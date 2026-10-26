@@ -55,9 +55,14 @@ fi
 
 # 5) 生成产物
 echo "[5/6] 生成 SQL 与 14 个私有函数 ..."
+# 可复现：用上游 commit 时间作为 SOURCE_DATE_EPOCH，让 CI 构建产物与本地逐字节一致
+export SOURCE_DATE_EPOCH="$(git -C "$UPSTREAM_DIR" log -1 --format=%ct "$COMMIT")"
+export TT_VERSION="$VERSION"
 (cd "$UPSTREAM_DIR" && node scripts/self-host/install.cjs --sql "$OUT/tokentracker-install.sql")
 (cd "$UPSTREAM_DIR" && node scripts/self-host/install.cjs --migration "$OUT/tokentracker-migration.sql")
 (cd "$UPSTREAM_DIR" && node scripts/self-host/build-functions.cjs "$OUT/functions")
+# 统一权限，保证容器内以非 root 用户也能读取（OCI 层权限可复现）
+chmod 644 "$OUT"/tokentracker-*.sql "$OUT"/functions/*.js "$OUT"/functions/functions.json
 node "$ROOT/scripts/summarize.cjs" "$UPSTREAM_DIR" "$OUT" > "$OUT/manifest-report.md"
 
 # 6) 校验和（排除 SHA256SUMS 自身；路径相对 releases/<ver>/ 便于 sha256sum -c）

@@ -205,4 +205,19 @@ jobs:
 - 依赖锁定：`npm:@insforge/sdk@1.4.5`、`alipay-sdk@4.14.0`、`urllib@4.9.1`、`@waffo/pancake-ts@0.25.0`。
 - Node ≥ 20；产物为 async CommonJS（InsForge v2.3.3 worker 的 `new Function` 执行器）。
 - `TOKENTRACKER_DASHBOARD_URL` 必须指向自有 dashboard（HTTPS 或 loopback HTTP），源码锚点校验会拒绝回落官方域名。
-- 首次实施**尚未开始**：`releases/` 下只有模板，没有产物。
+- **v1.4.12 首次产物已生成**：`releases/1.4.12/`（19 个文件，含 SQL/14 函数/SHA256SUMS）。首次**部署**仍未开始。
+- **最终交付物是 Docker 镜像**（linux/amd64），见 [`docs/docker-image.md`](docs/docker-image.md)。
+
+---
+
+## 10. Docker 镜像维护要点
+
+镜像是最终交付物，维护时须遵守：
+
+1. **产物是唯一真源**：镜像内容来自 `releases/<VERSION>/`，CI 的 `reproduce` job 会从锁定上游 commit 重建并逐字节比对；**禁止**手改 `SHA256SUMS` 让它"通过"。
+2. **改产物必须走完整循环**：`build.sh` → `verify.sh` → `reproduce.sh` → 提交 → 触发 `build-image.yml`。
+3. **镜像不自动部署**：只输出工件与 `commands`；psql / 上传函数由实例持有者在 VPS 上执行。
+4. **平台**：目前只 `linux/amd64`。加 ARM64 前需重新验证函数产物。
+5. **GHCR 包默认 private**：首次推送后需在包设置里改为 public（一次性）。
+6. **旧版本镜像与 `releases/<old>/` 都不删**：回滚时唯一的已知函数来源。
+7. 每次升级循环结束，确认新标签镜像的 `info` / `verify` 与 `tracking/REF` 一致，并把 digest 记入 `releases/<ver>/acceptance.md`。

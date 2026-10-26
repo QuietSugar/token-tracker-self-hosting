@@ -1,0 +1,38 @@
+# 示例：用工件镜像导出产物，再由你在 VPS 上执行 SQL 与函数部署。
+# 本文件不包含 InsForge 平台服务 —— 平台请按官方文档单独部署。
+#
+# 用法：
+#   docker compose -f docker-compose.example.yml run --rm export
+#   ls -la ./out
+#   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ./out/tokentracker-install.sql
+#
+# 注意：TT_IMAGE_TAG 要与 tracking/REF 的 VERSION 一致。
+
+services:
+  info:
+    image: ghcr.io/quietsugar/token-tracker-self-hosting:${TT_IMAGE_TAG:-1.4.12}
+    command: ["info"]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+
+  verify:
+    image: ghcr.io/quietsugar/token-tracker-self-hosting:${TT_IMAGE_TAG:-1.4.12}
+    command: ["verify"]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+
+  commands:
+    image: ghcr.io/quietsugar/token-tracker-self-hosting:${TT_IMAGE_TAG:-1.4.12}
+    command: ["commands"]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+
+  # 一次性导出：把全部产物写到 ./out，供 psql 与 InsForge 管理界面使用。
+  # 非 root (uid 10001) 写入，宿主机目录需可写：mkdir -p out && chmod 777 out
+  export:
+    image: ghcr.io/quietsugar/token-tracker-self-hosting:${TT_IMAGE_TAG:-1.4.12}
+    command: ["export", "/out"]
+    volumes:
+      - ./out:/out
+    read_only: true
+    security_opt: ["no-new-privileges:true"]

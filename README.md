@@ -11,6 +11,8 @@
 > ⚠️ **本仓库是公有的**：任何 `git push` 后内容立即对全网可见，且无法真正撤回。安全约定见下方「公有仓库安全约定」与 [`SECURITY.md`](SECURITY.md)。
 >
 > 🤖 **本仓库由 Agent 长期维护**。维护契约、会话启动协议与标准循环见 [`MAINTENANCE.md`](MAINTENANCE.md)——**接手或上下文重置时先读它**。
+>
+> 🐳 **最终交付物是 Docker 镜像**（linux/amd64）：由 GitHub Actions 构建并推送 GHCR，携带已审计的 SQL 基线与 14 个私有函数。见 [`docs/docker-image.md`](docs/docker-image.md)。
 
 ---
 
@@ -23,7 +25,8 @@
 - [x] 建立版本追踪、产物校验、编码检查机制
 - [x] 面向 public 远程仓库加固（密钥扫描 + CI）
 - [x] 建立长期维护契约与会话启动协议（`MAINTENANCE.md` / `session-start.sh`）
-- [ ] **首次实施**：生成基线 SQL 与 14 个私有函数产物
+- [x] **首次实施**：生成 v1.4.12 基线 SQL 与 14 个私有函数产物（`releases/1.4.12/`）
+- [x] 建立 Docker 镜像交付链（Dockerfile / CLI / GHCR 构建流水线 / 可复现性硬门槛）
 - [ ] **首次部署**：应用 SQL、上传函数、配置服务端环境变量（由人在 VPS 上执行）
 - [ ] **首次验收**：按 [`docs/runbook.md`](docs/runbook.md) 逐项打勾
 - [ ] 进入「跟随上游」的稳定循环
@@ -79,11 +82,22 @@ tokentracker-selfhost/
 ├── MAINTENANCE.md               # 长期维护契约 / 会话启动协议 / SOP（先读它）
 ├── SECURITY.md                  # 凭据处理与误提交处置
 ├── CHANGELOG.md                 # 本运维仓库自身的变更记录
+├── Dockerfile                   # 多阶段构建：产物校验 + CLI 载体（linux/amd64）
+├── .dockerignore                # build context 白名单，排除凭据
+├── docker/
+│   ├── tokentracker.cjs         # 镜像内部署 CLI（info/verify/sql/export/commands）
+│   └── DEPLOY.md                # 镜像自带部署说明
+├── docker-compose.example.yml   # 一次性导出产物的 compose 示例
+├── .github/workflows/
+│   ├── verify.yml               # CI：密钥/编码/产物/脚本校验
+│   └── build-image.yml          # CI：可复现性 + GHCR 镜像构建推送
 ├── docs/
 │   ├── maintainer-prompt.md     # 维护 Agent 的系统提示词（归档自 uploads/）
 │   ├── prompts.md               # 可复用提示词 A/B/C/D
 │   ├── update-plan.md           # 总体规划与交接
-│   └── runbook.md               # 首次实施 / 升级 / 回滚操作手册
+│   ├── runbook.md               # 首次实施 / 升级 / 回滚操作手册
+│   ├── github-app-setup.md      # GitHub App 认证配置
+│   └── docker-image.md          # Docker 镜像交付设计与使用
 ├── tracking/
 │   ├── REF                      # 当前锁定的上游 commit（单一构建点）
 │   └── upstream.md              # 版本追踪表（每次拉取后更新，单一事实来源）
@@ -168,6 +182,8 @@ tokentracker-selfhost/
 | `./scripts/check-encoding.sh` | UTF-8 / 无 BOM 检查 | 否 |
 | `./scripts/gh-app-token.cjs` | GitHub App 换取 installation token | 写 /tmp token 文件 |
 | `./scripts/push-with-app.sh -u origin main` | 用 App token 推送 | 推远程 |
+| `./scripts/reproduce.sh` | 从上游 commit 重建产物并逐字节校验 | 写 /tmp 临时目录 |
+| `docker run --rm <image> commands` | 输出 VPS 上要执行的完整部署命令 | 否 |
 
 ---
 

@@ -1,0 +1,293 @@
+name: build-image
+
+# 在 GitHub 上构建 linux/amd64 部署工件镜像并推送 GHCR。
+# 充分利用 GitHub 构建能力：buildx + GHA layer cache + OCI labels +
+# SBOM + SLSA provenance attestation + 可复现性硬门槛。
+#
+# 触发：
+#   - push 到 main 且相关文件变化
+#   - workflow_dispatch（可指定上游 commit；默认用 tracking/REF）
+#   - pull_request（只构建与校验，不推送）
+#   - 每周一 06:12 UTC 定时重建（可复现性回归检查）
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker/**'
+      - 'releases/**'
+      - 'scripts/build.sh'
+      - 'scripts/summarize.cjs'
+      - 'scripts/reproduce.sh'
+      - 'tracking/REF'
+      - '.github/workflows/build-image.yml'
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker/**'
+      - 'releases/**'
+      - 'scripts/**'
+      - 'tracking/REF'
+      - '.github/workflows/build-image.yml'
+  workflow_dispatch:
+    inputs:
+      upstream_commit:
+        description: '覆盖上游 commit（留空则用 tracking/REF 的 COMMIT）'
+        required: false
+        type: string
+      push:
+        description: '是否推送到 GHCR'
+        required: false
+        default: true
+        type: boolean
+  schedule:
+    - cron: '12 6 * * 1'
+
+# 最小权限；各 job 按需提升
+permissions:
+  contents: read
+
+concurrency:
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  PLATFORMS: linux/amd64
+
+jobs:
+  # ------------------------------------------------------------------ meta
+  meta:
+    name: Resolve build metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ref.outputs.version }}
+      upstream_commit: ${{ steps.ref.outputs.upstream_commit }}
+      image: ${{ steps.ref.outputs.image }}
+      should_push: ${{ steps.ref.outputs.should_push }}
+      short_sha: ${{ steps.ref.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read tracking/REF
+        id: ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          get() { sed -n "s/^$1=//p" tracking/REF | head -1; }
+          VERSION="$(get VERSION)"
+          COMMIT="$(get COMMIT)"
+          test -n "$VERSION" || { echo "::error::REF.VERSION empty"; exit 1; }
+          test -n "$COMMIT"  || { echo "::error::REF.COMMIT empty"; exit 1; }
+
+          OVERRIDE='${{ inputs.upstream_commit }}'
+          if [ -n "$OVERRIDE" ]; then
+            if ! [[ "$OVERRIDE" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::upstream_commit must be a full 40-hex SHA"; exit 1
+            fi
+            COMMIT="$OVERRIDE"
+            echo "::warning::上游 commit 被 workflow_dispatch 覆盖为 $COMMIT；请确认已评审"
+          fi
+
+          # GHCR 仓库名必须全小写
+          IMAGE="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+
+          IS_PUSH='false'
+          if [ "${{ github.event_name }}" = 'push' ]; then IS_PUSH='true'; fi
+          if [ "${{ github.event_name }}" = 'workflow_dispatch' ] && [ '${{ inputs.push }}' = 'true' ]; then IS_PUSH='true'; fi
+          if [ "${{ github.event_name }}" = 'schedule' ]; then IS_PUSH='false'; fi
+
+          {
+            echo "version=$VERSION"
+            echo "upstream_commit=$COMMIT"
+            echo "image=$IMAGE"
+            echo "should_push=$IS_PUSH"
+            echo "short_sha=${GITHUB_SHA::7}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "### 构建元数据" >> "$GITHUB_STEP_SUMMARY"
+          echo "- version: \`$VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- upstream commit: \`$COMMIT\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- image: \`$IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- push: \`$IS_PUSH\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ------------------------------------------------------------- reproduce
+  # 硬门槛：从上游锁定 commit 重建产物，与仓库审计 SHA256SUMS 逐字节比对。
+  reproduce:
+    name: Reproduce artifacts from pinned upstream
+    needs: meta
+    runs-on: ubuntu-latest
+    outputs:
+      source_date_epoch: ${{ steps.epoch.outputs.source_date_epoch }}
+    steps:
+      - name: Checkout control repo
+        uses: actions/checkout@v4
+        with:
+          path: control
+
+      - name: Checkout upstream at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: xiufengsun/TokenTracker
+          ref: ${{ needs.meta.outputs.upstream_commit }}
+          path: upstream
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify upstream commit matches REF
+        id: epoch
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL="$(git -C upstream rev-parse HEAD)"
+          EXPECT='${{ needs.meta.outputs.upstream_commit }}'
+          test "$ACTUAL" = "$EXPECT" || { echo "::error::upstream HEAD $ACTUAL != $EXPECT"; exit 1; }
+          EPOCH="$(git -C upstream log -1 --format=%ct "$ACTUAL")"
+          echo "SOURCE_DATE_EPOCH=$EPOCH" >> "$GITHUB_ENV"
+          echo "source_date_epoch=$EPOCH" >> "$GITHUB_OUTPUT"
+          echo "SOURCE_DATE_EPOCH=$EPOCH"
+
+      - name: Reproduce and compare with audited artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd control
+          chmod +x scripts/*.sh
+          UPSTREAM_DIR="$GITHUB_WORKSPACE/upstream" ./scripts/reproduce.sh
+
+      - name: Run artifact verification suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd control
+          ./scripts/verify.sh "releases/${{ needs.meta.outputs.version }}"
+          ./scripts/check-secrets.sh
+          ./scripts/check-encoding.sh
+
+  # ------------------------------------------------------------------ build
+  build:
+    name: Build and push amd64 image
+    needs: [meta, reproduce]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write          # GITHUB_TOKEN 推送 GHCR
+      id-token: write          # provenance attestation
+      attestations: write      # actions/attest-build-provenance
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ needs.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify no credentials in build context
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/check-secrets.sh
+          # 额外确保 dockerignore 没把私钥放进 context
+          if find . -path ./.git -prune -o -type f \( -name '*.pem' -o -name 'private-key*' -o -name 'config.env' \) -print | grep -q .; then
+            echo "::error::build context 中发现凭据类文件"; exit 1
+          fi
+          echo "✓ build context 无凭据"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: needs.meta.outputs.should_push == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata (tags + OCI labels)
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ needs.meta.outputs.image }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ needs.meta.outputs.version }}
+            type=raw,value=${{ needs.meta.outputs.version }}-${{ needs.meta.outputs.short_sha }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short,prefix=sha-
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.meta.outputs.version }}
+            dev.tokentracker.upstream.commit=${{ needs.meta.outputs.upstream_commit }}
+
+      - name: Build and (conditionally) push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ needs.meta.outputs.should_push == 'true' }}
+          load: ${{ needs.meta.outputs.should_push != 'true' }}
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ needs.meta.outputs.version }}
+            UPSTREAM_COMMIT=${{ needs.meta.outputs.upstream_commit }}
+            SOURCE_DATE_EPOCH=${{ needs.reproduce.outputs.source_date_epoch }}
+            VCS_REF=${{ github.sha }}
+          provenance: ${{ needs.meta.outputs.should_push == 'true' }}
+          sbom: ${{ needs.meta.outputs.should_push == 'true' }}
+          cache-from: type=gha,scope=tokentracker-selfhost-amd64
+          cache-to: type=gha,mode=max,scope=tokentracker-selfhost-amd64
+
+      - name: Smoke test the built image
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ '${{ needs.meta.outputs.should_push }}' = 'true' ]; then
+            IMAGE='${{ needs.meta.outputs.image }}@${{ steps.build.outputs.digest }}'
+          else
+            IMAGE="$(echo '${{ steps.docker_meta.outputs.tags }}' | head -1)"
+          fi
+          echo "Testing image: $IMAGE"
+          docker run --rm "$IMAGE" info
+          echo "--- verify ---"
+          docker run --rm "$IMAGE" verify
+          echo "--- functions (count) ---"
+          docker run --rm "$IMAGE" functions --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const m=JSON.parse(s);if(m.functions.length!==14)process.exit(1);console.log("14 functions OK")})'
+          echo "--- sql (first line) ---"
+          docker run --rm "$IMAGE" sql | head -1
+          echo "--- export ---"
+          mkdir -p "$RUNNER_TEMP/tt-export"
+          docker run --rm -v "$RUNNER_TEMP/tt-export:/out" "$IMAGE" export /out
+          (cd "$RUNNER_TEMP/tt-export" && sha256sum -c SHA256SUMS)
+          echo "--- commands ---"
+          docker run --rm "$IMAGE" commands | head -8
+
+      - name: Attest build provenance (SLSA)
+        if: needs.meta.outputs.should_push == 'true' && steps.build.outputs.digest != ''
+        continue-on-error: true
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ needs.meta.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Write job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## 镜像构建结果"
+            echo "- image: \`${{ needs.meta.outputs.image }}\`"
+            echo "- version: \`${{ needs.meta.outputs.version }}\`"
+            echo "- upstream: \`${{ needs.meta.outputs.upstream_commit }}\`"
+            echo "- platform: \`${{ env.PLATFORMS }}\`"
+            echo "- push: \`${{ needs.meta.outputs.should_push }}\`"
+            echo "- digest: \`${{ steps.build.outputs.digest }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

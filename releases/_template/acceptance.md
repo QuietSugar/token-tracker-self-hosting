@@ -7,6 +7,11 @@
 - 执行人：
 - 环境：API `https://...` / Dashboard `https://...` / InsForge v2.3.3 / PostgreSQL 15.18
 - 对应产物：`SHA256SUMS`（已校验 ✓ / 未校验 ✗）
+- 镜像：`ghcr.io/quietsugar/token-tracker-self-hosting:<tag>@sha256:<digest>`
+- 镜像校验：`docker run --rm <image> verify` → ✓ / ✗
+- 镜像 `BUILD.json` 上游 commit 与 `tracking/REF` 一致：✓ / ✗
+
+> 取证原则：`acceptance.md` 只写结论与取证方式，**不要粘原始日志、抓包、截图或数据库 dump**（公有仓库）。
 
 ## 首次部署验收
 

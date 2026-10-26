@@ -28,11 +28,17 @@ const fnManifest = fs.existsSync(functionsJson)
   ? JSON.parse(fs.readFileSync(functionsJson, "utf8"))
   : null;
 
+// 可复现构建：时间取 SOURCE_DATE_EPOCH（上游 commit 时间），且不写入本地绝对路径
+const epoch = process.env.SOURCE_DATE_EPOCH
+  ? Number(process.env.SOURCE_DATE_EPOCH) * 1000
+  : Date.now();
+const generatedAt = new Date(epoch).toISOString().replace(/\.\d{3}Z$/, "Z");
+
 const L = [];
 L.push("# 自托管清单摘要");
 L.push("");
-L.push(`- 生成时间：${new Date().toISOString()}`);
-L.push(`- 上游 checkout：\`${upstream}\``);
+L.push(`- 生成时间：${generatedAt}（SOURCE_DATE_EPOCH，可复现）`);
+L.push(`- 构建版本：\`${process.env.TT_VERSION || "unknown"}\``);
 L.push(`- 上游 HEAD：\`${head}\``);
 L.push(`- 安装步骤数：**${steps.length}**`);
 L.push(`- 私有函数数：**${manifest.privateFunctions.length}**`);

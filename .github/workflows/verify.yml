@@ -48,5 +48,31 @@ jobs:
         run: |
           set -euo pipefail
           for f in scripts/*.sh; do bash -n "$f"; done
-          for f in scripts/*.cjs; do node --check "$f"; done
+          for f in scripts/*.cjs docker/*.cjs; do node --check "$f"; done
           echo "All scripts parse OK."
+
+      - name: Validate image CLI against audited artifacts
+        run: |
+          set -euo pipefail
+          VER="$(sed -n 's/^VERSION=//p' tracking/REF | head -1)"
+          test -n "$VER"
+          cat > /tmp/BUILD.json <<EOF
+          {"schemaVersion":1,"version":"$VER","upstream":{"repository":"https://github.com/xiufengsun/TokenTracker.git","commit":"$(sed -n 's/^COMMIT=//p' tracking/REF | head -1)"},"platform":"linux/amd64","node":"v20"}
+          EOF
+          export TT_ARTIFACTS="$GITHUB_WORKSPACE/releases/$VER"
+          export TT_BUILD_INFO=/tmp/BUILD.json
+          node docker/tokentracker.cjs info
+          node docker/tokentracker.cjs verify | tail -2
+          node docker/tokentracker.cjs functions --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const m=JSON.parse(s);if(m.functions.length!==14)process.exit(1);console.log("CLI: 14 functions OK")})'
+          rm -f /tmp/BUILD.json
+
+      - name: Validate Dockerfile / compose / build workflow YAML
+        run: |
+          set -euo pipefail
+          test -f Dockerfile
+          python3 - <<'PY'
+          import yaml
+          for f in ['.github/workflows/build-image.yml','.github/workflows/verify.yml','docker-compose.example.yml']:
+              yaml.safe_load(open(f))
+          print('YAML OK')
+          PY

@@ -2,6 +2,34 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-26 — Docker 镜像交付 + 首次产物生成
+
+用户明确：最终产物是 Docker 镜像，充分利用 GitHub 构建能力，目前只需 x86。
+
+**首次实施完成**：`releases/1.4.12/`（19 个文件）——15 步基线 SQL、无事务版迁移 SQL、14 个 async CommonJS 私有函数、`functions.json`、`manifest-report.md`、`SHA256SUMS`。
+
+**可复现性**：
+- `summarize.cjs` 改用 `SOURCE_DATE_EPOCH`（上游 commit 时间），去掉报告里的本地绝对路径。
+- `build.sh` 与新增的 `scripts/reproduce.sh` 用相同参数生成产物；实测两次构建 `SHA256SUMS` 逐字节一致。
+- `reproduce.sh` 是 CI 硬门槛：从锁定上游 commit 重建，与仓库审计产物比对，不一致即失败。
+
+**镜像**（linux/amd64）：
+- 多阶段 `Dockerfile`：prepare → verify（构建期 `sha256sum -c` + 14 函数检查）→ runtime（`node:20-alpine`，非 root uid 10001，tini）。
+- `docker/tokentracker.cjs` 部署 CLI：`info` / `verify` / `functions` / `sql` / `migration` / `checksums` / `export` / `commands`。只输出工件，不连实例、不执行 psql、不上传函数。
+- 修复 `sql | head` 的 EPIPE 崩溃。
+- `.dockerignore` 显式排除凭据；`docker-compose.example.yml` 提供一次性用法。
+- OCI labels 记录上游 commit / 版本 / 平台；`BUILD.json` 含构建元数据。
+
+**GitHub Actions** `.github/workflows/build-image.yml`：
+- 触发：push(main，路径过滤) / PR（只构建不推送）/ `workflow_dispatch`（可覆盖上游 commit、控制是否推送）/ 每周定时回归。
+- jobs：`meta`（读 REF）→ `reproduce`（可复现性硬门槛）→ `build`（buildx + GHA layer cache + SBOM + provenance + SLSA attestation + 冒烟测试）。
+- 用内置 `GITHUB_TOKEN` + `packages: write` 推 GHCR，不需要 PAT；顶层权限仅 `contents: read`。
+- 标签：`<version>`、`<version>-<short_sha>`、`latest`、`sha-<short>`。
+
+**文档**：新增 [`docs/docker-image.md`](docs/docker-image.md) 与 `docker/DEPLOY.md`；README / MAINTENANCE 增加镜像章节。
+
+**注意**：GHCR 包首次推送默认 private，需在包设置里改为 public（一次性）。首次**部署**（VPS 上执行 SQL / 上传函数）仍未开始。
+
 ## 2026-10-26 — 首次推送成功（仓库正式上线）
 
 - 用 GitHub App（App ID `5476780` / Installation `175378660`）的 installation token 推送 `main` 到 <https://github.com/QuietSugar/token-tracker-self-hosting.git>。
