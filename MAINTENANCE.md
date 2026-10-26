@@ -39,7 +39,7 @@ cd /path/to/token-tracker-self-hosting
 | 我负责 | 我不负责 |
 |---|---|
 | 跟踪上游 `xiufengsun/TokenTracker` main | InsForge 平台搭建（VPS / Docker / HTTPS / OAuth） |
-| 判定自托管契约是否变化 | 执行 psql / 应用 SQL |
+| 判定自托管契约是否变化 | 对用户实例执行 psql / 应用 SQL（隔离本地测试 PG 可在用户明确授权后使用） |
 | 生成基线 SQL 与 14 个私有函数 | 上传函数到 worker |
 | 输出升级评审、执行顺序、回滚方案 | 写 `~/.tokentracker/config.json` |
 | 维护版本追踪、评审/验收记录、CHANGELOG | 连接或操作用户的实例 |

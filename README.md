@@ -10,7 +10,7 @@
 
 > ⚠️ **本仓库是公有的**：任何 `git push` 后内容立即对全网可见，且无法真正撤回。安全约定见下方「公有仓库安全约定」与 [`SECURITY.md`](SECURITY.md)。
 >
-> 🤖 **本仓库由 Agent 长期维护**。维护契约、会话启动协议与标准循环见 [`MAINTENANCE.md`](MAINTENANCE.md)——**接手或上下文重置时先读它**。
+> 🤖 **本仓库由 Agent 长期维护**。首次跨环境接手先读 [`docs/HANDOFF.md`](docs/HANDOFF.md)，再按 [`MAINTENANCE.md`](MAINTENANCE.md) 的会话启动协议恢复详细状态。
 >
 > 🐳 **当前正式交付物**是 Docker 工件镜像（linux/amd64）：携带已审计 SQL 与 14 个私有函数，面向 InsForge + PostgreSQL。另有**实验性 Go+SQLite 后端镜像**，已通过 33 个行为契约 + 2 个 PG 专属 SKIP；尚未达到生产 GA。见 [`docs/docker-image.md`](docs/docker-image.md) 与 [`go-server/STATUS.md`](go-server/STATUS.md)。
 
@@ -51,7 +51,7 @@
 3. **步骤清单只增不改**：升级 = 新增步骤，绝不修改已安装步骤。installer 会对旧步骤 checksum 不匹配直接报错——这是保护机制，不是要绕过的障碍。
 4. **凭据永不入库**：只提交 `.example` 模板；真实值放本地被忽略的文件。
 5. 云端付费 webhook、社区排行榜、`device-usage-reset` 等函数**不混入**自托管 14 函数清单。
-6. Agent 不连接实例、不执行 psql、不上传函数、不写 `~/.tokentracker/config.json`；这些由人在 VPS 上执行。
+6. Agent 不连接或操作用户的真实实例，不在用户 VPS 执行 psql、不上传函数、不写 `~/.tokentracker/config.json`；经用户明确授权，可在隔离本地标准环境执行 SQL/L3 验收。
 7. 所有文本文件 **UTF-8 无 BOM**，统一 LF 行尾（`check-encoding.sh` / `verify.sh` 会检查）。
 8. **每次推送前跑 `check-secrets.sh`**；CI 也会在 push / PR 时重复检查。
 
