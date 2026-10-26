@@ -2,6 +2,16 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-26 — 数据库选型决策
+
+用户询问「PG 数据库是必须的吗，有其他选择吗」。核实后新增 [`docs/database-choice.md`](docs/database-choice.md)：
+
+- **PostgreSQL 引擎是硬依赖**，不能换成 MySQL/SQLite/MongoDB。依据：`releases/1.4.12/tokentracker-install.sql` 实测含 338 处 `jsonb`、82 处 PL/pgSQL 函数/触发器、33 处 `pg_advisory_xact_lock`、28 处 RLS、24 处 `auth.uid()`；第一行 preflight 就要求 InsForge 的 `auth.users`、`auth.uid()` 及三个 API 角色；14 个函数经 `@insforge/sdk` 走 PostgREST，而 PostgREST 只能连 PG。
+- **可选的是 PG 的部署形态**：A 官方 Compose 内置 PG（推荐，v2.3.3 实测 15.18）／B 外部自建 PG（Pigsty 有模板，需自建角色与扩展）／C 托管 PG（Neon/RDS 等，无真 superuser 且有扩展白名单，高风险）／D PGlite（仅测试，单连接 alpha）／E 分布式 PG 兼容库（未验证）／F 重写平台（超出范围）。
+- 澄清上游 `package.json` 里的 `pglite` / `sql.js` / `wa-sqlite` **只用于测试**，不是生产库；上游文档明确并发/锁测试必须在真实 PG 上跑。
+- 明确本仓库 Docker 镜像不含数据库，对方案 A/B/C 都适用，只要目标 PG 已有 InsForge 的 `auth` schema 与角色。
+- 同步更新 `docker/DEPLOY.md` 与 README 目录。
+
 ## 2026-10-26 — Docker 镜像交付 + 首次产物生成
 
 用户明确：最终产物是 Docker 镜像，充分利用 GitHub 构建能力，目前只需 x86。

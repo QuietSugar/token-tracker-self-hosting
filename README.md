@@ -97,7 +97,8 @@ tokentracker-selfhost/
 │   ├── update-plan.md           # 总体规划与交接
 │   ├── runbook.md               # 首次实施 / 升级 / 回滚操作手册
 │   ├── github-app-setup.md      # GitHub App 认证配置
-│   └── docker-image.md          # Docker 镜像交付设计与使用
+│   ├── docker-image.md          # Docker 镜像交付设计与使用
+│   └── database-choice.md       # 为什么 PostgreSQL 是硬依赖 + 可选部署形态
 ├── tracking/
 │   ├── REF                      # 当前锁定的上游 commit（单一构建点）
 │   └── upstream.md              # 版本追踪表（每次拉取后更新，单一事实来源）

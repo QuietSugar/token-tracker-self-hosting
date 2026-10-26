@@ -33,6 +33,7 @@ docker run --rm -v "$PWD/out:/out" <image> export /out
 
 - 镜像**不**连接数据库、**不**调用 InsForge API、**不**上传函数、**不**持有凭据。
 - 服务端密钥（`INSFORGE_SERVICE_ROLE_KEY`、`JWT_SECRET` 等）只在 VPS 上配置。
+- **PostgreSQL 是硬依赖**：安装 SQL 依赖 `jsonb`、RLS、`auth.uid()`、`pg_advisory_xact_lock` 等 PG 特性，且要求 InsForge 平台预置的 `auth.users` 表与 `anon`/`authenticated`/`project_admin` 角色。不能换成 MySQL/SQLite。详见仓库 `docs/database-choice.md`。
 - `TOKENTRACKER_DASHBOARD_URL` 必须指向自有 HTTPS dashboard；函数内的源码锚点校验会拒绝回落官方域名。
 - 付费 webhook、社区排行榜、`device-usage-reset` 被有意排除，不要额外部署。
 - 仅构建 **linux/amd64**（x86_64）。ARM64 未验证。
