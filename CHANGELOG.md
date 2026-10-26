@@ -28,7 +28,15 @@
 
 **文档**：新增 [`docs/docker-image.md`](docs/docker-image.md) 与 `docker/DEPLOY.md`；README / MAINTENANCE 增加镜像章节。
 
-**注意**：GHCR 包首次推送默认 private，需在包设置里改为 public（一次性）。首次**部署**（VPS 上执行 SQL / 上传函数）仍未开始。
+**CI 上线过程（4 次迭代）**：
+1. `badba45` 首跑失败 —— `reproduce.sh` 尾部 `[ ... ] && echo` 在成功时返回 1，CI 误判失败。改为 `if` + 显式 `exit 0`，并在 `verify.yml` 加退出码回归测试。
+2. `a4e5125` Dockerfile 解析失败 —— 多行 `node -e '...'` 被 Dockerfile parser 当成指令。把 Node 逻辑抽成 `docker/verify-artifacts.cjs` 与 `docker/write-build-info.cjs`。
+3. 同次构建**镜像已成功推送**，但 smoke test 的 `docker run ... sql | head -1` 在 `pipefail` 下 broken pipe。改为先重定向到文件；`export` 挂载目录加 `chmod 777`（容器 uid 10001）。
+4. `8d7112e` 三个 job 全绿：`meta` → `reproduce` → `build`，冒烟测试含 `info`/`verify`/`functions`/`sql`/`export`+`sha256sum -c`/`commands`。
+
+**产物**：`ghcr.io/quietsugar/token-tracker-self-hosting:1.4.12`（另有 `1.4.12-<short_sha>`、`latest`、`sha-<short>`），digest `sha256:6deb9ce1…`，包可见性 **public**，linux/amd64，含 SBOM 与 provenance attestation。
+
+首次**部署**（VPS 上执行 SQL / 上传函数）仍未开始。
 
 ## 2026-10-26 — 首次推送成功（仓库正式上线）
 
