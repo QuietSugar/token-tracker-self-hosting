@@ -207,7 +207,7 @@ jobs:
 - `TOKENTRACKER_DASHBOARD_URL` 必须指向自有 dashboard（HTTPS 或 loopback HTTP），源码锚点校验会拒绝回落官方域名。
 - **v1.4.12 首次产物已生成**：`releases/1.4.12/`（19 个文件，含 SQL/14 函数/SHA256SUMS）。本地官方 InsForge v2.3.3 + PG 15.18 标准栈已安装/重装验收；用户自己的公共 VPS 部署仍未开始。
 - 正式交付仍是 InsForge 工件 Docker 镜像（linux/amd64），见 [`docs/docker-image.md`](docs/docker-image.md)。
-- 另有 `go-server/` 实验性 Go+SQLite 垂直切片：33 个可移植行为契约 PASS、2 个 PG 专属安装账本用例显式 SKIP；**不代表完整替代，不得标 GA/生产**。详情见 `go-server/STATUS.md`。
+- 另有 `go-server/` 实验性 Go 垂直切片（SQLite 与 PostgreSQL 双引擎）：两种引擎各自 33 个可移植行为契约 PASS、2 个 PG 专属安装账本用例显式 SKIP；**不代表完整替代，不得标 GA/生产**。详情见 `go-server/STATUS.md` 与 `docs/go-postgres.md`。
 
 ---
 
@@ -225,12 +225,20 @@ jobs:
 
 ---
 
-## 11. Go + SQLite 迁移实验的维护规则
+## 11. Go 迁移实验（SQLite / PostgreSQL 双引擎）的维护规则
 
 1. Go 实现是**实验分支/垂直切片**，不得与正式 InsForge 镜像混用标签、配置或发布说明。
-2. 每次改动必须跑 `cd go-server && go test -race ./... && go vet ./...`。
-3. 每次改动必须跑 `CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs ./contract/scripts/verify.sh`；当前基线为 33 PASS / 0 FAIL / 2 SKIP。
-4. 2 个 SKIP 是刻意的 PG 专属 step/checksum ledger，不许把 SQLite schema migration 假装成 15 个 PG SQL step；SQLite 自己用 `schema_migrations(version=1, checksum=...)`。
-5. 每次更改 Go contract，重新跑 PGlite 参考自测和可复现 golden；不要为了 Go 实现而无评审地改 reference golden。
-6. 真实并发/锁语义用 `./contract/scripts/standard-env-test.sh` 在真实 PG 15.18 上验；当前 5 PASS / 0 FAIL。不要用 PGlite 声称并发验证完成。
-7. 生产 GA 前阻断项见 `go-server/STATUS.md`；在完整 schema、更多行为矩阵、安全审查、恢复/备份与客户端 E2E 未通过前，镜像标签只能是 `experimental`。
+2. 每次改动必须跑 `cd go-server && go test -race ./... && go vet ./...`（默认 SQLite），
+   并再跑一次 `TT_TEST_DATABASE_URL='postgres://…' go test -race ./...`（真实 PG）。
+3. 每次改动必须跑两个 adapter 的契约：
+   `CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs ./contract/scripts/verify.sh` 与
+   `GO_POSTGRES_URL='postgres://…' CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs ./contract/scripts/verify.sh`；
+   两条基线都是 33 PASS / 0 FAIL / 2 SKIP，任一方 FAIL 阻塞合并。
+4. 2 个 SKIP 是刻意的 PG 专属 step/checksum ledger，不许把自有 schema migration 假装成 15 个 PG SQL step；
+   两种引擎都用 `schema_migrations(version=1, checksum=sha256(该引擎渲染后的 DDL))`。
+   SQLite 渲染结果逐字节锁定（`TestSQLiteSchemaStaysByteCompatibleWithV1`），改动它会破坏既有实例的 checksum。
+5. 引擎选择只允许通过 `store.Dialect` 与 `store.DB` 包装层；**禁止**在 handler 里写 `if dialect == ...`
+   或直接 `sql.Open` 绕过方言改写。新增 SQL 一律用 `?` 占位符。
+6. 每次更改 Go contract，重新跑 PGlite 参考自测和可复现 golden；不要为了 Go 实现而无评审地改 reference golden。
+7. 真实并发/锁语义用 `./contract/scripts/standard-env-test.sh` 在真实 PG 15.18 上验；当前 5 PASS / 0 FAIL。不要用 PGlite 声称并发验证完成。
+8. 生产 GA 前阻断项见 `go-server/STATUS.md`；在完整 schema、更多行为矩阵、安全审查、恢复/备份与客户端 E2E 未通过前，镜像标签只能是 `experimental`。

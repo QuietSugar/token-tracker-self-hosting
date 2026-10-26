@@ -1,4 +1,4 @@
-// Package app 实现 TokenTracker 自托管后端的 HTTP 层（Go + SQLite 垂直切片）。
+// Package app 实现 TokenTracker 自托管后端的 HTTP 层（Go；SQLite / PostgreSQL 共用）。
 //
 // 覆盖范围（对齐 contract/golden/1.4.12 的行为快照）：
 //   - JWT HS256 认证（anon / authenticated / project_admin）
@@ -34,15 +34,18 @@ import (
 )
 
 type Server struct {
-	db        *sql.DB
+	db        *store.DB
 	secret    []byte
 	dashboard string
 	now       time.Time
 	testMode  bool
-	mu        sync.Mutex // 模拟 PG advisory_xact_lock 的串行化（跨连接互斥）
+	// mu 串行化写路径（设备签发、ingest 整行修正），使 SQLite 单写者与 PostgreSQL
+	// 多连接在同一个进程里表现一致。注意：它是**进程内**互斥；多实例部署时不同进程
+	// 之间没有 advisory lock 保护（见 STATUS.md「仍然缺什么」）。
+	mu sync.Mutex
 }
 
-func New(db *sql.DB) *Server {
+func New(db *store.DB) *Server {
 	now := time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC)
 	if v := os.Getenv("TT_NOW"); v != "" {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
@@ -227,7 +230,7 @@ func (s *Server) testUsers(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "id required")
 		return
 	}
-	if _, err := s.db.Exec(`INSERT OR IGNORE INTO auth_users(id,email) VALUES(?,?)`, b.ID, "contract@local.test"); err != nil {
+	if _, err := s.db.Exec(s.db.InsertIgnore(`auth_users(id,email) VALUES(?,?)`), b.ID, "contract@local.test"); err != nil {
 		fail(w, 500, err.Error())
 		return
 	}
@@ -279,6 +282,37 @@ func nullStr(s string) any {
 		return nil
 	}
 	return s
+}
+
+// flexibleBool 让布尔列（例如 cloud_machines.is_current）在 SQLite（INTEGER 0/1）
+// 与 PostgreSQL（boolean）上都能 Scan 到同一个 Go 值。
+type flexibleBool bool
+
+func (b *flexibleBool) Scan(v any) error {
+	switch t := v.(type) {
+	case nil:
+		*b = false
+	case bool:
+		*b = flexibleBool(t)
+	case int64:
+		*b = t != 0
+	case []byte:
+		*b = parseBoolText(string(t))
+	case string:
+		*b = parseBoolText(t)
+	default:
+		return fmt.Errorf("cannot scan %T into bool", v)
+	}
+	return nil
+}
+
+func parseBoolText(s string) flexibleBool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "1", "t", "true":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) testSQL(w http.ResponseWriter, r *http.Request) {
@@ -489,11 +523,11 @@ func (s *Server) listMachines(userID string) []map[string]any {
 	for rows.Next() {
 		var id, name, mid, platform, status string
 		var lastSeen sql.NullString
-		var cur int
+		var cur flexibleBool
 		_ = rows.Scan(&id, &name, &mid, &platform, &status, &lastSeen, &cur)
 		out = append(out, map[string]any{
 			"machine_id": mid, "name": name, "platform": platform, "status": status,
-			"is_current": cur != 0, "last_seen_at": nil,
+			"is_current": bool(cur), "last_seen_at": nil,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {

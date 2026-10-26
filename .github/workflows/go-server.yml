@@ -1,0 +1,119 @@
+name: go-server
+
+# Go 自托管后端的双层验证：
+#   1. sqlite：unit + race + contract（golden 一致性）
+#   2. postgres：同一批 unit 测试 + 同一批 contract，跑在真实 PostgreSQL 上
+# 目的是保证「同一份 Go 代码、两种引擎、同一批行为契约」不会漂移。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'go-server/**'
+      - 'contract/adapters/go-*.cjs'
+      - '.github/workflows/go-server.yml'
+  pull_request:
+    paths:
+      - 'go-server/**'
+      - 'contract/adapters/go-*.cjs'
+      - '.github/workflows/go-server.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-server-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CONTRACT_NOW: '2026-10-26T00:00:00Z'
+
+jobs:
+  # ------------------------------------------------------- unit + contract
+  sqlite:
+    name: Go unit tests + contract (sqlite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go-server/go.mod
+          cache-dependency-path: go-server/go.sum
+      - name: go vet
+        working-directory: go-server
+        run: go vet ./...
+      - name: go test -race
+        working-directory: go-server
+        run: go test -race ./...
+      - name: Build server
+        working-directory: go-server
+        run: CGO_ENABLED=0 go build -trimpath -o bin/tokentracker-server ./cmd/server
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Contract (go-sqlite)
+        run: ./contract/scripts/verify.sh
+        env:
+          CONTRACT_ADAPTER: ./contract/adapters/go-sqlite.cjs
+          GO_SERVER_BIN: ${{ github.workspace }}/go-server/bin/tokentracker-server
+          CONTRACT_CONCURRENCY: '2'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contract-go-sqlite
+          path: contract/report.md
+          retention-days: 14
+
+  # ------------------------------------------------------------- postgres
+  postgres:
+    name: Go tests + contract (postgres ${{ matrix.pg }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: ['15', '16']
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg }}-alpine
+        env:
+          POSTGRES_USER: tokentracker
+          POSTGRES_PASSWORD: tokentracker-ci
+          POSTGRES_DB: tokentracker
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U tokentracker -d tokentracker"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      TT_TEST_DATABASE_URL: postgres://tokentracker:tokentracker-ci@127.0.0.1:5432/tokentracker?sslmode=disable
+      GO_POSTGRES_URL: postgres://tokentracker:tokentracker-ci@127.0.0.1:5432/tokentracker?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go-server/go.mod
+          cache-dependency-path: go-server/go.sum
+      - name: go vet
+        working-directory: go-server
+        run: go vet ./...
+      - name: go test -race (postgres)
+        working-directory: go-server
+        run: go test -race ./...
+      - name: Build server
+        working-directory: go-server
+        run: CGO_ENABLED=0 go build -trimpath -o bin/tokentracker-server ./cmd/server
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Contract (go-postgres)
+        run: ./contract/scripts/verify.sh
+        env:
+          CONTRACT_ADAPTER: ./contract/adapters/go-postgres.cjs
+          GO_SERVER_BIN: ${{ github.workspace }}/go-server/bin/tokentracker-server
+          CONTRACT_CONCURRENCY: '2'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contract-go-postgres-${{ matrix.pg }}
+          path: contract/report.md
+          retention-days: 14

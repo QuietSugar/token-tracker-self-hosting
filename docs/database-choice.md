@@ -1,7 +1,10 @@
 # 数据库选型：PostgreSQL 是硬依赖吗？
 
 > 结论按实现版本区分：**当前正式自托管后端（InsForge + TypeScript edge functions）硬依赖 PostgreSQL**，不能直接换 MySQL/SQLite/MongoDB。
-> 我们后来建立了一个**实验性 Go + SQLite 兼容实现**，已通过 33 个可移植行为契约（另 2 个 PG 专属安装账本测试显式 SKIP）；但它目前只覆盖垂直切片，**不等价于完整正式后端，也不是生产替代品**。详见 [`../go-server/STATUS.md`](../go-server/STATUS.md)。
+> 我们后来建立了一个**实验性 Go 兼容实现**，同一份代码支持 SQLite 与 PostgreSQL（用 `TT_DATABASE_URL` 切换），
+> 两者都通过 33 个可移植行为契约（另 2 个 PG 专属安装账本测试显式 SKIP）；但它目前只覆盖垂直切片，
+> **不等价于完整正式后端，也不是生产替代品**。详见 [`../go-server/STATUS.md`](../go-server/STATUS.md) 与
+> [`go-postgres.md`](go-postgres.md)。
 
 ---
 
@@ -101,6 +104,13 @@ InsForge 官方自托管栈就是四个容器：`postgres` / `postgrest` / `insf
 - **2026-10-26（初始结论）**：对当前正式 InsForge/TypeScript 后端，PostgreSQL 是不可替代依赖；默认方案 A（官方 Compose 内置 PG 15.18）。依据见 §1。
 - **2026-10-26（新目标）**：用户明确希望后续把后端改为 SQLite + Golang。于是新增 `go-server/` 实验垂直切片，而不是继续声称 SQLite 绝对不可能。它不改动正式 InsForge 产物，状态与限制见 [`../go-server/STATUS.md`](../go-server/STATUS.md)。
 - **真实验收**：官方 InsForge v2.3.3 Compose 栈在隔离容器环境运行，PostgreSQL 15.18；15 步 SQL 安装/重装通过；L3 真实多连接测试 5 PASS / 0 FAIL（advisory lock、8 并发重装、RLS 矩阵、并发幂等 upsert）。说明见 `../contract/L3-RESULTS.md`。
+- **2026-10-26（Go 后端支持 PostgreSQL）**：用户要求 Go 版本支持 PG。做法不是"再写一份 PG 实现"，而是
+  在 `go-server/internal/store` 加一层方言适配（`?`→`$n`、布尔/幂等插入/DDL 渲染、连接池、schema 隔离），
+  业务代码保持单份。同一批 33 个契约用例在 **SQLite 与真实 PostgreSQL 上都 33 PASS / 0 FAIL / 2 SKIP**；
+  CI 新增 PG 15/16 矩阵。设计与取舍见 [`go-postgres.md`](go-postgres.md)。
+- **关于"只留 PG 是否更省维护"**：会少一个引擎与一条流水线，但省不掉真正的成本大头
+  （24 表映射、session states、客户端 E2E、安全审查）；SQLite 的边际成本已降到"同一批测试跑两遍"。
+  结论与观察期计划写在 [`go-postgres.md`](go-postgres.md) §5，未做删除决定。
 - 触发原因：用户先问 PG 是否必需，后要求进行 SQLite + Golang 改造并尽可能保持行为一致。
 - 依据：本仓库 `releases/1.4.12/tokentracker-install.sql`、上游 `docs/self-hosting*.md`、InsForge/PostgREST 官方架构、真实 PostgreSQL 15.18 验收、契约 golden 与 Go adapter 对比结果。
 

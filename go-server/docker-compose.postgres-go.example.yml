@@ -1,0 +1,70 @@
+# 实验用 Go + PostgreSQL 自托管后端。
+#
+# 用法:
+#   export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+#   export TT_JWT_SECRET="$(openssl rand -hex 32)"   # 至少 32 字节
+#   docker compose -f docker-compose.postgres-go.example.yml up -d
+#   curl http://127.0.0.1:8080/health
+#
+# ⚠️ 当前只覆盖 STATUS.md 中明确列出的行为；不是 InsForge 替代品/生产 GA。
+# ⚠️ 这里的 postgres:15-alpine 为了示例可读性用 tag；生产请按 OCI digest 固定，
+#    并自行负责 pg_dump/物理备份、PITR、监控与升级窗口。
+services:
+  tokentracker-postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tokentracker
+      POSTGRES_DB: tokentracker
+      # 只用于本地示例；生产请换成 secrets 或外部托管 PG
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a strong random password}
+      # 数据目录归 postgres 用户所有；容器内不需要额外扩展
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - tokentracker-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tokentracker -d tokentracker"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+    # 不发布到宿主机；Go 服务用 compose 内部网络访问。
+    # 需要 psql/备份时临时加 ports 或 `docker compose exec`。
+
+  tokentracker-go:
+    image: ghcr.io/quietsugar/token-tracker-self-hosting-sqlite-go:experimental
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: experimental
+        VCS_REF: ${GIT_SHA:-local}
+        TARGETARCH: amd64
+    restart: unless-stopped
+    depends_on:
+      tokentracker-postgres:
+        condition: service_healthy
+    environment:
+      # 同一个二进制同时内置 sqlite 与 postgres 驱动，用 URL scheme 选择引擎。
+      TT_DATABASE_URL: postgres://tokentracker:${POSTGRES_PASSWORD}@tokentracker-postgres:5432/tokentracker?sslmode=disable
+      TT_LISTEN_ADDR: 0.0.0.0:8080
+      TT_JWT_SECRET: ${TT_JWT_SECRET:?set a strong random secret}
+      TT_DASHBOARD_URL: ${TT_DASHBOARD_URL:-https://your-dashboard.example}
+      TT_NOW: ${TT_NOW:-}
+    ports:
+      - "127.0.0.1:${TT_PORT:-8080}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  tokentracker-pgdata:

@@ -2,6 +2,41 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-26 — Go 后端支持 PostgreSQL（双引擎，同一份代码）
+
+用户要求：Go 版本支持 PostgreSQL；并问「支持 PG 是否更简单」「不再支持 SQLite 是否降低维护成本」。
+
+### 实现
+
+- `go-server/internal/store` 新增方言层：
+  - `dialect.go`：`Dialect`（sqlite/postgres）、DSN 推断、`?`→`$n` 占位符改写
+    （跳过字符串/标识符/注释/美元引号，表驱动单测覆盖）。
+  - `db.go`：`DB`/`Tx` 包装（所有 SQL 自动按方言改写）、连接池
+    （SQLite 单连接；PG 16 连接 + 30s 启动等待）、可选 PG schema 隔离、优雅关闭。
+  - `schema.go`：DDL 仍是**唯一一份**，用 `{{ENGINE}}` / `{{BOOL}}` / `{{FALSE}}`
+    三个占位符按引擎渲染；SQLite 的 `PRAGMA` 只在该引擎拼入。
+- 启动配置：`TT_DATABASE_URL`（`postgres://…` 或 SQLite 路径）、`TT_DATABASE_DRIVER`、
+  `TT_POSTGRES_SCHEMA[_EPHEMERAL]`；`TT_DATABASE_PATH` 保留兼容。启动日志脱敏密码。
+- 幂等插入 `INSERT OR IGNORE` → `store.DB.InsertIgnore`（PG 走 `ON CONFLICT DO NOTHING`）；
+  PG 布尔列由 `flexibleBool` 吸收。
+- **不再支持 SQLite？未做此决定**：SQLite 渲染结果逐字节未变（checksum 不变，既有实例可原地升级），
+  成本分析见 `docs/go-postgres.md` §5。
+
+### 验收
+
+- 新增 `contract/adapters/go-postgres.cjs`：每个用例起独立 schema（`tt_case_<hex>`），退出 `DROP SCHEMA CASCADE`。
+- Go unit `-race`（SQLite）PASS；同一批测试切到真实 PostgreSQL 16.2 也 PASS。
+- 契约：`go-sqlite` **33 PASS / 0 FAIL / 2 SKIP**；`go-postgres` **33 PASS / 0 FAIL / 2 SKIP**。
+- 新增 `.github/workflows/go-server.yml`：SQLite 流水线 + PostgreSQL **15 / 16** 矩阵（unit + 契约）。
+
+### 文档/配置
+
+- 新增 `docs/go-postgres.md`（用法、架构、验证证据、运维差异、维护成本问答）。
+- 新增 `go-server/docker-compose.postgres-go.example.yml`；`go-server/Dockerfile` 说明同一镜像双驱动。
+- 更新 `go-server/STATUS.md`、`docs/database-choice.md`、`MAINTENANCE.md` §11、`contract/README.md`、`README.md`。
+
+---
+
 ## 2026-10-26 — 真实标准环境 + Go/SQLite 垂直切片 + 文档现实审计
 
 用户要求：① 运行真实标准环境；② 实现 SQLite + Go 版本；③ 按真实项目状态反审文档/规则。
