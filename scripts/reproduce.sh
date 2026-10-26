@@ -76,4 +76,9 @@ fi
 echo "[5/5] SHA256SUMS 逐字节一致 ✓"
 echo
 echo "✓ 可复现性校验通过：镜像将使用的产物可由 $COMMIT 完整重建。"
-[ "$KEEP" = "1" ] && echo "临时目录: $TMP"
+# 注意：不能用 `[ ... ] && echo` 作为最后一条命令——条件为假时整条返回 1，
+# 会让调用方（CI step）误判为失败。用 if 保证退出码为 0。
+if [ "$KEEP" = "1" ]; then
+  echo "临时目录: $TMP"
+fi
+exit 0

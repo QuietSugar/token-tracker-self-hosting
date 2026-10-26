@@ -51,6 +51,20 @@ jobs:
           for f in scripts/*.cjs docker/*.cjs; do node --check "$f"; done
           echo "All scripts parse OK."
 
+      - name: Reproducibility check (CI must be able to rebuild artifacts)
+        run: |
+          set -euo pipefail
+          # 直接在 CI 里验证：从锁定上游 commit 重建产物，且脚本必须返回 0。
+          # 这条同时是 reproduce.sh 退出码的回归测试（曾因尾部 [ ] && echo 误判失败）。
+          COMMIT="$(sed -n 's/^COMMIT=//p' tracking/REF | head -1)"
+          UP="$RUNNER_TEMP/upstream"
+          git init -q "$UP"
+          git -C "$UP" remote add origin https://github.com/xiufengsun/TokenTracker.git
+          git -C "$UP" fetch -q --depth=1 origin "$COMMIT"
+          git -C "$UP" checkout -q FETCH_HEAD
+          UPSTREAM_DIR="$UP" ./scripts/reproduce.sh
+          echo "reproduce.sh exit code OK"
+
       - name: Validate image CLI against audited artifacts
         run: |
           set -euo pipefail
