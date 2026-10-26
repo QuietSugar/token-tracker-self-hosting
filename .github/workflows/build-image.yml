@@ -260,14 +260,23 @@ jobs:
           docker run --rm "$IMAGE" verify
           echo "--- functions (count) ---"
           docker run --rm "$IMAGE" functions --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const m=JSON.parse(s);if(m.functions.length!==14)process.exit(1);console.log("14 functions OK")})'
-          echo "--- sql (first line) ---"
-          docker run --rm "$IMAGE" sql | head -1
+          # 注意：用 `docker run ... | head` 会让 docker CLI 写 /dev/stdout 时
+          # broken pipe，在 `set -o pipefail` 下导致 step 失败。
+          # 因此先重定向到文件再查看（既避免 EPIPE，又能完整校验 SQL）。
+          echo "--- sql ---"
+          docker run --rm "$IMAGE" sql > "$RUNNER_TEMP/install.sql"
+          head -1 "$RUNNER_TEMP/install.sql"
+          grep -q 'BEGIN;' "$RUNNER_TEMP/install.sql"
           echo "--- export ---"
+          # 容器以 uid 10001 运行，挂载目录需可写
           mkdir -p "$RUNNER_TEMP/tt-export"
+          chmod 777 "$RUNNER_TEMP/tt-export"
           docker run --rm -v "$RUNNER_TEMP/tt-export:/out" "$IMAGE" export /out
           (cd "$RUNNER_TEMP/tt-export" && sha256sum -c SHA256SUMS)
           echo "--- commands ---"
-          docker run --rm "$IMAGE" commands | head -8
+          docker run --rm "$IMAGE" commands > "$RUNNER_TEMP/commands.txt"
+          head -8 "$RUNNER_TEMP/commands.txt"
+          grep -q 'psql' "$RUNNER_TEMP/commands.txt"
 
       - name: Attest build provenance (SLSA)
         if: needs.meta.outputs.should_push == 'true' && steps.build.outputs.digest != ''
