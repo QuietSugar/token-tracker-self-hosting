@@ -56,6 +56,24 @@ cd /path/to/token-tracker-self-hosting
 - 用户想复核某次部署或回滚
 - 安全相关：疑似凭据误提交 → 立即走 `SECURITY.md`
 
+## 2.1 推送认证（GitHub App）
+
+**默认且唯一的推送方式**：GitHub App 的 installation token，不用 PAT。
+
+| 项 | 值 |
+|---|---|
+| 配置文件 | `~/.config/tokentracker-gh-app/config.env`（仓库之外，永不入库） |
+| 私钥 | `~/.config/tokentracker-gh-app/private-key.pem`（chmod 600，仓库之外） |
+| 换取 token | `node scripts/gh-app-token.cjs`（JWT → installation token，1 小时有效） |
+| 推送 | `./scripts/push-with-app.sh -u origin main` |
+| 配置指南 | [`docs/github-app-setup.md`](docs/github-app-setup.md) |
+
+必需的 App 权限：**Contents: R/W** + **Workflows: R/W**（后者决定能否推送 `.github/workflows/`；PAT 就是因为缺它而被拒）。Metadata: Read 是自动的。
+
+推送前必跑 `./scripts/check-secrets.sh`。私钥与 token 都不得进入仓库或聊天记录；疑似泄露时先轮换私钥（立即失效），再清历史。
+
+提交身份（`hall <sugarjellyfish@gmail.com>`）与推送凭据无关，由 `bootstrap.sh` 设置；两者可以独立更换。
+
 ---
 
 ## 3. 标准循环（SOP）
@@ -87,7 +105,7 @@ cd /path/to/token-tracker-self-hosting
       7. ./scripts/verify.sh releases/<ver>
       8. 由人在 VPS 部署；结果写 releases/<ver>/acceptance.md
       9. 更新 CHANGELOG，commit（message 带上上游 commit SHA）
-     10. ./scripts/check-secrets.sh && git push
+     10. ./scripts/check-secrets.sh && ./scripts/push-with-app.sh -u origin main
 ```
 
 ### 硬停止条件（出现即停，不要绕过）

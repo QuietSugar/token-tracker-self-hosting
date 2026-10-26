@@ -25,6 +25,13 @@ if name="$(git config user.name 2>/dev/null)" && email="$(git config user.email 
 else
   echo "  ⚠️ 提交身份缺失 —— 先跑 ./scripts/bootstrap.sh（否则 git commit 会失败）"
 fi
+app_cfg="${GH_APP_CONFIG:-$HOME/.config/tokentracker-gh-app/config.env}"
+if [ -f "$app_cfg" ]; then
+  echo "  GitHub App  : 已配置 ($app_cfg)"
+  echo "                推送用 ./scripts/push-with-app.sh -u origin main"
+else
+  echo "  GitHub App  : ⚠️ 未配置（见 docs/github-app-setup.md）"
+fi
 
 echo; bar; echo "▌1. 当前锁定点 (tracking/REF)"
 sed -n '/^[A-Z_]*=/p' tracking/REF

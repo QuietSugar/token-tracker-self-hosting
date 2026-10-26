@@ -2,6 +2,19 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-26 — 改用 GitHub App 做长期推送认证
+
+背景：fine-grained PAT 缺少 `workflow` 权限，推送 `.github/workflows/verify.yml` 被 GitHub 拒绝。用户希望长期维护，改用 GitHub App。
+
+- 新增 [`docs/github-app-setup.md`](docs/github-app-setup.md)：完整的 GitHub App 创建/授权/安装/轮换指南，含必需的 `Contents: R/W` + `Workflows: R/W` 权限说明与官方参考链接。
+- 新增 `scripts/gh-app-token.cjs`：用私钥签 RS256 JWT（`iat`/`exp`/`iss`）换取 1 小时 installation token；只写 600 权限的临时文件，stdout 不打印 token。
+- 新增 `scripts/push-with-app.sh`：`GIT_ASKPASS` 注入 token 推送，输出脱敏，退出即清理临时文件；支持 `--dry-run`。
+- `bootstrap.sh` / `session-start.sh`：检查 `~/.config/tokentracker-gh-app/` 凭据是否就绪。
+- 提交身份设为 `hall <sugarjellyfish@gmail.com>`（可经 `SELFHOST_GIT_NAME` / `SELFHOST_GIT_EMAIL` 覆盖）。
+- 查明仓库 owner 为 `QuietSugar`（User），与用户提供的用户名 `hall` 是两个不同账号；App 必须由有该仓库管理权限的账号安装。
+- README / SECURITY.md / MAINTENANCE.md 同步更新推送方式与私钥保护规则。
+- **首次实施仍未开始**；`releases/` 下暂无产物。
+
 ## 2026-10-26 — 建立长期维护机制
 
 - 新增 `MAINTENANCE.md`：维护契约、会话启动协议、标准循环 SOP、决策树、硬停止条件、灾难恢复、当前不变式。明确「状态存在仓库里，不在对话记忆里」。

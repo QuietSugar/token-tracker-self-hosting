@@ -17,7 +17,8 @@
 2. 文件权限 `chmod 600`；密钥只存在于服务器，不进 shell 历史、不进截图、不进浏览器构建产物。
 3. 客户端 `~/.tokentracker/config.json` 权限 `600`，且**不复制到本仓库**。
 4. 自托管模式**不配置** Waffo / Paddle / 微信 / 支付宝密钥——付费与赠送码功能在自托管清单里被有意排除。
-5. **每次推送前**：`./scripts/check-secrets.sh`；失败就不要推。CI 会再查一遍，但不要把 CI 当作唯一防线。
+5. **GitHub App 私钥**放在 `~/.config/tokentracker-gh-app/private-key.pem`（仓库之外，chmod 600），`config.env` 只放非密钥的 ID 配置。私钥不进仓库、不进聊天记录、不进 CI 日志。installation token 只有 1 小时寿命，用后立即删除临时文件。
+6. **每次推送前**：`./scripts/check-secrets.sh`；失败就不要推。CI 会再查一遍，但不要把 CI 当作唯一防线。
 6. `releases/<ver>/acceptance.md` 只写结论与取证方式，**不要粘原始日志、抓包内容、截图或数据库 dump**（这些文件会入库并公开）。
 
 ## 误提交处置（公有仓库 = 已泄露）
@@ -26,7 +27,8 @@
 2. 检查该服务的访问日志，确认有无异常使用。
 3. `git rm --cached` 移除文件并提交；若已推送，用 `git filter-repo` 清历史并强推（改写历史，先与协作者协调）。
 4. 即使清理完成，也**保留已轮换**的假设：历史可能已被 clone / fork / 缓存。
-5. 复盘：把该文件模式加入 `.gitignore` 与 `check-secrets.sh` 的模式表，避免重犯。
+5. 若泄露的是 GitHub App 私钥：立刻在 App settings 生成新私钥（旧私钥立即失效），更新本地 `private-key.pem`；installation token 最多 1 小时自动过期。
+6. 复盘：把该文件模式加入 `.gitignore` 与 `check-secrets.sh` 的模式表，避免重犯。
 
 ## 报告
 

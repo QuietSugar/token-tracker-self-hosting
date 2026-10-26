@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 环境自举：恢复 git 的本地配置（remote / 提交身份）。
+# 环境自举：恢复 git 的本地配置（remote / 提交身份），并检查 GitHub App 凭据是否就绪。
 #
 # 背景：本仓库的维护环境（沙箱工作区）快照不包含 .git/config 与 ~/.gitconfig，
 #       因此每个新会话都会丢失 remote 与 user.name/user.email，但提交历史与 refs 仍在。
@@ -14,8 +14,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
 REMOTE_URL="https://github.com/QuietSugar/token-tracker-self-hosting.git"
-NAME="${SELFHOST_GIT_NAME:-TokenTracker Selfhost Maintainer}"
-EMAIL="${SELFHOST_GIT_EMAIL:-selfhost@localhost}"
+# 提交身份：与推送凭据（GitHub App）无关，仅决定 commit 的 author/committer。
+NAME="${SELFHOST_GIT_NAME:-hall}"
+EMAIL="${SELFHOST_GIT_EMAIL:-sugarjellyfish@gmail.com}"
+APP_CONFIG="${GH_APP_CONFIG:-$HOME/.config/tokentracker-gh-app/config.env}"
 
 echo "=== 环境自举 ==="
 
@@ -35,11 +37,20 @@ git config user.name "$NAME"
 git config user.email "$EMAIL"
 echo "[ok]   提交身份: $NAME <$EMAIL>"
 
-if [ "$NAME" = "TokenTracker Selfhost Maintainer" ]; then
-  echo
-  echo "提示: 这是占位身份，会显示在 public 提交历史里。想改用自己的："
-  echo "  SELFHOST_GIT_NAME=\"你的名字\" SELFHOST_GIT_EMAIL=\"你的邮箱\" ./scripts/bootstrap.sh"
-  echo "  （尚未推送前可用 git commit --amend --reset-author --no-edit 修正已有提交）"
+echo
+echo "=== GitHub App 凭据 ==="
+if [ -f "$APP_CONFIG" ]; then
+  echo "[ok]   配置文件存在: $APP_CONFIG"
+  key="$(sed -n 's/^GH_APP_PRIVATE_KEY_PATH=//p' "$APP_CONFIG" | head -1)"
+  if [ -n "$key" ] && [ -f "$key" ]; then
+    echo "[ok]   私钥存在: $key (权限 $(stat -c '%a' "$key" 2>/dev/null || echo '?'))"
+  else
+    echo "[warn] 私钥缺失，检查 $APP_CONFIG 里的 GH_APP_PRIVATE_KEY_PATH"
+  fi
+  echo "       推送: ./scripts/push-with-app.sh -u origin main"
+else
+  echo "[warn] 未配置 GitHub App 凭据，暂时无法推送。"
+  echo "       配置方式见 docs/github-app-setup.md §6"
 fi
 
 echo

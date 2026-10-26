@@ -91,14 +91,16 @@ tokentracker-selfhost/
 │   ├── README.md                # env/ 目录说明
 │   └── server.env.example       # 服务端环境变量模板（占位符，无真实值）
 ├── scripts/
-│   ├── bootstrap.sh             # 每次会话第 0 步：恢复 remote 与提交身份
+│   ├── bootstrap.sh             # 每次会话第 0 步：恢复 remote / 提交身份 / 检查 App 凭据
 │   ├── session-start.sh         # 每次会话第 1 步：恢复完整上下文
 │   ├── upstream.sh              # 只读检查上游：status / fetch / review / pin
 │   ├── build.sh                 # 从锁定点生成产物到 releases/<version>/
 │   ├── summarize.cjs            # 输出步骤 SHA-256 与 functions.json 摘要
 │   ├── verify.sh                # 校验 SHA256SUMS + 编码 + 函数数量
 │   ├── check-secrets.sh         # 推送前密钥扫描（public gate）
-│   └── check-encoding.sh        # UTF-8 / 无 BOM 检查
+│   ├── check-encoding.sh        # UTF-8 / 无 BOM 检查
+│   ├── gh-app-token.cjs         # GitHub App JWT → installation token
+│   └── push-with-app.sh         # 用 App token 推送（GIT_ASKPASS 注入）
 ├── .github/workflows/verify.yml # CI：密钥扫描 + 编码 + 产物校验
 └── releases/
     ├── _template/               # review.md / acceptance.md 模板
@@ -164,6 +166,8 @@ tokentracker-selfhost/
 | `./scripts/verify.sh releases/<ver>` | 校验产物完整性/编码/函数数量 | 否 |
 | `./scripts/check-secrets.sh` | **推送前**密钥扫描 | 否 |
 | `./scripts/check-encoding.sh` | UTF-8 / 无 BOM 检查 | 否 |
+| `./scripts/gh-app-token.cjs` | GitHub App 换取 installation token | 写 /tmp token 文件 |
+| `./scripts/push-with-app.sh -u origin main` | 用 App token 推送 | 推远程 |
 
 ---
 
@@ -188,15 +192,20 @@ tokentracker-selfhost/
 
 ## 远程仓库与推送
 
-远程已配置为 `origin`：<https://github.com/QuietSugar/token-tracker-self-hosting.git>（**public**，初始为空仓库）。
+远程已配置为 `origin`：<https://github.com/QuietSugar/token-tracker-self-hosting.git>（**public**）。
 
-在**有 GitHub 凭据的机器**上执行：
+**认证使用 GitHub App，不用 PAT**。完整配置步骤见 [`docs/github-app-setup.md`](docs/github-app-setup.md)——需要 `Contents: R/W` 和 `Workflows: R/W` 两个权限（缺后者无法推送 `.github/workflows/`）。
+
+配置好 `~/.config/tokentracker-gh-app/` 后：
 
 ```sh
-./scripts/check-secrets.sh          # 必须：公有仓库强制关卡
-git remote -v                       # 确认 origin 指向正确
-git push -u origin main
+./scripts/bootstrap.sh                      # 恢复 remote 与提交身份
+./scripts/check-secrets.sh                  # 必须：公有仓库强制关卡
+./scripts/push-with-app.sh --dry-run         # 验证 App 认证（不推送）
+./scripts/push-with-app.sh -u origin main    # 实际推送
 ```
+
+`push-with-app.sh` 用 `GIT_ASKPASS` 注入 1 小时有效的 installation token：**不写进 URL、不写 `.git/config`、不落 shell 历史、输出自动脱敏**，推送后立即删除临时文件。
 
 推送后 CI（`.github/workflows/verify.yml`）会自动跑一遍密钥扫描、编码检查和产物校验。建议同时在 GitHub 仓库设置里开启：
 
