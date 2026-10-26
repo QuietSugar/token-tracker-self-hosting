@@ -9,6 +9,8 @@
 - 状态：**技术预览**（依据上游 `docs/self-hosting-status.md`）。
 
 > ⚠️ **本仓库是公有的**：任何 `git push` 后内容立即对全网可见，且无法真正撤回。安全约定见下方「公有仓库安全约定」与 [`SECURITY.md`](SECURITY.md)。
+>
+> 🤖 **本仓库由 Agent 长期维护**。维护契约、会话启动协议与标准循环见 [`MAINTENANCE.md`](MAINTENANCE.md)——**接手或上下文重置时先读它**。
 
 ---
 
@@ -19,6 +21,8 @@
 - [x] 归档维护提示词、可复用提示词、总体规划
 - [x] 锁定首个上游构建点：v1.4.12 / `8d32a956181bf52fae449c89b8f6520253566283`
 - [x] 建立版本追踪、产物校验、编码检查机制
+- [x] 面向 public 远程仓库加固（密钥扫描 + CI）
+- [x] 建立长期维护契约与会话启动协议（`MAINTENANCE.md` / `session-start.sh`）
 - [ ] **首次实施**：生成基线 SQL 与 14 个私有函数产物
 - [ ] **首次部署**：应用 SQL、上传函数、配置服务端环境变量（由人在 VPS 上执行）
 - [ ] **首次验收**：按 [`docs/runbook.md`](docs/runbook.md) 逐项打勾
@@ -72,6 +76,7 @@
 ```
 tokentracker-selfhost/
 ├── README.md                    # 本文件：定位、状态、原则、工作流
+├── MAINTENANCE.md               # 长期维护契约 / 会话启动协议 / SOP（先读它）
 ├── SECURITY.md                  # 凭据处理与误提交处置
 ├── CHANGELOG.md                 # 本运维仓库自身的变更记录
 ├── docs/
@@ -86,6 +91,8 @@ tokentracker-selfhost/
 │   ├── README.md                # env/ 目录说明
 │   └── server.env.example       # 服务端环境变量模板（占位符，无真实值）
 ├── scripts/
+│   ├── bootstrap.sh             # 每次会话第 0 步：恢复 remote 与提交身份
+│   ├── session-start.sh         # 每次会话第 1 步：恢复完整上下文
 │   ├── upstream.sh              # 只读检查上游：status / fetch / review / pin
 │   ├── build.sh                 # 从锁定点生成产物到 releases/<version>/
 │   ├── summarize.cjs            # 输出步骤 SHA-256 与 functions.json 摘要
@@ -131,10 +138,24 @@ tokentracker-selfhost/
 
 ---
 
+## 长期维护
+
+本仓库由 Agent 长期维护，完整契约见 [`MAINTENANCE.md`](MAINTENANCE.md)。要点：
+
+- **状态在仓库里，不在对话记忆里**。每次会话先跑 `./scripts/bootstrap.sh`（沙箱快照不保存 `.git/config`），再跑 `./scripts/session-start.sh`，然后读 `MAINTENANCE.md` → `tracking/REF` → `tracking/upstream.md` → 最新 `releases/<ver>/review.md` + `acceptance.md`，即可恢复全部上下文。
+- **触发**：用户说「检查上游 / 升级 / 生成产物 / 做评审」即启动标准循环；Agent 不会主动定时运行（可用 CI 定时只读检查 + 开 issue 提醒）。
+- **每次循环必须留痕**：版本追踪表一行 + `review.md` + `acceptance.md` + `CHANGELOG.md` + 带上游 SHA 的 commit。没有记录的维护等于没做。
+- **硬停止条件**：旧步骤 checksum 变化、依赖锁定不一致、密钥扫描未通过——出现即停并报告，不绕过。
+- **灾难恢复**：用 bundle 或 clone 恢复仓库 → `session-start.sh` → 把上游切到 `REF` 的 commit → `build.sh` 重建产物，SHA-256 应与 `SHA256SUMS` 完全一致。
+
+---
+
 ## 命令速查
 
 | 命令 | 作用 | 是否修改外部状态 |
 |---|---|---|
+| `./scripts/bootstrap.sh` | **每次会话第 0 步**：恢复 `origin` 与提交身份 | 只改 `.git/config` |
+| `./scripts/session-start.sh` | **每次会话第 1 步**：恢复状态、待办、安全检查 | 否 |
 | `./scripts/upstream.sh status` | 显示锁定点与本地 checkout 状态 | 否 |
 | `./scripts/upstream.sh fetch` | 拉取上游 main 到 FETCH_HEAD | 仅更新上游 git refs |
 | `./scripts/upstream.sh review` | 拉取 + 新提交列表 + 契约 diff + 结论 | 仅更新上游 git refs |

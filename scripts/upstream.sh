@@ -36,7 +36,9 @@ cmd_status() {
   local head dirty content_changes mode_changes
   head="$(git -C "$UPSTREAM_DIR" rev-parse HEAD)"
   dirty="$(git -C "$UPSTREAM_DIR" status --porcelain | wc -l | tr -d ' ')"
-  content_changes="$(git -C "$UPSTREAM_DIR" diff --numstat | wc -l | tr -d ' ')"
+  # --numstat 对纯权限位变更输出 "0\t0\tfile"，必须过滤掉再计数
+  content_changes="$(git -C "$UPSTREAM_DIR" diff --numstat \
+    | awk '$1!="0" || $2!="0" {n++} END {print n+0}')"
   mode_changes="$(git -C "$UPSTREAM_DIR" diff --summary | wc -l | tr -d ' ')"
   echo "=== 本地上游 checkout ==="
   echo "DIR       : $UPSTREAM_DIR"
