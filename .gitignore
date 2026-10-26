@@ -1,0 +1,40 @@
+# ---- 凭据与本地配置：永不入库 ----
+# env/ 下只允许 *.example 与 README.md
+env/*
+!env/*.example
+!env/README.md
+.env
+.env.*
+*.env.local
+secrets/
+credentials/
+*.key
+*.pem
+*.p12
+*.pfx
+*.secret
+id_rsa*
+tokentracker-config.json
+config.json
+
+# ---- 上游源码 checkout（本仓库只保留锁定点 REF）----
+upstream/checkout/
+vendor/
+TokenTracker/
+
+# ---- 运行时 / 临时 ----
+node_modules/
+.npm/
+.tmp/
+tmp/
+*.tmp
+*.bak
+*~
+*.log
+.DS_Store
+Thumbs.db
+
+# ---- 编辑器 ----
+.idea/
+.vscode/
+*.swp

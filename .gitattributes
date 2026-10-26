@@ -1,0 +1,21 @@
+# 统一 LF + 文本归一化（硬性规则：UTF-8 无 BOM，由 scripts/verify.sh 检查）
+* text=auto eol=lf
+
+*.md      text eol=lf
+*.sql     text eol=lf
+*.js      text eol=lf
+*.cjs     text eol=lf
+*.mjs     text eol=lf
+*.sh      text eol=lf
+*.json    text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.txt     text eol=lf
+*.example text eol=lf
+REF       text eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif  binary
+*.pdf binary

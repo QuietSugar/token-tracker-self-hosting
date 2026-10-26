@@ -1,0 +1,9 @@
+# 本仓库当前锁定的上游构建点（single source of truth for builds）
+# 所有 releases/ 下的产物 MUST 从这个 commit 生成。
+# 修改此文件请用：./scripts/upstream.sh pin <commit> <version>
+REPO_URL=https://github.com/xiufengsun/TokenTracker.git
+BRANCH=main
+VERSION=1.4.12
+COMMIT=8d32a956181bf52fae449c89b8f6520253566283
+PINNED_AT=2026-10-26
+PINNED_BY=initial-planning
