@@ -2,6 +2,16 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-26 — 首次推送成功（仓库正式上线）
+
+- 用 GitHub App（App ID `5476780` / Installation `175378660`）的 installation token 推送 `main` 到 <https://github.com/QuietSugar/token-tracker-self-hosting.git>。
+- 远程 `main` = `1949097`；`.github/workflows/verify.yml` 首次运行 **success**（密钥扫描 + 编码 + 脚本语法 + 产物校验通过）。
+- 远程 29 个文件核对无 `.pem` / `.env` / 私钥类文件。
+- 提交身份统一为 `hall <sugarjellyfish@gmail.com>`。
+- 删除仅用于 PAT 无 workflow 权限场景的 `fallback-no-workflow` 备用分支及对应 bundle——完整历史已成功推送，不再需要。
+- ⚠️ **安全事项**：App 私钥曾被直接粘贴在对话中，视为已泄露，需尽快在 App settings 轮换（见 `docs/github-app-setup.md` §9）。
+- **首次实施（生成 SQL 与 14 个函数）仍未开始**；`releases/` 下暂无产物。
+
 ## 2026-10-26 — 改用 GitHub App 做长期推送认证
 
 背景：fine-grained PAT 缺少 `workflow` 权限，推送 `.github/workflows/verify.yml` 被 GitHub 拒绝。用户希望长期维护，改用 GitHub App。
