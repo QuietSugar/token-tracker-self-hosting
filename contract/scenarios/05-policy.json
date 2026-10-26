@@ -1,0 +1,57 @@
+{
+  "group": "policy",
+  "description": "自托管免费策略：membership、配额、付费/试用/赠送码被拒、跨环境",
+  "cases": [
+    {
+      "id": "policy/self-hosted-membership",
+      "tags": ["policy", "rpc"],
+      "given": { "users": 1 },
+      "steps": [
+        { "op": "rpc", "call": "cloud_membership", "args": { "p_user_id": "@ownerId", "p_environment": "live" },
+          "capture": ["status", "body.status", "body.phase", "body.can_upload_cloud", "body.can_read_cloud", "body.machine_limit", "body.hourly_history_days", "body.trial_available"] },
+        { "op": "rpc", "call": "cloud_account_access", "args": { "p_user_id": "@ownerId", "p_environment": "live", "p_kind": "hourly" },
+          "capture": ["status", "body.available_from"] }
+      ]
+    },
+    {
+      "id": "policy/free-device-enrollment-7",
+      "tags": ["policy", "quota"],
+      "given": { "users": 1 },
+      "steps": [
+        { "op": "issueMany", "count": 7, "capture": ["statuses", "memberships"] },
+        { "op": "rpc", "call": "cloud_list_machines", "args": { "p_user_id": "@ownerId", "p_environment": "live" },
+          "capture": ["status", "body.machine_count"] }
+      ]
+    },
+    {
+      "id": "policy/paid-order-refused",
+      "tags": ["policy", "error", "rpc"],
+      "given": { "users": 1 },
+      "steps": [
+        { "op": "rpc", "call": "cloud_create_order",
+          "args": { "p_user_id": "@ownerId", "p_environment": "live", "p_provider": "waffo", "p_sku": "cloud_usd_monthly", "p_request_id": "@uuid:order" },
+          "capture": ["status", "body"] },
+        { "op": "rpc", "call": "cloud_start_trial", "args": { "p_user_id": "@ownerId", "p_environment": "live" },
+          "capture": ["status", "body"] }
+      ]
+    },
+    {
+      "id": "policy/unknown-account-refused",
+      "tags": ["policy", "error", "rpc"],
+      "given": { "users": 0 },
+      "steps": [
+        { "op": "rpc", "call": "cloud_membership", "args": { "p_user_id": "@uuid:ghost", "p_environment": "live" },
+          "capture": ["status", "body"] }
+      ]
+    },
+    {
+      "id": "policy/no-payment-rows",
+      "tags": ["policy", "L1"],
+      "given": { "users": 1 },
+      "steps": [
+        { "op": "query", "sql": "SELECT count(*)::int AS n FROM public.tokentracker_cloud_payments", "capture": ["rows[0].n"] },
+        { "op": "query", "sql": "SELECT count(*)::int AS n FROM public.tokentracker_cloud_orders", "capture": ["rows[0].n"] }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,121 @@
+{
+  "id": "install/manifest-exclusions",
+  "tags": [
+    "L1",
+    "install"
+  ],
+  "group": "install",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "manifest",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "functions": [
+            {
+              "slug": "tokentracker-device-flow-authorize",
+              "file": "tokentracker-device-flow-authorize.js",
+              "public": true
+            },
+            {
+              "slug": "tokentracker-device-flow-grant",
+              "file": "tokentracker-device-flow-grant.js",
+              "public": false
+            },
+            {
+              "slug": "tokentracker-device-flow-poll",
+              "file": "tokentracker-device-flow-poll.js",
+              "public": true
+            },
+            {
+              "slug": "tokentracker-device-token-issue",
+              "file": "tokentracker-device-token-issue.js",
+              "public": false
+            },
+            {
+              "slug": "tokentracker-device-rename",
+              "file": "tokentracker-device-rename.js",
+              "public": false
+            },
+            {
+              "slug": "tokentracker-ingest",
+              "file": "tokentracker-ingest.js",
+              "public": false
+            },
+            {
+              "slug": "tokentracker-account-summary",
+              "file": "tokentracker-account-summary.js",
+              "public": false
+            },
+            {
+              "slug": "tokentracker-account-daily",
+              "file": "tokentracker-account-daily.js",
+              "public": false
+            },
+            {
+              "slug": "tokentracker-account-hourly",
+              "file": "tokentracker-account-hourly.js",
+              "public": false
+            },
+            {
+              "slug": "tokentracker-account-monthly",
+              "file": "tokentracker-account-monthly.js",
+              "public": false
+            },
+            {
+              "slug": "tokentracker-account-heatmap",
+              "file": "tokentracker-account-heatmap.js",
+              "public": false
+            },
+            {
+              "slug": "tokentracker-account-model-breakdown",
+              "file": "tokentracker-account-model-breakdown.js",
+              "public": false
+            },
+            {
+              "slug": "tokentracker-account-devices",
+              "file": "tokentracker-account-devices.js",
+              "public": false
+            },
+            {
+              "slug": "tokentracker-billing",
+              "file": "tokentracker-billing.js",
+              "public": false
+            }
+          ],
+          "publicSlugs": [
+            "tokentracker-device-flow-authorize",
+            "tokentracker-device-flow-poll"
+          ],
+          "excluded": [
+            "official community publishing",
+            "payment provider webhooks",
+            "billing merchant credentials"
+          ],
+          "serverSecrets": [
+            "INSFORGE_BASE_URL",
+            "INSFORGE_SERVICE_ROLE_KEY",
+            "ANON_KEY",
+            "JWT_SECRET or JWT_PUBLIC_KEY",
+            "TOKENTRACKER_DASHBOARD_URL"
+          ],
+          "dashboardBuildVariables": [
+            "VITE_INSFORGE_BASE_URL",
+            "VITE_INSFORGE_ANON_KEY"
+          ],
+          "mode": "self_hosted",
+          "schemaVersion": 1
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

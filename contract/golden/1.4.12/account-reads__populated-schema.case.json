@@ -1,0 +1,182 @@
+{
+  "id": "account-reads/populated-schema",
+  "tags": [
+    "read",
+    "schema",
+    "aggregation"
+  ],
+  "group": "account-reads",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "request",
+      "call": "tokentracker-account-summary",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "from": "@reldate:1",
+          "to": "@reldate:1",
+          "days": 1,
+          "totals": {
+            "total_tokens": 75,
+            "billable_total_tokens": 75,
+            "total_cost_usd": "0.000000",
+            "input_tokens": 75,
+            "output_tokens": 0,
+            "cached_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "conversation_count": 1
+          },
+          "rolling": {
+            "last_7d": {
+              "from": "@reldate:2",
+              "to": "@reldate:3",
+              "active_days": 0,
+              "totals": {
+                "billable_total_tokens": 0,
+                "conversation_count": 0
+              }
+            },
+            "last_30d": {
+              "from": "@reldate:4",
+              "to": "@reldate:3",
+              "active_days": 1,
+              "totals": {
+                "billable_total_tokens": 75,
+                "conversation_count": 1
+              },
+              "avg_per_active_day": 75
+            }
+          }
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 4,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-daily",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "from": "@reldate:1",
+          "to": "@reldate:1",
+          "data": [
+            {
+              "day": "@reldate:1",
+              "total_tokens": 75,
+              "billable_total_tokens": 75,
+              "total_cost_usd": 0,
+              "input_tokens": 75,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "cache_creation_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "conversation_count": 1,
+              "models": {
+                "gpt-6": 75
+              }
+            }
+          ]
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 1,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-model-breakdown",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json",
+          "vary": "Accept-Encoding"
+        },
+        "body": {
+          "from": "@reldate:1",
+          "to": "@reldate:1",
+          "days": 0,
+          "sources": [
+            {
+              "source": "codex",
+              "totals": {
+                "total_tokens": 75,
+                "billable_total_tokens": 75,
+                "input_tokens": 75,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "reasoning_output_tokens": 0,
+                "total_cost_usd": "0.000000"
+              },
+              "models": [
+                {
+                  "model": "gpt-6",
+                  "model_id": "gpt-6",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 75,
+                    "billable_total_tokens": 75,
+                    "input_tokens": 75,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                }
+              ]
+            }
+          ],
+          "pricing": {
+            "model": "per-model",
+            "pricing_mode": "per_token_type",
+            "source": "litellm",
+            "effective_from": "@reldate:2"
+          }
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 2,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

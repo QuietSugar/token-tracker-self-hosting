@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "description": "已登记的有意偏差。未登记的偏差一律判 FAIL。",
+  "waivers": [],
+  "example": {
+    "case": "07-aggregation/timezone-bucket",
+    "path": "$.steps[0].body.tz",
+    "reason": "示例：SQLite 无 timestamptz；Go 层用 UTC 文本等价实现，字段类型不同但语义相同",
+    "approvedBy": "maintainer",
+    "date": "YYYY-MM-DD"
+  },
+  "note": "真实偏差必须逐项写明 case / path / reason / approvedBy / date，并由维护者评审。"
+}

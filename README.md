@@ -99,6 +99,14 @@ tokentracker-selfhost/
 │   ├── github-app-setup.md      # GitHub App 认证配置
 │   ├── docker-image.md          # Docker 镜像交付设计与使用
 │   └── database-choice.md       # 为什么 PostgreSQL 是硬依赖 + 可选部署形态
+├── contract/                    # 契约测试体系（为 Go+SQLite 改造做一致性基准）
+│   ├── README.md / SPEC.md      # 体系说明 / 实现者契约规范
+│   ├── scenarios/               # 35 个语言无关用例（8 组）
+│   ├── golden/1.4.12/           # 录制的行为快照 + L1 静态契约 + 校验和
+│   ├── lib/                     # 归一化 / 执行器 / 对比器 / 录制器 / 进程池
+│   ├── adapters/                # 参考实现适配器 + Go+SQLite 适配器模板
+│   ├── scripts/                 # record / verify / self-test / benchmark
+│   └── RESULTS.md               # 当前结果摘要与改造者下一步
 ├── tracking/
 │   ├── REF                      # 当前锁定的上游 commit（单一构建点）
 │   └── upstream.md              # 版本追踪表（每次拉取后更新，单一事实来源）
@@ -184,6 +192,10 @@ tokentracker-selfhost/
 | `./scripts/gh-app-token.cjs` | GitHub App 换取 installation token | 写 /tmp token 文件 |
 | `./scripts/push-with-app.sh -u origin main` | 用 App token 推送 | 推远程 |
 | `./scripts/reproduce.sh` | 从上游 commit 重建产物并逐字节校验 | 写 /tmp 临时目录 |
+| `./contract/scripts/record.sh` | 录制契约黄金快照（PG+TS 参考实现） | 写 `contract/golden/` |
+| `./contract/scripts/self-test.sh` | 契约体系自测（必须 100% PASS） | 写报告 |
+| `CONTRACT_ADAPTER=... ./contract/scripts/verify.sh` | 对 Go+SQLite 实现跑一致性验证 | 写报告 |
+| `./contract/scripts/benchmark.sh` | 性能基准 | 写报告 |
 | `docker run --rm <image> commands` | 输出 VPS 上要执行的完整部署命令 | 否 |
 
 ---

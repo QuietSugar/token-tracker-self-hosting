@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "product": "tokentracker-selfhost-contract-golden",
+  "upstream": {
+    "version": "1.4.12",
+    "commit": "8d32a956181bf52fae449c89b8f6520253566283",
+    "repository": "https://github.com/xiufengsun/TokenTracker.git"
+  },
+  "implementation": {
+    "name": "reference",
+    "engine": "postgresql-pglite",
+    "language": "typescript-deno-cjs"
+  },
+  "seed": "tokentracker-contract-v1",
+  "recordedAt": "2026-10-26T10:22:45.858Z",
+  "durationMs": 157395,
+  "caseCount": 35,
+  "stepCount": 82,
+  "scenarioGroups": [
+    {
+      "group": "install",
+      "cases": 5
+    },
+    {
+      "group": "device-flow",
+      "cases": 3
+    },
+    {
+      "group": "ingest",
+      "cases": 6
+    },
+    {
+      "group": "account-reads",
+      "cases": 4
+    },
+    {
+      "group": "policy",
+      "cases": 5
+    },
+    {
+      "group": "auth",
+      "cases": 4
+    },
+    {
+      "group": "aggregation",
+      "cases": 4
+    },
+    {
+      "group": "billing",
+      "cases": 4
+    }
+  ],
+  "normalizeVersion": 1,
+  "runnerVersion": 1,
+  "note": "录制自上游 PGlite fixture（真实 SQL + 真实打包 handler 的 loopback HTTP 响应）。"
+}

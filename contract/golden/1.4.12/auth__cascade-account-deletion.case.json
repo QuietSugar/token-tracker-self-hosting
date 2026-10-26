@@ -1,0 +1,53 @@
+{
+  "id": "auth/cascade-account-deletion",
+  "tags": [
+    "auth",
+    "cascade"
+  ],
+  "group": "auth",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "deleteUser",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "deleted": true
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "query",
+      "call": "SELECT (SELECT count(*)::int FROM public.tokentracker_cloud_",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "rows": [
+            {
+              "machines": 0,
+              "aliases": 0,
+              "devices": 0,
+              "hourly": 0
+            }
+          ]
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

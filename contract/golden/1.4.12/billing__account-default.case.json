@@ -1,0 +1,63 @@
+{
+  "id": "billing/account-default",
+  "tags": [
+    "billing",
+    "account"
+  ],
+  "group": "billing",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "request",
+      "call": "tokentracker-billing",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, POST, OPTIONS",
+          "access-control-allow-origin": "*",
+          "cache-control": "no-store",
+          "content-type": "application/json"
+        },
+        "body": {
+          "environment": "live",
+          "membership": {
+            "phase": "active",
+            "status": "self_hosted",
+            "has_gift": false,
+            "expires_at": null,
+            "environment": "live",
+            "hosting_mode": "self_hosted",
+            "access_source": "none",
+            "machine_limit": null,
+            "trial_ends_at": null,
+            "can_read_cloud": true,
+            "gift_expires_at": null,
+            "read_only_until": null,
+            "trial_available": false,
+            "can_upload_cloud": true,
+            "transition_ends_at": null,
+            "hourly_history_days": null,
+            "daily_history_months": null,
+            "sync_interval_seconds": 0
+          },
+          "machine_count": 0,
+          "payments": [],
+          "subscriptions": [],
+          "pending_orders": [],
+          "conflict_orders": [],
+          "gifts": [],
+          "redemption_restriction": null,
+          "gift_redemption_available": false
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

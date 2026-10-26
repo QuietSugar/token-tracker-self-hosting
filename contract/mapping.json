@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "description": "PG 对象 → SQLite/Go 等价实现的映射表。由 Go 实现者填写，供 _test/sql 探针翻译与人工审查。",
+  "tables": {},
+  "functions": {},
+  "types": {
+    "jsonb": "TEXT (JSON) + Go 侧 json.Marshal/Unmarshal",
+    "timestamptz": "TEXT (RFC3339 UTC) 或 INTEGER (unix millis)，需在 mapping 里二选一并统一",
+    "uuid": "TEXT (36 chars) 或 BLOB(16)",
+    "numeric": "REAL，注意与 PG numeric 的精度差异（契约测试会暴露）"
+  },
+  "featuresNeedingApplicationLayer": [
+    "ROW LEVEL SECURITY → Go 中间件强制 owner 过滤（必须覆盖 contract/scenarios/06-auth.json）",
+    "pg_advisory_xact_lock → Go sync.Mutex 或 SQLite BEGIN IMMEDIATE（L3 并发测试）",
+    "PL/pgSQL 聚合函数 → Go 代码实现（contract/scenarios/07-aggregation.json）",
+    "auth.uid() → JWT claims 解析后注入上下文",
+    "gen_random_uuid() → Go crypto/rand 或 SQLite randomblob 组装",
+    "NOTIFY pgrst → 无需实现（PostgREST 专用）",
+    "SECURITY DEFINER → Go 侧以 service 角色执行"
+  ],
+  "note": "此表是改造工作的施工图，不是运行时配置。填完后在 review.md 里说明每项的验证方式。"
+}

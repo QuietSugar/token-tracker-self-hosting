@@ -1,0 +1,1947 @@
+{
+  "id": "ingest/batch-80-models",
+  "tags": [
+    "ingest",
+    "scale"
+  ],
+  "group": "ingest",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "ingestBatch",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey, x-tokentracker-device-token-hash",
+          "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "ok": true,
+          "skipped": 0,
+          "inserted": 80,
+          "membership": {
+            "phase": "active",
+            "status": "self_hosted",
+            "has_gift": false,
+            "expires_at": null,
+            "environment": "live",
+            "hosting_mode": "self_hosted",
+            "access_source": "none",
+            "machine_limit": null,
+            "trial_ends_at": null,
+            "can_read_cloud": true,
+            "gift_expires_at": null,
+            "read_only_until": null,
+            "trial_available": false,
+            "can_upload_cloud": true,
+            "transition_ends_at": null,
+            "hourly_history_days": null,
+            "daily_history_months": null,
+            "sync_interval_seconds": 0
+          },
+          "upload_scope": "cloud",
+          "next_allowed_at": "@ts:1",
+          "sync_interval_seconds": 0
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 1,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-model-breakdown",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json",
+          "vary": "Accept-Encoding"
+        },
+        "body": {
+          "from": "@reldate:1",
+          "to": "@reldate:1",
+          "days": 0,
+          "sources": [
+            {
+              "source": "codex",
+              "totals": {
+                "total_tokens": 11160,
+                "billable_total_tokens": 11160,
+                "input_tokens": 11160,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "reasoning_output_tokens": 0,
+                "total_cost_usd": "0.000000"
+              },
+              "models": [
+                {
+                  "model": "unpriced-model-79",
+                  "model_id": "unpriced-model-79",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 179,
+                    "billable_total_tokens": 179,
+                    "input_tokens": 179,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-78",
+                  "model_id": "unpriced-model-78",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 178,
+                    "billable_total_tokens": 178,
+                    "input_tokens": 178,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-77",
+                  "model_id": "unpriced-model-77",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 177,
+                    "billable_total_tokens": 177,
+                    "input_tokens": 177,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-76",
+                  "model_id": "unpriced-model-76",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 176,
+                    "billable_total_tokens": 176,
+                    "input_tokens": 176,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-75",
+                  "model_id": "unpriced-model-75",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 175,
+                    "billable_total_tokens": 175,
+                    "input_tokens": 175,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-74",
+                  "model_id": "unpriced-model-74",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 174,
+                    "billable_total_tokens": 174,
+                    "input_tokens": 174,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-73",
+                  "model_id": "unpriced-model-73",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 173,
+                    "billable_total_tokens": 173,
+                    "input_tokens": 173,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-72",
+                  "model_id": "unpriced-model-72",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 172,
+                    "billable_total_tokens": 172,
+                    "input_tokens": 172,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-71",
+                  "model_id": "unpriced-model-71",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 171,
+                    "billable_total_tokens": 171,
+                    "input_tokens": 171,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-70",
+                  "model_id": "unpriced-model-70",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 170,
+                    "billable_total_tokens": 170,
+                    "input_tokens": 170,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-69",
+                  "model_id": "unpriced-model-69",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 169,
+                    "billable_total_tokens": 169,
+                    "input_tokens": 169,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-68",
+                  "model_id": "unpriced-model-68",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 168,
+                    "billable_total_tokens": 168,
+                    "input_tokens": 168,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-67",
+                  "model_id": "unpriced-model-67",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 167,
+                    "billable_total_tokens": 167,
+                    "input_tokens": 167,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-66",
+                  "model_id": "unpriced-model-66",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 166,
+                    "billable_total_tokens": 166,
+                    "input_tokens": 166,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-65",
+                  "model_id": "unpriced-model-65",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 165,
+                    "billable_total_tokens": 165,
+                    "input_tokens": 165,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-64",
+                  "model_id": "unpriced-model-64",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 164,
+                    "billable_total_tokens": 164,
+                    "input_tokens": 164,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-63",
+                  "model_id": "unpriced-model-63",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 163,
+                    "billable_total_tokens": 163,
+                    "input_tokens": 163,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-62",
+                  "model_id": "unpriced-model-62",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 162,
+                    "billable_total_tokens": 162,
+                    "input_tokens": 162,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-61",
+                  "model_id": "unpriced-model-61",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 161,
+                    "billable_total_tokens": 161,
+                    "input_tokens": 161,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-60",
+                  "model_id": "unpriced-model-60",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 160,
+                    "billable_total_tokens": 160,
+                    "input_tokens": 160,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-59",
+                  "model_id": "unpriced-model-59",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 159,
+                    "billable_total_tokens": 159,
+                    "input_tokens": 159,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-58",
+                  "model_id": "unpriced-model-58",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 158,
+                    "billable_total_tokens": 158,
+                    "input_tokens": 158,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-57",
+                  "model_id": "unpriced-model-57",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 157,
+                    "billable_total_tokens": 157,
+                    "input_tokens": 157,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-56",
+                  "model_id": "unpriced-model-56",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 156,
+                    "billable_total_tokens": 156,
+                    "input_tokens": 156,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-55",
+                  "model_id": "unpriced-model-55",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 155,
+                    "billable_total_tokens": 155,
+                    "input_tokens": 155,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-54",
+                  "model_id": "unpriced-model-54",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 154,
+                    "billable_total_tokens": 154,
+                    "input_tokens": 154,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-53",
+                  "model_id": "unpriced-model-53",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 153,
+                    "billable_total_tokens": 153,
+                    "input_tokens": 153,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-52",
+                  "model_id": "unpriced-model-52",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 152,
+                    "billable_total_tokens": 152,
+                    "input_tokens": 152,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-51",
+                  "model_id": "unpriced-model-51",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 151,
+                    "billable_total_tokens": 151,
+                    "input_tokens": 151,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-50",
+                  "model_id": "unpriced-model-50",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 150,
+                    "billable_total_tokens": 150,
+                    "input_tokens": 150,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-49",
+                  "model_id": "unpriced-model-49",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 149,
+                    "billable_total_tokens": 149,
+                    "input_tokens": 149,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-48",
+                  "model_id": "unpriced-model-48",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 148,
+                    "billable_total_tokens": 148,
+                    "input_tokens": 148,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-47",
+                  "model_id": "unpriced-model-47",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 147,
+                    "billable_total_tokens": 147,
+                    "input_tokens": 147,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-46",
+                  "model_id": "unpriced-model-46",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 146,
+                    "billable_total_tokens": 146,
+                    "input_tokens": 146,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-45",
+                  "model_id": "unpriced-model-45",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 145,
+                    "billable_total_tokens": 145,
+                    "input_tokens": 145,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-44",
+                  "model_id": "unpriced-model-44",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 144,
+                    "billable_total_tokens": 144,
+                    "input_tokens": 144,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-43",
+                  "model_id": "unpriced-model-43",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 143,
+                    "billable_total_tokens": 143,
+                    "input_tokens": 143,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-42",
+                  "model_id": "unpriced-model-42",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 142,
+                    "billable_total_tokens": 142,
+                    "input_tokens": 142,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-41",
+                  "model_id": "unpriced-model-41",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 141,
+                    "billable_total_tokens": 141,
+                    "input_tokens": 141,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-40",
+                  "model_id": "unpriced-model-40",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 140,
+                    "billable_total_tokens": 140,
+                    "input_tokens": 140,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-39",
+                  "model_id": "unpriced-model-39",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 139,
+                    "billable_total_tokens": 139,
+                    "input_tokens": 139,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-38",
+                  "model_id": "unpriced-model-38",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 138,
+                    "billable_total_tokens": 138,
+                    "input_tokens": 138,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-37",
+                  "model_id": "unpriced-model-37",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 137,
+                    "billable_total_tokens": 137,
+                    "input_tokens": 137,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-36",
+                  "model_id": "unpriced-model-36",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 136,
+                    "billable_total_tokens": 136,
+                    "input_tokens": 136,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-35",
+                  "model_id": "unpriced-model-35",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 135,
+                    "billable_total_tokens": 135,
+                    "input_tokens": 135,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-34",
+                  "model_id": "unpriced-model-34",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 134,
+                    "billable_total_tokens": 134,
+                    "input_tokens": 134,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-33",
+                  "model_id": "unpriced-model-33",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 133,
+                    "billable_total_tokens": 133,
+                    "input_tokens": 133,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-32",
+                  "model_id": "unpriced-model-32",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 132,
+                    "billable_total_tokens": 132,
+                    "input_tokens": 132,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-31",
+                  "model_id": "unpriced-model-31",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 131,
+                    "billable_total_tokens": 131,
+                    "input_tokens": 131,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-30",
+                  "model_id": "unpriced-model-30",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 130,
+                    "billable_total_tokens": 130,
+                    "input_tokens": 130,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-29",
+                  "model_id": "unpriced-model-29",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 129,
+                    "billable_total_tokens": 129,
+                    "input_tokens": 129,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-28",
+                  "model_id": "unpriced-model-28",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 128,
+                    "billable_total_tokens": 128,
+                    "input_tokens": 128,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-27",
+                  "model_id": "unpriced-model-27",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 127,
+                    "billable_total_tokens": 127,
+                    "input_tokens": 127,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-26",
+                  "model_id": "unpriced-model-26",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 126,
+                    "billable_total_tokens": 126,
+                    "input_tokens": 126,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-25",
+                  "model_id": "unpriced-model-25",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 125,
+                    "billable_total_tokens": 125,
+                    "input_tokens": 125,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-24",
+                  "model_id": "unpriced-model-24",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 124,
+                    "billable_total_tokens": 124,
+                    "input_tokens": 124,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-23",
+                  "model_id": "unpriced-model-23",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 123,
+                    "billable_total_tokens": 123,
+                    "input_tokens": 123,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-22",
+                  "model_id": "unpriced-model-22",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 122,
+                    "billable_total_tokens": 122,
+                    "input_tokens": 122,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-21",
+                  "model_id": "unpriced-model-21",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 121,
+                    "billable_total_tokens": 121,
+                    "input_tokens": 121,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-20",
+                  "model_id": "unpriced-model-20",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 120,
+                    "billable_total_tokens": 120,
+                    "input_tokens": 120,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-19",
+                  "model_id": "unpriced-model-19",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 119,
+                    "billable_total_tokens": 119,
+                    "input_tokens": 119,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-18",
+                  "model_id": "unpriced-model-18",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 118,
+                    "billable_total_tokens": 118,
+                    "input_tokens": 118,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-17",
+                  "model_id": "unpriced-model-17",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 117,
+                    "billable_total_tokens": 117,
+                    "input_tokens": 117,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-16",
+                  "model_id": "unpriced-model-16",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 116,
+                    "billable_total_tokens": 116,
+                    "input_tokens": 116,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-15",
+                  "model_id": "unpriced-model-15",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 115,
+                    "billable_total_tokens": 115,
+                    "input_tokens": 115,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-14",
+                  "model_id": "unpriced-model-14",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 114,
+                    "billable_total_tokens": 114,
+                    "input_tokens": 114,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-13",
+                  "model_id": "unpriced-model-13",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 113,
+                    "billable_total_tokens": 113,
+                    "input_tokens": 113,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-12",
+                  "model_id": "unpriced-model-12",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 112,
+                    "billable_total_tokens": 112,
+                    "input_tokens": 112,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-11",
+                  "model_id": "unpriced-model-11",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 111,
+                    "billable_total_tokens": 111,
+                    "input_tokens": 111,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-10",
+                  "model_id": "unpriced-model-10",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 110,
+                    "billable_total_tokens": 110,
+                    "input_tokens": 110,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-9",
+                  "model_id": "unpriced-model-9",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 109,
+                    "billable_total_tokens": 109,
+                    "input_tokens": 109,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-8",
+                  "model_id": "unpriced-model-8",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 108,
+                    "billable_total_tokens": 108,
+                    "input_tokens": 108,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-7",
+                  "model_id": "unpriced-model-7",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 107,
+                    "billable_total_tokens": 107,
+                    "input_tokens": 107,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-6",
+                  "model_id": "unpriced-model-6",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 106,
+                    "billable_total_tokens": 106,
+                    "input_tokens": 106,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-5",
+                  "model_id": "unpriced-model-5",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 105,
+                    "billable_total_tokens": 105,
+                    "input_tokens": 105,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-4",
+                  "model_id": "unpriced-model-4",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 104,
+                    "billable_total_tokens": 104,
+                    "input_tokens": 104,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-3",
+                  "model_id": "unpriced-model-3",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 103,
+                    "billable_total_tokens": 103,
+                    "input_tokens": 103,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-2",
+                  "model_id": "unpriced-model-2",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 102,
+                    "billable_total_tokens": 102,
+                    "input_tokens": 102,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-1",
+                  "model_id": "unpriced-model-1",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 101,
+                    "billable_total_tokens": 101,
+                    "input_tokens": 101,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                },
+                {
+                  "model": "unpriced-model-0",
+                  "model_id": "unpriced-model-0",
+                  "pricing": {
+                    "status": "unpriced",
+                    "source": null,
+                    "input": 0,
+                    "output": 0,
+                    "cache_read": 0,
+                    "cache_write": 0
+                  },
+                  "cost_source": "model_pricing",
+                  "totals": {
+                    "total_tokens": 100,
+                    "billable_total_tokens": 100,
+                    "input_tokens": 100,
+                    "output_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_cost_usd": "0.000000"
+                  }
+                }
+              ]
+            }
+          ],
+          "pricing": {
+            "model": "per-model",
+            "pricing_mode": "per_token_type",
+            "source": "litellm",
+            "effective_from": "@reldate:2"
+          }
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 2,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

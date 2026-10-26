@@ -1,0 +1,33 @@
+{
+  "id": "policy/unknown-account-refused",
+  "tags": [
+    "policy",
+    "error",
+    "rpc"
+  ],
+  "group": "policy",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "rpc",
+      "call": "cloud_membership",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": "P0001",
+          "message": "self-hosted account does not exist"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "id": "billing/catalog-empty",
+  "tags": [
+    "billing",
+    "catalog"
+  ],
+  "group": "billing",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "request",
+      "call": "tokentracker-billing",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, POST, OPTIONS",
+          "access-control-allow-origin": "*",
+          "cache-control": "no-store",
+          "content-type": "application/json"
+        },
+        "body": {
+          "environment": "live",
+          "policy": {
+            "phase": "active",
+            "launch_at": "2026-10-26T00:00:00.000Z",
+            "hosting_mode": "self_hosted"
+          },
+          "prices": [],
+          "providers": {
+            "waffo": false,
+            "paddle": false,
+            "wechat": false,
+            "alipay": false
+          },
+          "checkout_verified": false,
+          "paddle_client_token": null,
+          "limits": {
+            "machines": null,
+            "sync_minutes": 0,
+            "hourly_history_days": null,
+            "daily_history_months": null,
+            "trial_days": 0
+          }
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

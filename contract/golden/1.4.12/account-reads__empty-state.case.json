@@ -1,0 +1,2882 @@
+{
+  "id": "account-reads/empty-state",
+  "tags": [
+    "read",
+    "schema"
+  ],
+  "group": "account-reads",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "request",
+      "call": "tokentracker-account-summary",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "from": "@reldate:1",
+          "to": "@reldate:1",
+          "days": 0,
+          "totals": {
+            "total_tokens": 0,
+            "billable_total_tokens": 0,
+            "total_cost_usd": "0.000000",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cached_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "conversation_count": 0
+          },
+          "rolling": {
+            "last_7d": {
+              "from": "@reldate:2",
+              "to": "@reldate:3",
+              "active_days": 0,
+              "totals": {
+                "billable_total_tokens": 0,
+                "conversation_count": 0
+              }
+            },
+            "last_30d": {
+              "from": "@reldate:4",
+              "to": "@reldate:3",
+              "active_days": 0,
+              "totals": {
+                "billable_total_tokens": 0,
+                "conversation_count": 0
+              },
+              "avg_per_active_day": 0
+            }
+          }
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 4,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-daily",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "from": "@reldate:1",
+          "to": "@reldate:1",
+          "data": []
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 1,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-hourly",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "day": "@reldate:1",
+          "data": []
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 1,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-monthly",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "from": "@reldate:1",
+          "to": "@reldate:1",
+          "data": []
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 1,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-heatmap",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "from": "2025-10-03",
+          "to": "@reldate:1",
+          "week_starts_on": "sun",
+          "active_days": 0,
+          "streak_days": 0,
+          "weeks": [
+            [
+              {
+                "day": "2025-10-03",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-04",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-05",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-06",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-07",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-08",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-09",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "2025-10-10",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-11",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-12",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-13",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-14",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-15",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-16",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "2025-10-17",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-18",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-19",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-20",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-21",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-22",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-23",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "2025-10-24",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "2025-10-25",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:2",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:3",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:4",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:5",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:6",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:7",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:8",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:9",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:10",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:11",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:12",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:13",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:14",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:15",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:16",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:17",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:18",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:19",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:20",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:21",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:22",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:23",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:24",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:25",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:26",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:27",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:28",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:29",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:30",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:31",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:32",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:33",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:34",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:35",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:36",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:37",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:38",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:39",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:40",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:41",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:42",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:43",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:44",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:45",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:46",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:47",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:48",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:49",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:50",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:51",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:52",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:53",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:54",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:55",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:56",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:57",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:58",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:59",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:60",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:61",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:62",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:63",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:64",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:65",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:66",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:67",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:68",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:69",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:70",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:71",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:72",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:73",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:74",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:75",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:76",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:77",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:78",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:79",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:80",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:81",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:82",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:83",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:84",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:85",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:86",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:87",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:88",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:89",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:90",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:91",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:92",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:93",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:94",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:95",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:96",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:97",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:98",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:99",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:100",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:101",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:102",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:103",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:104",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:105",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:106",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:107",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:108",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:109",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:110",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:111",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:112",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:113",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:114",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:115",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:116",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:117",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:118",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:119",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:120",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:121",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:122",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:123",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:124",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:125",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:126",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:127",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:128",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:129",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:130",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:131",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:132",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:133",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:134",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:135",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:136",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:137",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:138",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:139",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:140",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:141",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:142",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:143",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:144",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:145",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:146",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:147",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:148",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:149",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:150",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:151",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:152",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:153",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:154",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:155",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:156",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:157",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:158",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:159",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:160",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:161",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:162",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:163",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:164",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:165",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:166",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:167",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:168",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:169",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:170",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:171",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:172",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:173",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:174",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:175",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:176",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:177",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:178",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:179",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:180",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:181",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:182",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:183",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:184",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:185",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:186",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:187",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:188",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:189",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:190",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:191",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:192",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:193",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:194",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:195",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:196",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:197",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:198",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:199",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:200",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:201",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:202",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:203",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:204",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:205",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:206",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:207",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:208",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:209",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:210",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:211",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:212",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:213",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:214",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:215",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:216",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:217",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:218",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:219",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:220",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:221",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:222",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:223",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:224",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:225",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:226",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:227",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:228",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:229",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:230",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:231",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:232",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:233",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:234",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:235",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:236",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:237",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:238",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:239",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:240",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:241",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:242",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:243",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:244",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:245",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:246",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:247",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:248",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:249",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:250",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:251",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:252",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:253",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:254",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:255",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:256",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:257",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:258",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:259",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:260",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:261",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:262",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:263",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:264",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:265",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:266",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:267",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:268",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:269",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:270",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:271",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:272",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:273",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:274",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:275",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:276",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:277",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:278",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:279",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:280",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:281",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:282",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:283",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:284",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:285",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:286",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:287",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:288",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:289",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:290",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:291",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:292",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:293",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:294",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:295",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:296",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:297",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:298",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:299",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:300",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:301",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:302",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:303",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:304",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:305",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:306",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:307",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:308",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:309",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:310",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:311",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:312",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:313",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:314",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:315",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:316",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:317",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:318",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:319",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:320",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:321",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:322",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:323",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:324",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:325",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:326",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:327",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:328",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:329",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:330",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:331",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:332",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:333",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:334",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:335",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ],
+            [
+              {
+                "day": "@reldate:336",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:337",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:338",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:339",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:340",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:341",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              },
+              {
+                "day": "@reldate:1",
+                "total_tokens": 0,
+                "billable_total_tokens": 0,
+                "level": 0,
+                "models": null
+              }
+            ]
+          ]
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 341,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-model-breakdown",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json",
+          "vary": "Accept-Encoding"
+        },
+        "body": {
+          "from": "@reldate:1",
+          "to": "@reldate:1",
+          "days": 0,
+          "sources": [],
+          "pricing": {
+            "model": "per-model",
+            "pricing_mode": "per_token_type",
+            "source": "litellm",
+            "effective_from": "@reldate:2"
+          }
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 2,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-devices",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "from": "@reldate:1",
+          "to": "@reldate:1",
+          "devices": [],
+          "account_sources": []
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 1,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

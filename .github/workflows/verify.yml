@@ -47,9 +47,32 @@ jobs:
       - name: Check scripts syntax
         run: |
           set -euo pipefail
-          for f in scripts/*.sh; do bash -n "$f"; done
-          for f in scripts/*.cjs docker/*.cjs; do node --check "$f"; done
+          for f in scripts/*.sh contract/scripts/*.sh; do bash -n "$f"; done
+          for f in scripts/*.cjs docker/*.cjs contract/lib/*.cjs contract/adapters/*.cjs; do node --check "$f"; done
           echo "All scripts parse OK."
+
+      - name: Contract static gate (L1 + golden checksums)
+        run: |
+          set -euo pipefail
+          # 契约快照的静态部分必须在所有 PR 上校验，防止 golden 被误改
+          node contract/lib/verify.cjs --static-only
+          VER="$(sed -n 's/^VERSION=//p' tracking/REF | head -1)"
+          (cd "contract/golden/$VER" && sha256sum -c SHA256SUMS)
+          # 场景定义必须是合法 JSON 且 case 数与 golden 一致
+          node -e '
+            const fs=require("fs"),path=require("path");
+            const d="contract/scenarios";
+            const idx=JSON.parse(fs.readFileSync(path.join(d,"index.json"),"utf8"));
+            let n=0;
+            for(const g of idx.groups.filter(x=>x.enabled)){
+              const f=JSON.parse(fs.readFileSync(path.join(d,g.file),"utf8"));
+              n+=f.cases.length;
+            }
+            const golden=fs.readdirSync(path.join("contract/golden",fs.readFileSync("tracking/REF","utf8").match(/^VERSION=(.*)$/m)[1]))
+              .filter(x=>x.endsWith(".case.json")).length;
+            if(n!==golden) throw Error(`scenario cases ${n} != golden cases ${golden}`);
+            console.log(`scenario/golden cases: ${n}`);
+          '
 
       - name: Reproducibility check (CI must be able to rebuild artifacts)
         run: |

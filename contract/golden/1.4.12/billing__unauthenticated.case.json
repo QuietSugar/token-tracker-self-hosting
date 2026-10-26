@@ -1,0 +1,36 @@
+{
+  "id": "billing/unauthenticated",
+  "tags": [
+    "billing",
+    "auth",
+    "error"
+  ],
+  "group": "billing",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "request",
+      "call": "tokentracker-billing",
+      "response": {
+        "status": 401,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, POST, OPTIONS",
+          "access-control-allow-origin": "*",
+          "cache-control": "no-store",
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": "sign_in_required"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

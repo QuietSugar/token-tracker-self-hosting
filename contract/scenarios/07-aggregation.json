@@ -1,0 +1,55 @@
+{
+  "group": "aggregation",
+  "description": "聚合语义：时区桶、整行修正后的缓存失效、定价档位、跨日/跨月边界",
+  "cases": [
+    {
+      "id": "aggregation/timezone-asia-shanghai",
+      "tags": ["aggregation", "timezone"],
+      "given": { "users": 1, "devices": 1 },
+      "steps": [
+        { "op": "ingest", "tokens": 100 },
+        { "op": "rpc", "call": "account_usage_grouped_cached",
+          "args": { "p_user_id": "@ownerId", "p_device_ids": null, "p_from": "2026-10-01T00:00:00Z", "p_to": "2026-10-02T00:00:00Z", "p_bucket": "hour", "p_tz": "Asia/Shanghai", "p_limit": null },
+          "capture": ["status", "body[0].total_tokens", "body[0].bucket"] }
+      ]
+    },
+    {
+      "id": "aggregation/cache-invalidated-by-correction",
+      "tags": ["aggregation", "cache", "correction"],
+      "given": { "users": 1, "devices": 1 },
+      "steps": [
+        { "op": "ingest", "tokens": 100 },
+        { "op": "rpc", "call": "account_usage_grouped_cached",
+          "args": { "p_user_id": "@ownerId", "p_device_ids": null, "p_from": "2026-10-01T00:00:00Z", "p_to": "2026-10-02T00:00:00Z", "p_bucket": "hour", "p_tz": "Asia/Shanghai", "p_limit": null },
+          "capture": ["body[0].total_tokens"] },
+        { "op": "ingest", "tokens": 60 },
+        { "op": "rpc", "call": "account_usage_grouped_cached",
+          "args": { "p_user_id": "@ownerId", "p_device_ids": null, "p_from": "2026-10-01T00:00:00Z", "p_to": "2026-10-02T00:00:00Z", "p_bucket": "hour", "p_tz": "Asia/Shanghai", "p_limit": null },
+          "capture": ["body[0].total_tokens", "body[0].bucket"] }
+      ]
+    },
+    {
+      "id": "aggregation/weekend-offpeak-pricing",
+      "tags": ["aggregation", "pricing"],
+      "given": { "users": 1, "devices": 1 },
+      "steps": [
+        { "op": "ingest", "tokens": 70, "overrides": { "model": "deepseek-v4-pro", "hour_start": "2026-10-03T02:00:00Z" } },
+        { "op": "rpc", "call": "account_usage_grouped_cached",
+          "args": { "p_user_id": "@ownerId", "p_device_ids": null, "p_from": "2026-10-03T00:00:00Z", "p_to": "2026-10-04T00:00:00Z", "p_bucket": "day", "p_tz": "UTC", "p_limit": null },
+          "capture": ["status", "body[0].pricing_tier", "body[0].total_tokens"] }
+      ]
+    },
+    {
+      "id": "aggregation/utc-vs-offset",
+      "tags": ["aggregation", "timezone"],
+      "given": { "users": 1, "devices": 1 },
+      "steps": [
+        { "op": "ingest", "tokens": 100, "overrides": { "hour_start": "2026-10-01T23:30:00Z" } },
+        { "op": "request", "call": "tokentracker-account-daily", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-03", "tz": "UTC" }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-account-daily", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-03", "tz": "Asia/Shanghai" }, "capture": ["status", "body"] }
+      ]
+    }
+  ]
+}

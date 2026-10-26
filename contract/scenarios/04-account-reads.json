@@ -1,0 +1,66 @@
+{
+  "group": "account-reads",
+  "description": "7 个账户读取接口的响应 schema、空态、隔离、时区参数",
+  "cases": [
+    {
+      "id": "account-reads/empty-state",
+      "tags": ["read", "schema"],
+      "given": { "users": 1, "usage": [] },
+      "steps": [
+        { "op": "request", "call": "tokentracker-account-summary", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-account-daily", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-account-hourly", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-account-monthly", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-account-heatmap", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-account-model-breakdown", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-account-devices", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" }, "capture": ["status", "body"] }
+      ]
+    },
+    {
+      "id": "account-reads/populated-schema",
+      "tags": ["read", "schema", "aggregation"],
+      "given": { "users": 1, "devices": 1, "usage": [100, 250, 75] },
+      "steps": [
+        { "op": "request", "call": "tokentracker-account-summary", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-account-daily", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-account-model-breakdown", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" }, "capture": ["status", "body"] }
+      ]
+    },
+    {
+      "id": "account-reads/cross-user-isolation",
+      "tags": ["read", "security", "rls"],
+      "given": { "users": 2, "devices": 1, "usage": [100] },
+      "steps": [
+        { "op": "request", "call": "tokentracker-account-summary", "as": "stranger",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" }, "capture": ["status", "body.totals.total_tokens"] },
+        { "op": "request", "call": "tokentracker-account-summary", "as": "stranger",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC", "user_id": "@ownerId" },
+          "capture": ["status", "body.totals.total_tokens"] },
+        { "op": "request", "call": "tokentracker-account-devices", "as": "stranger",
+          "query": { "from": "2026-10-01", "to": "2026-10-01" }, "capture": ["status", "body.devices"] }
+      ]
+    },
+    {
+      "id": "account-reads/missing-params",
+      "tags": ["read", "error", "validation"],
+      "given": { "users": 1 },
+      "steps": [
+        { "op": "request", "call": "tokentracker-account-summary", "as": "owner", "query": {}, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-account-summary", "as": "owner",
+          "query": { "from": "not-a-date", "to": "2026-10-01", "tz": "UTC" }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-account-summary", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "Not/AZone" }, "capture": ["status", "body"] }
+      ]
+    }
+  ]
+}

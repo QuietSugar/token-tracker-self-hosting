@@ -2,6 +2,30 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-26 — 契约测试体系（为 Go+SQLite 改造做一致性基准）
+
+用户目标：后续把数据库改成 SQLite、后端语言改成 Golang，需要尽可能多的测试保证两方一致，且全流程自动化。
+
+**新增 `contract/`**（Golden Master / Characterization Tests）：
+
+- **参考实现运行器**：直接复用上游 `test/helpers/self-host-fixture.cjs` —— PGlite 上安装 15 步基线，加载真实打包后的 14 个 async CommonJS handler，通过 loopback HTTP 提供函数与 PostgREST 风格端点。录到的是真实 SQL + 真实 handler 输出，不是 mock。
+- **L1 静态契约** `lib/static.cjs`：从 `releases/1.4.12/` 提取 15 步 id+checksum、14 函数、24 表 / 52 SQL 函数 / 15 索引 / 8 触发器 / 4 RLS 策略 / 31 GRANT，以及 jsonb/timestamptz/advisory lock 等 PG 特性计数。写入 `golden/1.4.12/static.json`，作为 Go 改造施工图。
+- **L2 行为契约**：35 个语言无关用例 / 82 步骤，8 组覆盖安装幂等、设备授权、上传与整行修正、7 个读接口、免费策略、认证与 RLS、时区/定价聚合、billing。归一化的 HTTP 响应快照。
+- **归一化** `lib/normalize.cjs`：UUID/随机 token/时间戳/浮点/URL 内嵌 code/无序 SQL 结果集。修复三个真实缺陷：checksum 被误当 secret、`ctx.last` 覆盖导致 device-flow grant 失败、滚动窗口日期跨天漂移。
+- **冻结时钟**：`CONTRACT_NOW=2026-10-26T00:00:00Z`，归一化把日期转成相对偏移；实测两个不同冻结时钟下输出一致。
+- **进程池** `lib/pool.cjs`：PGlite 的 WASM 堆 `close()` 后不归还 OS，每 case 独立子进程是唯一可靠回收方式。并发 2 在 1.5GB 沙箱会 OOM（已实测），默认并发 1，CI 用 3。
+- **对比器** `lib/compare.cjs`：结构化 diff（路径→期望/实际），支持 `waivers.json`（已登记偏差）与 `capabilities.json`（显式 SKIP，报告可见）。负向测试验证篡改能被检出。
+- **自动化脚本**：`record.sh` / `verify.sh` / `self-test.sh` / `benchmark.sh` / `setup-upstream.sh`。
+- **新 workflow** `.github/workflows/contract.yml`：L1 静态校验 → 重录 golden 并与仓库逐字节对比（可复现性硬门槛）→ 参考实现自测 → 候选实现 job（占位，待 Go 就绪）→ 每周性能基准。
+- **Go+SQLite 交付模板**：`adapters/go-sqlite.example.cjs`、`SPEC.md §6` 检查清单、`mapping.json`（PG→SQLite 对象映射）、`capabilities.json`、`waivers.json`。
+
+**验证结果**：
+- 两次独立录制 `SHA256SUMS` **逐字节一致**。
+- 自测 `35 PASS / 0 FAIL / 0 SKIP / 0 waived`（L1 静态契约也一致）。
+- 基准：7 个热路径用例 3 轮采样，p50 从 174.9ms（空账户读）到 421.5ms（有数据聚合）。PGlite 绝对值不代表生产，用途是跨实现相对比值。
+
+**已知限制**：PGlite 单连接，不能证明真实多连接 advisory lock 竞争（L3 待补）；详见 `contract/RESULTS.md`。
+
 ## 2026-10-26 — 数据库选型决策
 
 用户询问「PG 数据库是必须的吗，有其他选择吗」。核实后新增 [`docs/database-choice.md`](docs/database-choice.md)：

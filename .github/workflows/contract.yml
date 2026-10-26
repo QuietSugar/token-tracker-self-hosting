@@ -1,0 +1,191 @@
+name: contract
+
+# 契约测试自动化：确保 golden 快照可复现、静态契约未漂移、体系自洽。
+# 未来 Go+SQLite 实现就绪后，加一个 matrix 或第二个 job 用 CONTRACT_ADAPTER 跑跨实现对比。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'contract/**'
+      - 'releases/**'
+      - 'tracking/REF'
+      - '.github/workflows/contract.yml'
+  pull_request:
+    paths:
+      - 'contract/**'
+      - 'releases/**'
+      - 'tracking/REF'
+      - '.github/workflows/contract.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '运行模式'
+        required: false
+        default: 'all'
+        type: choice
+        options: [all, static-only, self-test, benchmark]
+  schedule:
+    - cron: '24 6 * * 1'   # 每周一 06:24 UTC 完整回归
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contract-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CONTRACT_CONCURRENCY: '3'        # GH runner 有 7GB，3 并发安全（本地沙箱请用 1）
+  CONTRACT_NOW: '2026-10-26T00:00:00Z'
+  CONTRACT_SEED: 'tokentracker-contract-v1'
+
+jobs:
+  # --------------------------------------------------------------- static
+  static:
+    name: L1 static contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Static contract must match golden
+        run: |
+          set -euo pipefail
+          node contract/lib/verify.cjs --static-only
+      - name: Golden checksums
+        run: |
+          set -euo pipefail
+          VER="$(sed -n 's/^VERSION=//p' tracking/REF | head -1)"
+          (cd "contract/golden/$VER" && sha256sum -c SHA256SUMS)
+      - name: Scenario JSON validity
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs=require("fs"),path=require("path");
+            const d="contract/scenarios";
+            for(const f of fs.readdirSync(d)) if(f.endsWith(".json")) JSON.parse(fs.readFileSync(path.join(d,f),"utf8"));
+            const idx=JSON.parse(fs.readFileSync(path.join(d,"index.json"),"utf8"));
+            let n=0; for(const g of idx.groups) n+=JSON.parse(fs.readFileSync(path.join(d,g.file),"utf8")).cases.length;
+            console.log("scenario cases:",n);
+          '
+
+  # ------------------------------------------------------------ reproduce
+  reproduce:
+    name: Golden reproducibility
+    needs: static
+    if: inputs.mode != 'static-only' || github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Prepare upstream test environment
+        run: ./contract/scripts/setup-upstream.sh
+
+      - name: Re-record golden into temp dir
+        run: |
+          set -euo pipefail
+          VER="$(sed -n 's/^VERSION=//p' tracking/REF | head -1)"
+          node contract/lib/recorder.cjs --out "$RUNNER_TEMP/golden-fresh"
+          echo "GOLDEN_DIR=contract/golden/$VER" >> "$GITHUB_ENV"
+
+      - name: Fresh recording must be byte-identical to committed golden
+        run: |
+          set -euo pipefail
+          FRESH="$RUNNER_TEMP/golden-fresh"
+          COMMITTED="${{ env.GOLDEN_DIR }}"
+          echo "Comparing $FRESH vs $COMMITTED"
+          if ! diff -q "$FRESH/SHA256SUMS" "$COMMITTED/SHA256SUMS"; then
+            echo "::error::golden 快照不可复现或与仓库不一致——需要显式 --update 并评审"
+            diff "$COMMITTED/SHA256SUMS" "$FRESH/SHA256SUMS" || true
+            exit 1
+          fi
+          # 逐文件再确认（SHA256SUMS 可能被误改）
+          diff -rq --exclude=_meta.json "$FRESH" "$COMMITTED"
+          echo "✓ 两次独立录制逐字节一致"
+
+      - name: Upload fresh golden as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-fresh
+          path: ${{ runner.temp }}/golden-fresh
+          retention-days: 7
+
+  # ------------------------------------------------------------ self-test
+  self-test:
+    name: Self-test (reference vs golden)
+    needs: [static, reproduce]
+    if: always() && needs.static.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Prepare upstream test environment
+        run: ./contract/scripts/setup-upstream.sh
+      - name: Run full behavioral contract against itself
+        run: |
+          set -euo pipefail
+          node contract/lib/verify.cjs \
+            --adapter ./contract/adapters/reference.cjs \
+            --report "$RUNNER_TEMP/contract-report.md" --json
+      - name: Publish report
+        if: always()
+        run: |
+          {
+            echo "## 契约自测结果"
+            echo
+            cat "$RUNNER_TEMP/contract-report.md" 2>/dev/null || echo "(无报告)"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-report
+          path: ${{ runner.temp }}/contract-report*
+          retention-days: 14
+
+  # ------------------------------------------------------------ candidate
+  # 未来在这里启用 Go+SQLite 的跨实现对比。
+  candidate:
+    name: Candidate implementation (Go+SQLite)
+    needs: static
+    if: false   # 改为 true 并在下面接好 adapter 后启用
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.23' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Build candidate
+        run: |
+          echo "TODO - 编译 Go 服务到 GO_SERVER_BIN"
+      - name: Verify candidate against golden
+        env:
+          CONTRACT_ADAPTER: ./contract/adapters/go-sqlite.cjs
+          GO_SERVER_BIN: ${{ github.workspace }}/go-server/bin/tokentracker-server
+        run: ./contract/scripts/verify.sh
+
+  # ------------------------------------------------------------ benchmark
+  benchmark:
+    name: Weekly performance baseline
+    needs: [self-test]
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'benchmark')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: ./contract/scripts/setup-upstream.sh
+      - run: BENCH_ITERATIONS=3 ./contract/scripts/benchmark.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark
+          path: |
+            contract/BENCHMARK.md
+            contract/benchmark.json
+          retention-days: 30

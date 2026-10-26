@@ -1,0 +1,73 @@
+{
+  "group": "ingest",
+  "description": "用量上传：幂等、整行修正、多设备、批量边界、认证失败",
+  "cases": [
+    {
+      "id": "ingest/basic-and-idempotent",
+      "tags": ["ingest", "idempotency"],
+      "given": { "users": 1, "devices": 1 },
+      "steps": [
+        { "op": "ingest", "tokens": 100, "capture": ["status", "body.upload_scope", "body.membership.status"] },
+        { "op": "ingest", "tokens": 100, "capture": ["status", "body"] },
+        { "op": "query", "sql": "SELECT count(*)::int AS n, sum(total_tokens)::int AS total FROM public.tokentracker_hourly",
+          "capture": ["rows[0].n", "rows[0].total"] }
+      ]
+    },
+    {
+      "id": "ingest/whole-row-correction",
+      "tags": ["ingest", "correction"],
+      "given": { "users": 1, "devices": 1 },
+      "steps": [
+        { "op": "ingest", "tokens": 100 },
+        { "op": "query", "sql": "SELECT sum(total_tokens)::int AS total FROM public.tokentracker_hourly", "capture": ["rows[0].total"] },
+        { "op": "ingest", "tokens": 60 },
+        { "op": "query", "sql": "SELECT sum(total_tokens)::int AS total FROM public.tokentracker_hourly", "capture": ["rows[0].total"] }
+      ]
+    },
+    {
+      "id": "ingest/two-devices-same-account",
+      "tags": ["ingest", "multi-device"],
+      "given": { "users": 1, "devices": 2 },
+      "steps": [
+        { "op": "ingest", "device": 0, "tokens": 120 },
+        { "op": "ingest", "device": 1, "tokens": 80 },
+        { "op": "request", "call": "tokentracker-account-summary", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" },
+          "capture": ["status", "body.totals.total_tokens"] }
+      ]
+    },
+    {
+      "id": "ingest/unauthenticated-rejected",
+      "tags": ["ingest", "auth", "error"],
+      "given": { "users": 1, "devices": 1 },
+      "steps": [
+        { "op": "request", "call": "tokentracker-ingest", "as": "anon",
+          "body": { "buckets": ["@usage:100"] }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-ingest", "as": "unknown-token",
+          "body": { "buckets": ["@usage:100"] }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-ingest", "as": "forged",
+          "body": { "buckets": ["@usage:100"] }, "capture": ["status", "body"] }
+      ]
+    },
+    {
+      "id": "ingest/batch-80-models",
+      "tags": ["ingest", "scale"],
+      "given": { "users": 1, "devices": 1 },
+      "steps": [
+        { "op": "ingestBatch", "count": 80, "modelPrefix": "unpriced-model-", "baseTokens": 100 },
+        { "op": "request", "call": "tokentracker-account-model-breakdown", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" },
+          "capture": ["status", "body.sources[0].models.length", "body.totals"] }
+      ]
+    },
+    {
+      "id": "ingest/oversize-rejected",
+      "tags": ["ingest", "error", "boundary"],
+      "given": { "users": 1, "devices": 1 },
+      "steps": [
+        { "op": "request", "call": "tokentracker-ingest", "as": "device",
+          "body": { "buckets": "@oversize:1200000" }, "capture": ["status", "body"] }
+      ]
+    }
+  ]
+}

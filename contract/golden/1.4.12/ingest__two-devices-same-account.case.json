@@ -1,0 +1,162 @@
+{
+  "id": "ingest/two-devices-same-account",
+  "tags": [
+    "ingest",
+    "multi-device"
+  ],
+  "group": "ingest",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "ingest",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey, x-tokentracker-device-token-hash",
+          "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "ok": true,
+          "skipped": 0,
+          "inserted": 1,
+          "membership": {
+            "phase": "active",
+            "status": "self_hosted",
+            "has_gift": false,
+            "expires_at": null,
+            "environment": "live",
+            "hosting_mode": "self_hosted",
+            "access_source": "none",
+            "machine_limit": null,
+            "trial_ends_at": null,
+            "can_read_cloud": true,
+            "gift_expires_at": null,
+            "read_only_until": null,
+            "trial_available": false,
+            "can_upload_cloud": true,
+            "transition_ends_at": null,
+            "hourly_history_days": null,
+            "daily_history_months": null,
+            "sync_interval_seconds": 0
+          },
+          "upload_scope": "cloud",
+          "next_allowed_at": "@ts:1",
+          "sync_interval_seconds": 0
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 1,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "ingest",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey, x-tokentracker-device-token-hash",
+          "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "ok": true,
+          "skipped": 0,
+          "inserted": 1,
+          "membership": {
+            "phase": "active",
+            "status": "self_hosted",
+            "has_gift": false,
+            "expires_at": null,
+            "environment": "live",
+            "hosting_mode": "self_hosted",
+            "access_source": "none",
+            "machine_limit": null,
+            "trial_ends_at": null,
+            "can_read_cloud": true,
+            "gift_expires_at": null,
+            "read_only_until": null,
+            "trial_available": false,
+            "can_upload_cloud": true,
+            "transition_ends_at": null,
+            "hourly_history_days": null,
+            "daily_history_months": null,
+            "sync_interval_seconds": 0
+          },
+          "upload_scope": "cloud",
+          "next_allowed_at": "@ts:1",
+          "sync_interval_seconds": 0
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 1,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-summary",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "from": "@reldate:1",
+          "to": "@reldate:1",
+          "days": 1,
+          "totals": {
+            "total_tokens": 200,
+            "billable_total_tokens": 200,
+            "total_cost_usd": "0.000000",
+            "input_tokens": 200,
+            "output_tokens": 0,
+            "cached_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "conversation_count": 2
+          },
+          "rolling": {
+            "last_7d": {
+              "from": "@reldate:2",
+              "to": "@reldate:3",
+              "active_days": 0,
+              "totals": {
+                "billable_total_tokens": 0,
+                "conversation_count": 0
+              }
+            },
+            "last_30d": {
+              "from": "@reldate:4",
+              "to": "@reldate:3",
+              "active_days": 1,
+              "totals": {
+                "billable_total_tokens": 200,
+                "conversation_count": 2
+              },
+              "avg_per_active_day": 200
+            }
+          }
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 4,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

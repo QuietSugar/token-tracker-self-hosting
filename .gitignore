@@ -42,6 +42,16 @@ Thumbs.db
 # ---- 生成的离线搬运文件（bundle 不入库）----
 *.bundle
 
+# ---- 契约测试生成物（golden 快照入库，报告不入库）----
+contract/report.md
+contract/report.json
+contract/self-test-report.md
+contract/self-test-report.json
+contract/BENCHMARK.md
+contract/benchmark.json
+contract/benchmark.reference.json
+contract/.tmp/
+
 # ---- 编辑器 ----
 .idea/
 .vscode/

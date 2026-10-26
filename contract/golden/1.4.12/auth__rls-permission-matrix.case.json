@@ -1,0 +1,38 @@
+{
+  "id": "auth/rls-permission-matrix",
+  "tags": [
+    "auth",
+    "security",
+    "rls",
+    "L1"
+  ],
+  "group": "auth",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "query",
+      "call": "SELECT has_table_privilege('anon','tokentracker_hourly','SEL",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "rows": [
+            {
+              "anon_read": false,
+              "user_read": false,
+              "direct_upload": false,
+              "direct_private_read": false
+            }
+          ]
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

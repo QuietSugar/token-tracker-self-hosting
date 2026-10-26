@@ -1,0 +1,52 @@
+{
+  "group": "install",
+  "description": "安装契约：15 步基线、幂等重装、校验和锁定、原子性、函数清单",
+  "cases": [
+    {
+      "id": "install/ledger-15-steps",
+      "tags": ["L1", "install"],
+      "steps": [
+        { "op": "query", "sql": "SELECT step, checksum FROM public.tokentracker_self_host_installations ORDER BY step",
+          "capture": ["rows.length", "rows[*].step", "rows[*].checksum"] }
+      ]
+    },
+    {
+      "id": "install/policy-self-hosted",
+      "tags": ["L1", "install"],
+      "steps": [
+        { "op": "query", "sql": "SELECT environment, hosting_mode, phase FROM public.tokentracker_cloud_policy ORDER BY environment",
+          "capture": ["rows[*].environment", "rows[*].hosting_mode"] }
+      ]
+    },
+    {
+      "id": "install/rerun-preserves-data",
+      "tags": ["install", "idempotency"],
+      "given": { "users": 1, "devices": 1, "usage": [100] },
+      "steps": [
+        { "op": "ingest", "tokens": 100 },
+        { "op": "rerunInstall" },
+        { "op": "query", "sql": "SELECT sum(total_tokens)::int AS total FROM public.tokentracker_hourly",
+          "capture": ["rows[0].total"] },
+        { "op": "query", "sql": "SELECT count(*)::int AS n FROM public.tokentracker_self_host_installations",
+          "capture": ["rows[0].n"] }
+      ]
+    },
+    {
+      "id": "install/checksum-drift-refused",
+      "tags": ["install", "error"],
+      "steps": [
+        { "op": "tamperChecksum", "step": "01-private-baseline" },
+        { "op": "rerunInstall", "expectError": true,
+          "capture": ["error"] },
+        { "op": "restoreChecksum" }
+      ]
+    },
+    {
+      "id": "install/manifest-exclusions",
+      "tags": ["L1", "install"],
+      "steps": [
+        { "op": "manifest", "capture": ["functions.length", "publicSlugs", "excluded", "serverSecrets"] }
+      ]
+    }
+  ]
+}

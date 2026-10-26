@@ -1,0 +1,137 @@
+{
+  "group": "device-flow",
+  "description": "设备授权：authorize → poll(pending) → grant → poll(approved) → 用返回的 token 上传",
+  "cases": [
+    {
+      "id": "device-flow/happy-path",
+      "tags": [
+        "auth",
+        "device",
+        "public"
+      ],
+      "given": {
+        "users": 1
+      },
+      "steps": [
+        {
+          "op": "request",
+          "call": "tokentracker-device-flow-authorize",
+          "as": "anon",
+          "body": {
+            "client_info": "Contract CLI",
+            "machine_id": "@machine:1"
+          },
+          "capture": [
+            "status",
+            "body.verification_uri",
+            "body.verification_uri_complete",
+            "body.expires_in"
+          ]
+        },
+        {
+          "op": "request",
+          "call": "tokentracker-device-flow-poll",
+          "as": "anon",
+          "bodyFrom": "flow.device_code",
+          "bodyWrap": "device_code",
+          "capture": [
+            "status",
+            "body.status"
+          ]
+        },
+        {
+          "op": "request",
+          "call": "tokentracker-device-flow-grant",
+          "as": "owner",
+          "bodyFrom": "flow.user_code",
+          "bodyWrap": "user_code",
+          "capture": [
+            "status",
+            "body"
+          ]
+        },
+        {
+          "op": "request",
+          "call": "tokentracker-device-flow-poll",
+          "as": "anon",
+          "bodyFrom": "flow.device_code",
+          "bodyWrap": "device_code",
+          "capture": [
+            "status",
+            "body.status"
+          ]
+        },
+        {
+          "op": "request",
+          "call": "tokentracker-ingest",
+          "as": "flow.device_token",
+          "body": {
+            "buckets": [
+              "@usage:50"
+            ]
+          },
+          "capture": [
+            "status",
+            "body.upload_scope",
+            "body.membership.status"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "device-flow/dashboard-url-anchor",
+      "tags": [
+        "auth",
+        "device",
+        "config"
+      ],
+      "given": {
+        "users": 0
+      },
+      "steps": [
+        {
+          "op": "request",
+          "call": "tokentracker-device-flow-authorize",
+          "as": "anon",
+          "body": {
+            "client_info": "Anchor check",
+            "machine_id": "@machine:2"
+          },
+          "capture": [
+            "status",
+            "body.verification_uri"
+          ]
+        },
+        {
+          "op": "assertNot",
+          "path": "last.verification_uri",
+          "contains": "tokentracker.cc"
+        }
+      ]
+    },
+    {
+      "id": "device-flow/poll-unknown-code",
+      "tags": [
+        "auth",
+        "error"
+      ],
+      "given": {
+        "users": 0
+      },
+      "steps": [
+        {
+          "op": "request",
+          "call": "tokentracker-device-flow-poll",
+          "as": "anon",
+          "body": {
+            "device_code": "does-not-exist-code"
+          },
+          "capture": [
+            "status",
+            "body"
+          ]
+        }
+      ]
+    }
+  ]
+}

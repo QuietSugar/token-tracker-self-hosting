@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "description": "契约用例清单。顺序固定：录制与回放必须一致。",
+  "seed": "tokentracker-contract-v1",
+  "groups": [
+    { "file": "01-install.json",       "enabled": true },
+    { "file": "02-device-flow.json",   "enabled": true },
+    { "file": "03-ingest.json",        "enabled": true },
+    { "file": "04-account-reads.json", "enabled": true },
+    { "file": "05-policy.json",        "enabled": true },
+    { "file": "06-auth.json",          "enabled": true },
+    { "file": "07-aggregation.json",   "enabled": true },
+    { "file": "08-billing.json",       "enabled": true }
+  ],
+  "defaults": {
+    "from": "2026-10-01",
+    "to": "2026-10-01",
+    "tz": "UTC",
+    "hourStart": "2026-10-01T12:00:00Z",
+    "source": "codex",
+    "model": "gpt-6"
+  }
+}

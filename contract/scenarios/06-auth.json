@@ -1,0 +1,50 @@
+{
+  "group": "auth",
+  "description": "认证边界：伪造/过期/未知 token、设备撤销、RLS 权限矩阵",
+  "cases": [
+    {
+      "id": "auth/forged-expired-unknown",
+      "tags": ["auth", "error", "security"],
+      "given": { "users": 1, "devices": 1, "usage": [100] },
+      "steps": [
+        { "op": "request", "call": "tokentracker-account-summary", "as": "forged",
+          "query": { "from": "2026-10-01", "to": "2026-10-01" }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-account-summary", "as": "expired",
+          "query": { "from": "2026-10-01", "to": "2026-10-01" }, "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-account-summary", "as": "anon",
+          "query": { "from": "2026-10-01", "to": "2026-10-01" }, "capture": ["status", "body"] }
+      ]
+    },
+    {
+      "id": "auth/device-revocation",
+      "tags": ["auth", "device", "billing"],
+      "given": { "users": 1, "devices": 1 },
+      "steps": [
+        { "op": "request", "call": "tokentracker-billing", "as": "owner",
+          "query": { "action": "remove-device" }, "body": { "machine_id": "@machineId:0" },
+          "capture": ["status", "body"] },
+        { "op": "request", "call": "tokentracker-ingest", "as": "device",
+          "body": { "buckets": ["@usage:100"] }, "capture": ["status", "body"] }
+      ]
+    },
+    {
+      "id": "auth/rls-permission-matrix",
+      "tags": ["auth", "security", "rls", "L1"],
+      "given": { "users": 0 },
+      "steps": [
+        { "op": "query", "sql": "SELECT has_table_privilege('anon','tokentracker_hourly','SELECT') AS anon_read, has_table_privilege('authenticated','tokentracker_hourly','SELECT') AS user_read, has_function_privilege('authenticated','cloud_ingest_usage(text,text,jsonb,jsonb,text)','EXECUTE') AS direct_upload, has_function_privilege('authenticated','account_summary_wire(uuid,uuid,timestamptz,timestamptz,text,integer,text,text)','EXECUTE') AS direct_private_read",
+          "capture": ["rows[0]"] }
+      ]
+    },
+    {
+      "id": "auth/cascade-account-deletion",
+      "tags": ["auth", "cascade"],
+      "given": { "users": 1, "devices": 1 },
+      "steps": [
+        { "op": "deleteUser", "index": 0 },
+        { "op": "query", "sql": "SELECT (SELECT count(*)::int FROM public.tokentracker_cloud_machines) AS machines, (SELECT count(*)::int FROM public.tokentracker_cloud_machine_aliases) AS aliases, (SELECT count(*)::int FROM public.tokentracker_devices) AS devices, (SELECT count(*)::int FROM public.tokentracker_hourly) AS hourly",
+          "capture": ["rows[0]"] }
+      ]
+    }
+  ]
+}

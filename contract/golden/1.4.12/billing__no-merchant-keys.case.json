@@ -1,0 +1,30 @@
+{
+  "id": "billing/no-merchant-keys",
+  "tags": [
+    "billing",
+    "L1",
+    "security"
+  ],
+  "group": "billing",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "query",
+      "call": "SELECT count(*)::int AS n FROM public.tokentracker_cloud_pay",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "error": "relation \"public.tokentracker_cloud_payment_providers\" does not exist"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}
