@@ -1,0 +1,52 @@
+name: verify
+
+# 公有仓库：每次 push / PR 都做密钥扫描、编码校验与产物完整性校验。
+# 不引入第三方 action（除官方 actions/*），降低供应链风险。
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Secret scan (public repo gate)
+        run: bash scripts/check-secrets.sh
+
+      - name: Encoding check (UTF-8 / no BOM)
+        run: bash scripts/check-encoding.sh
+
+      - name: Verify release artifacts
+        run: |
+          set -euo pipefail
+          found=0
+          for d in releases/*/; do
+            [ -f "${d}SHA256SUMS" ] || continue
+            found=1
+            echo "--- verifying $d ---"
+            bash scripts/verify.sh "$d"
+          done
+          if [ "$found" = "0" ]; then
+            echo "No release artifacts yet (planning phase) - artifact verification skipped."
+          fi
+
+      - name: Check scripts syntax
+        run: |
+          set -euo pipefail
+          for f in scripts/*.sh; do bash -n "$f"; done
+          for f in scripts/*.cjs; do node --check "$f"; done
+          echo "All scripts parse OK."

@@ -19,29 +19,7 @@ sha256sum -c SHA256SUMS
 echo
 
 echo "=== [2/3] 文本编码（UTF-8 / 无 BOM）==="
-python3 - <<'PY'
-import pathlib, sys
-exts = {'.md','.sql','.js','.cjs','.mjs','.json','.sh','.txt','.example','.yml','.yaml','.env'}
-bad = []
-checked = 0
-for p in sorted(pathlib.Path('.').rglob('*')):
-    if p.name == 'SHA256SUMS' or not p.is_file():
-        continue
-    if p.suffix not in exts and p.name != 'SHA256SUMS':
-        continue
-    b = p.read_bytes()
-    checked += 1
-    if b.startswith(b'\xef\xbb\xbf'):
-        bad.append(f'  BOM: {p}')
-    try:
-        b.decode('utf-8')
-    except UnicodeDecodeError as e:
-        bad.append(f'  非 UTF-8: {p} ({e})')
-if bad:
-    print('\n'.join(bad))
-    sys.exit(1)
-print(f'OK: {checked} 个文本文件均为 UTF-8 且无 BOM')
-PY
+bash "$ROOT/scripts/check-encoding.sh" "$(pwd)"
 echo
 
 echo "=== [3/3] 函数产物 ==="

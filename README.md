@@ -4,8 +4,11 @@
 > 它是「以官方开源仓库为唯一上游，长期维护自有 InsForge 私有同步后端」的**控制平面 / 运维记录仓库**。
 
 - 上游：<https://github.com/xiufengsun/TokenTracker>（MIT）
+- 远程：<https://github.com/QuietSugar/token-tracker-self-hosting.git> — **PUBLIC（公有仓库）**
 - 职责边界：InsForge 平台（VPS、Docker、HTTPS、OAuth、worker）由实例持有者负责；本仓库只维护**应用侧**——基线 SQL、14 个私有函数、客户端指向配置、升级评审与验收记录。
 - 状态：**技术预览**（依据上游 `docs/self-hosting-status.md`）。
+
+> ⚠️ **本仓库是公有的**：任何 `git push` 后内容立即对全网可见，且无法真正撤回。安全约定见下方「公有仓库安全约定」与 [`SECURITY.md`](SECURITY.md)。
 
 ---
 
@@ -40,7 +43,27 @@
 4. **凭据永不入库**：只提交 `.example` 模板；真实值放本地被忽略的文件。
 5. 云端付费 webhook、社区排行榜、`device-usage-reset` 等函数**不混入**自托管 14 函数清单。
 6. Agent 不连接实例、不执行 psql、不上传函数、不写 `~/.tokentracker/config.json`；这些由人在 VPS 上执行。
-7. 所有文本文件 **UTF-8 无 BOM**，统一 LF 行尾（`scripts/verify.sh` 会检查）。
+7. 所有文本文件 **UTF-8 无 BOM**，统一 LF 行尾（`check-encoding.sh` / `verify.sh` 会检查）。
+8. **每次推送前跑 `check-secrets.sh`**；CI 也会在 push / PR 时重复检查。
+
+---
+
+## 公有仓库安全约定
+
+远程是 **public**，所以以下不是"建议"而是硬性要求：
+
+| 规则 | 落地方式 |
+|---|---|
+| 不提交任何真实密钥、token、cookie、dump | `.gitignore` + `scripts/check-secrets.sh` + CI |
+| 不提交真实域名 / IP / VPS 信息 / 客户端 config | 文档与模板一律用 `your-domain.example` 等占位符 |
+| 不提交验收日志原文、截图、HTTP 抓包 | `acceptance.md` 只写结论与取证方式，原始证据留本地 |
+| 不把 `env/server.env` 加入版本控制 | 该文件被忽略；只提交 `env/server.env.example` |
+| 提交前自检 | `./scripts/check-secrets.sh && git diff --cached --stat` |
+| CI 兜底 | `.github/workflows/verify.yml`（密钥扫描 + 编码 + 产物校验） |
+
+**公开展示的内容范围**（让访问者知道会看到什么）：上游版本追踪、自托管架构与工作流、占位符形式的变量名与示例域名、14 个函数名与步骤清单、模板化的评审/验收表格。**不包含**：真实域名、实例地址、任何密钥、VPS 细节、部署日志。
+
+> 归档的三份规划文档是原样保留的，其中两处提到「本机 version-fox 默认 14.21.3」——这是维护者本机 Node 环境的描述，不构成凭据，但公开可见。若介意可删掉这两个括号内的短句。
 
 ---
 
@@ -60,12 +83,16 @@ tokentracker-selfhost/
 │   ├── REF                      # 当前锁定的上游 commit（单一构建点）
 │   └── upstream.md              # 版本追踪表（每次拉取后更新，单一事实来源）
 ├── env/
+│   ├── README.md                # env/ 目录说明
 │   └── server.env.example       # 服务端环境变量模板（占位符，无真实值）
 ├── scripts/
 │   ├── upstream.sh              # 只读检查上游：status / fetch / review / pin
 │   ├── build.sh                 # 从锁定点生成产物到 releases/<version>/
 │   ├── summarize.cjs            # 输出步骤 SHA-256 与 functions.json 摘要
-│   └── verify.sh                # 校验 SHA256SUMS + 编码 + 函数数量
+│   ├── verify.sh                # 校验 SHA256SUMS + 编码 + 函数数量
+│   ├── check-secrets.sh         # 推送前密钥扫描（public gate）
+│   └── check-encoding.sh        # UTF-8 / 无 BOM 检查
+├── .github/workflows/verify.yml # CI：密钥扫描 + 编码 + 产物校验
 └── releases/
     ├── _template/               # review.md / acceptance.md 模板
     └── v1.4.12/                 # （首次实施后生成）SQL + 14 函数 + 校验和 + 记录
@@ -114,6 +141,8 @@ tokentracker-selfhost/
 | `./scripts/upstream.sh pin <sha> <ver>` | 更新 `tracking/REF` | 改本仓库文件 |
 | `./scripts/build.sh` | 生成 SQL + 14 函数 + 摘要 + SHA256SUMS | 写 `releases/<ver>/`，上游 `npm ci` |
 | `./scripts/verify.sh releases/<ver>` | 校验产物完整性/编码/函数数量 | 否 |
+| `./scripts/check-secrets.sh` | **推送前**密钥扫描 | 否 |
+| `./scripts/check-encoding.sh` | UTF-8 / 无 BOM 检查 | 否 |
 
 ---
 
@@ -126,18 +155,39 @@ tokentracker-selfhost/
 
 ## 首次使用提示
 
-- 初始提交使用了占位 git 身份；推送到你自己的远程前请设置：`git config user.name "..."` / `git config user.email "..."`。
+- 初始提交使用了占位 git 身份（`TokenTracker Selfhost Maintainer <selfhost@localhost>`）。因为远程是 **public**，这个 author 邮箱会公开显示在提交历史里。想改成自己的 GitHub 身份（尚未推送时可安全 amend）：
+  ```sh
+  git config user.name "你的名字"
+  git config user.email "你的 GitHub noreply 邮箱"
+  git commit --amend --reset-author --no-edit
+  ```
 - `UPSTREAM_DIR` 默认指向同级 `../TokenTracker`；若上游 checkout 在别处，设置该环境变量即可。
 
 ---
 
-## 关联远程仓库（可选，由你决定）
+## 远程仓库与推送
 
-本仓库目前只有本地初始提交。要推送到 GitHub / Gitea：
+远程已配置为 `origin`：<https://github.com/QuietSugar/token-tracker-self-hosting.git>（**public**，初始为空仓库）。
+
+在**有 GitHub 凭据的机器**上执行：
 
 ```sh
-git remote add origin <你的私有仓库 URL>   # 建议私有
+./scripts/check-secrets.sh          # 必须：公有仓库强制关卡
+git remote -v                       # 确认 origin 指向正确
 git push -u origin main
 ```
 
-推送前先运行 `git log --oneline` 和 `git ls-files` 确认没有凭据文件。
+推送后 CI（`.github/workflows/verify.yml`）会自动跑一遍密钥扫描、编码检查和产物校验。建议同时在 GitHub 仓库设置里开启：
+
+- **Secret scanning** + **Push protection**（Settings → Code security and analysis）
+- **Branch protection** 保护 `main`（要求 PR / CI 通过）
+- **Dependabot alerts**
+
+若当前环境没有 GitHub 凭据，可用离线搬运：仓库根目录旁提供 `tokentracker-selfhost.bundle`（`git bundle create` 生成，含完整历史）：
+
+```sh
+git clone /path/to/tokentracker-selfhost.bundle token-tracker-self-hosting
+cd token-tracker-self-hosting
+git remote set-url origin https://github.com/QuietSugar/token-tracker-self-hosting.git
+git push -u origin main
+```

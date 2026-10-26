@@ -1,11 +1,11 @@
 # ---- 凭据与本地配置：永不入库 ----
-# env/ 下只允许 *.example 与 README.md
-env/*
-!env/*.example
-!env/README.md
+# 注意：放行规则（!）必须放在所有忽略规则之后，否则会被后面的规则重新忽略。
 .env
 .env.*
+*.env
+*.env.*
 *.env.local
+*.env.production
 secrets/
 credentials/
 *.key
@@ -16,6 +16,11 @@ credentials/
 id_rsa*
 tokentracker-config.json
 config.json
+
+# env/ 目录：先忽略全部，再放行模板与说明
+env/*
+!env/*.example
+!env/README.md
 
 # ---- 上游源码 checkout（本仓库只保留锁定点 REF）----
 upstream/checkout/
@@ -33,6 +38,9 @@ tmp/
 *.log
 .DS_Store
 Thumbs.db
+
+# ---- 生成的离线搬运文件（bundle 不入库）----
+*.bundle
 
 # ---- 编辑器 ----
 .idea/
