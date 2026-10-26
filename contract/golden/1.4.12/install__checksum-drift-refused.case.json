@@ -2,7 +2,8 @@
   "id": "install/checksum-drift-refused",
   "tags": [
     "install",
-    "error"
+    "error",
+    "postgres-specific"
   ],
   "group": "install",
   "seed": "tokentracker-contract-v1",

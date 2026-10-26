@@ -1,10 +1,11 @@
 {
   "group": "install",
-  "description": "安装契约：15 步基线、幂等重装、校验和锁定、原子性、函数清单",
+  "description": "安装契约：PG 的 15 步账本/旧步骤 checksum 属于 PostgreSQL 专属；跨实现验证 SQLite 自有迁移版本与幂等数据保留。",
   "cases": [
     {
       "id": "install/ledger-15-steps",
-      "tags": ["L1", "install"],
+      "tags": ["L1", "install", "postgres-specific"],
+      "implementationSpecific": "PostgreSQL 专属：SQLite 版本使用自己的 schema_migrations；Go adapter 显式 SKIP，不伪造 PG SQL 安装账本。",
       "steps": [
         { "op": "query", "sql": "SELECT step, checksum FROM public.tokentracker_self_host_installations ORDER BY step",
           "capture": ["rows.length", "rows[*].step", "rows[*].checksum"] }
@@ -15,7 +16,7 @@
       "tags": ["L1", "install"],
       "steps": [
         { "op": "query", "sql": "SELECT environment, hosting_mode, phase FROM public.tokentracker_cloud_policy ORDER BY environment",
-          "capture": ["rows[*].environment", "rows[*].hosting_mode"] }
+          "capture": ["rows.length", "rows[*].environment", "rows[*].hosting_mode"] }
       ]
     },
     {
@@ -26,18 +27,16 @@
         { "op": "ingest", "tokens": 100 },
         { "op": "rerunInstall" },
         { "op": "query", "sql": "SELECT sum(total_tokens)::int AS total FROM public.tokentracker_hourly",
-          "capture": ["rows[0].total"] },
-        { "op": "query", "sql": "SELECT count(*)::int AS n FROM public.tokentracker_self_host_installations",
-          "capture": ["rows[0].n"] }
+          "capture": ["rows[0].total"] }
       ]
     },
     {
       "id": "install/checksum-drift-refused",
-      "tags": ["install", "error"],
+      "tags": ["install", "error", "postgres-specific"],
+      "implementationSpecific": "PostgreSQL 专属：旧 SQL step checksum 不可变规则；SQLite migration versioning 由 schema_migrations 单独测试。",
       "steps": [
         { "op": "tamperChecksum", "step": "01-private-baseline" },
-        { "op": "rerunInstall", "expectError": true,
-          "capture": ["error"] },
+        { "op": "rerunInstall", "expectError": true, "capture": ["error"] },
         { "op": "restoreChecksum" }
       ]
     },

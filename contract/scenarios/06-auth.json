@@ -1,6 +1,6 @@
 {
   "group": "auth",
-  "description": "认证边界：伪造/过期/未知 token、设备撤销、RLS 权限矩阵",
+  "description": "认证边界：伪造/过期/未知 token、设备撤销、Go/SQLite 应用层 owner isolation、账户级联删除",
   "cases": [
     {
       "id": "auth/forged-expired-unknown",
@@ -29,11 +29,15 @@
     },
     {
       "id": "auth/rls-permission-matrix",
-      "tags": ["auth", "security", "rls", "L1"],
-      "given": { "users": 0 },
+      "tags": ["auth", "security", "owner-isolation", "L2"],
+      "given": { "users": 2, "devices": 1, "usage": [100] },
       "steps": [
-        { "op": "query", "sql": "SELECT has_table_privilege('anon','tokentracker_hourly','SELECT') AS anon_read, has_table_privilege('authenticated','tokentracker_hourly','SELECT') AS user_read, has_function_privilege('authenticated','cloud_ingest_usage(text,text,jsonb,jsonb,text)','EXECUTE') AS direct_upload, has_function_privilege('authenticated','account_summary_wire(uuid,uuid,timestamptz,timestamptz,text,integer,text,text)','EXECUTE') AS direct_private_read",
-          "capture": ["rows[0]"] }
+        { "op": "request", "call": "tokentracker-account-summary", "as": "owner",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC" },
+          "capture": ["status", "body.totals.total_tokens"] },
+        { "op": "request", "call": "tokentracker-account-summary", "as": "stranger",
+          "query": { "from": "2026-10-01", "to": "2026-10-01", "tz": "UTC", "user_id": "@ownerId" },
+          "capture": ["status", "body.totals.total_tokens"] }
       ]
     },
     {

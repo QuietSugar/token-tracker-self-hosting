@@ -68,7 +68,9 @@ async function main() {
   for (const g of groups) for (const c of g.cases) allCases.push({ ...c, group: g.group });
 
   const concurrency = Number(process.env.CONTRACT_CONCURRENCY || 1);
-  const candidateCases = await runPool(allCases, {
+  const skipSet = new Set(adapter.capabilities?.skip || []);
+  const runnableCases = allCases.filter(c => !skipSet.has(c.id));
+  const ranCases = await runPool(runnableCases, {
     seed: index.seed,
     adapterPath,
     concurrency,
@@ -78,6 +80,12 @@ async function main() {
       if (done % 10 === 0 || done === total) console.log(`  [${done}/${total}] ${id}`);
     },
   });
+  // Explicitly skipped implementation-specific cases are reported as SKIP;
+  // do not run them against a database where those PG-only tables do not exist.
+  const skipCases = allCases.filter(c => skipSet.has(c.id)).map(c => ({
+    id: c.id, group: c.group, tags: c.tags || [], seed: index.seed, steps: [], _declaredSkip: true,
+  }));
+  const candidateCases = [...ranCases, ...skipCases];
 
   const runnerErrors = candidateCases.filter(c => c.steps.some(s => s.response.body?.runnerError));
   if (runnerErrors.length) {
@@ -96,7 +104,10 @@ async function main() {
 
   const waiversFile = process.env.CONTRACT_WAIVERS || path.join(ROOT, "waivers.json");
   const capabilitiesFile = process.env.CONTRACT_CAPABILITIES || path.join(ROOT, "capabilities.json");
-  const cmp = compareAll(goldenDir, candidateCases, { waiversFile, capabilitiesFile });
+  const cmp = compareAll(goldenDir, candidateCases, {
+    waiversFile, capabilitiesFile,
+    capabilities: adapter.capabilities || undefined,
+  });
   const report = {
     generatedAt: new Date().toISOString(),
     golden: { dir: goldenDir, version, recordedAt: JSON.parse(fs.readFileSync(path.join(goldenDir, "_meta.json"), "utf8")).recordedAt },

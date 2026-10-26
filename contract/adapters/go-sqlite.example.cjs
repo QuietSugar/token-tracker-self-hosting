@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Go + SQLite 实现的 Adapter 模板（骨架，待实现）。
+ * Go + SQLite adapter 的独立示例模板；实际候选 adapter 见 go-sqlite.cjs。
  *
  * 你的任务：让 Go 服务提供与参考实现相同的 HTTP 接口，然后在这个文件里
  * 把 runner 的 op 映射到你的服务（或起一个进程/容器）。

@@ -30,6 +30,10 @@ TokenTracker/
 # ---- 运行时 / 临时 ----
 node_modules/
 .npm/
+go-server/bin/
+go-server/*.db
+go-server/*.db-wal
+go-server/*.db-shm
 .tmp/
 tmp/
 *.tmp

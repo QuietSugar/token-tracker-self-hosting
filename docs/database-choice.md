@@ -1,7 +1,7 @@
 # 数据库选型：PostgreSQL 是硬依赖吗？
 
-> 结论先行：**PostgreSQL 数据库引擎本身是硬依赖，无法换成 MySQL / SQLite / MongoDB。
-> 但"PostgreSQL 由谁来跑"有多个选择**——这才是可以选的维度。
+> 结论按实现版本区分：**当前正式自托管后端（InsForge + TypeScript edge functions）硬依赖 PostgreSQL**，不能直接换 MySQL/SQLite/MongoDB。
+> 我们后来建立了一个**实验性 Go + SQLite 兼容实现**，已通过 33 个可移植行为契约（另 2 个 PG 专属安装账本测试显式 SKIP）；但它目前只覆盖垂直切片，**不等价于完整正式后端，也不是生产替代品**。详见 [`../go-server/STATUS.md`](../go-server/STATUS.md)。
 
 ---
 
@@ -54,9 +54,9 @@ InsForge 官方自托管栈就是四个容器：`postgres` / `postgrest` / `insf
 
 ---
 
-## 2. 那"其他选择"到底在哪
+## 2. 当前正式 InsForge 路径：其他选择是 PG 的部署形态
 
-可选的是 **PostgreSQL 的部署形态**，不是引擎本身。按推荐度排序：
+对于**当前 v1.4.12 + InsForge v2.3.3**正式自托管包，可选的是 PostgreSQL 的部署形态，不是数据库引擎本身。按推荐度排序：
 
 | # | 方案 | 可行性 | 主要代价 / 风险 | 适合 |
 |---|---|---|---|---|
@@ -98,9 +98,11 @@ InsForge 官方自托管栈就是四个容器：`postgres` / `postgrest` / `insf
 
 ## 4. 决策记录
 
-- **2026-10-26**：确认 PostgreSQL 为不可替代的引擎依赖。默认方案 A（Compose 内置 PG 15.18）。不引入 PGlite/SQLite 作为生产库。方案 B/C 需单独验收，未经 `acceptance.md` 记录不视为支持。
-- 触发原因：用户询问"pg 数据库是必须的吗，有其他选择吗"。
-- 依据：本仓库 `releases/1.4.12/tokentracker-install.sql` 实测统计、上游 `docs/self-hosting*.md`、InsForge 官方部署文档、PostgREST 官方文档、PGlite 官方限制说明。
+- **2026-10-26（初始结论）**：对当前正式 InsForge/TypeScript 后端，PostgreSQL 是不可替代依赖；默认方案 A（官方 Compose 内置 PG 15.18）。依据见 §1。
+- **2026-10-26（新目标）**：用户明确希望后续把后端改为 SQLite + Golang。于是新增 `go-server/` 实验垂直切片，而不是继续声称 SQLite 绝对不可能。它不改动正式 InsForge 产物，状态与限制见 [`../go-server/STATUS.md`](../go-server/STATUS.md)。
+- **真实验收**：官方 InsForge v2.3.3 Compose 栈在隔离容器环境运行，PostgreSQL 15.18；15 步 SQL 安装/重装通过；L3 真实多连接测试 5 PASS / 0 FAIL（advisory lock、8 并发重装、RLS 矩阵、并发幂等 upsert）。说明见 `../contract/L3-RESULTS.md`。
+- 触发原因：用户先问 PG 是否必需，后要求进行 SQLite + Golang 改造并尽可能保持行为一致。
+- 依据：本仓库 `releases/1.4.12/tokentracker-install.sql`、上游 `docs/self-hosting*.md`、InsForge/PostgREST 官方架构、真实 PostgreSQL 15.18 验收、契约 golden 与 Go adapter 对比结果。
 
 ## 参考
 

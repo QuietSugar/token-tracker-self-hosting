@@ -21,11 +21,11 @@
         },
         "body": {
           "device_code": "@secret:1",
+          "expires_in": 900,
+          "interval": 5,
           "user_code": "@secret:2",
           "verification_uri": "https://private.example.test/device",
-          "verification_uri_complete": "https://private.example.test/device?user_code=@secret:2",
-          "expires_in": 900,
-          "interval": 5
+          "verification_uri_complete": "https://private.example.test/device?user_code=@secret:2"
         },
         "_norm": {
           "uuid": 0,
@@ -71,29 +71,29 @@
           "content-type": "application/json"
         },
         "body": {
-          "ok": true,
-          "status": "approved",
+          "client_info": "Contract CLI",
           "membership": {
-            "phase": "active",
-            "status": "self_hosted",
-            "has_gift": false,
-            "expires_at": null,
-            "environment": "live",
-            "hosting_mode": "self_hosted",
             "access_source": "none",
-            "machine_limit": null,
-            "trial_ends_at": null,
             "can_read_cloud": true,
-            "gift_expires_at": null,
-            "read_only_until": null,
-            "trial_available": false,
             "can_upload_cloud": true,
-            "transition_ends_at": null,
-            "hourly_history_days": null,
             "daily_history_months": null,
-            "sync_interval_seconds": 0
+            "environment": "live",
+            "expires_at": null,
+            "gift_expires_at": null,
+            "has_gift": false,
+            "hosting_mode": "self_hosted",
+            "hourly_history_days": null,
+            "machine_limit": null,
+            "phase": "active",
+            "read_only_until": null,
+            "status": "self_hosted",
+            "sync_interval_seconds": 0,
+            "transition_ends_at": null,
+            "trial_available": false,
+            "trial_ends_at": null
           },
-          "client_info": "Contract CLI"
+          "ok": true,
+          "status": "approved"
         },
         "_norm": {
           "uuid": 0,
@@ -116,31 +116,31 @@
           "content-type": "application/json"
         },
         "body": {
-          "status": "approved",
-          "user_id": "@uuid:1",
+          "device_id": "@uuid:1",
           "device_token": "@secret:1",
-          "device_id": "@uuid:2",
-          "machine_id": "@uuid:3",
+          "machine_id": "@uuid:2",
           "membership": {
-            "phase": "active",
-            "status": "self_hosted",
-            "has_gift": false,
-            "expires_at": null,
-            "environment": "live",
-            "hosting_mode": "self_hosted",
             "access_source": "none",
-            "machine_limit": null,
-            "trial_ends_at": null,
             "can_read_cloud": true,
-            "gift_expires_at": null,
-            "read_only_until": null,
-            "trial_available": false,
             "can_upload_cloud": true,
-            "transition_ends_at": null,
-            "hourly_history_days": null,
             "daily_history_months": null,
-            "sync_interval_seconds": 0
-          }
+            "environment": "live",
+            "expires_at": null,
+            "gift_expires_at": null,
+            "has_gift": false,
+            "hosting_mode": "self_hosted",
+            "hourly_history_days": null,
+            "machine_limit": null,
+            "phase": "active",
+            "read_only_until": null,
+            "status": "self_hosted",
+            "sync_interval_seconds": 0,
+            "transition_ends_at": null,
+            "trial_available": false,
+            "trial_ends_at": null
+          },
+          "status": "approved",
+          "user_id": "@uuid:3"
         },
         "_norm": {
           "uuid": 3,
@@ -163,32 +163,32 @@
           "content-type": "application/json"
         },
         "body": {
-          "ok": true,
-          "skipped": 0,
           "inserted": 1,
           "membership": {
-            "phase": "active",
-            "status": "self_hosted",
-            "has_gift": false,
-            "expires_at": null,
-            "environment": "live",
-            "hosting_mode": "self_hosted",
             "access_source": "none",
-            "machine_limit": null,
-            "trial_ends_at": null,
             "can_read_cloud": true,
-            "gift_expires_at": null,
-            "read_only_until": null,
-            "trial_available": false,
             "can_upload_cloud": true,
-            "transition_ends_at": null,
-            "hourly_history_days": null,
             "daily_history_months": null,
-            "sync_interval_seconds": 0
+            "environment": "live",
+            "expires_at": null,
+            "gift_expires_at": null,
+            "has_gift": false,
+            "hosting_mode": "self_hosted",
+            "hourly_history_days": null,
+            "machine_limit": null,
+            "phase": "active",
+            "read_only_until": null,
+            "status": "self_hosted",
+            "sync_interval_seconds": 0,
+            "transition_ends_at": null,
+            "trial_available": false,
+            "trial_ends_at": null
           },
-          "upload_scope": "cloud",
           "next_allowed_at": "@ts:1",
-          "sync_interval_seconds": 0
+          "ok": true,
+          "skipped": 0,
+          "sync_interval_seconds": 0,
+          "upload_scope": "cloud"
         },
         "_norm": {
           "uuid": 0,

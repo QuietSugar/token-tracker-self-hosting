@@ -2,25 +2,52 @@
   "id": "billing/no-merchant-keys",
   "tags": [
     "billing",
-    "L1",
-    "security"
+    "security",
+    "public-contract"
   ],
   "group": "billing",
   "seed": "tokentracker-contract-v1",
   "steps": [
     {
-      "op": "query",
-      "call": "SELECT count(*)::int AS n FROM public.tokentracker_cloud_pay",
+      "op": "request",
+      "call": "tokentracker-billing",
       "response": {
         "status": 200,
-        "headers": {},
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, POST, OPTIONS",
+          "access-control-allow-origin": "*",
+          "cache-control": "no-store",
+          "content-type": "application/json"
+        },
         "body": {
-          "error": "relation \"public.tokentracker_cloud_payment_providers\" does not exist"
+          "checkout_verified": false,
+          "environment": "live",
+          "limits": {
+            "daily_history_months": null,
+            "hourly_history_days": null,
+            "machines": null,
+            "sync_minutes": 0,
+            "trial_days": 0
+          },
+          "paddle_client_token": null,
+          "policy": {
+            "hosting_mode": "self_hosted",
+            "launch_at": "@ts:1",
+            "phase": "active"
+          },
+          "prices": [],
+          "providers": {
+            "alipay": false,
+            "paddle": false,
+            "waffo": false,
+            "wechat": false
+          }
         },
         "_norm": {
           "uuid": 0,
           "secret": 0,
-          "ts": 0,
+          "ts": 1,
           "rel": 0,
           "referenceNow": "2026-10-26T00:00:00.000Z"
         }

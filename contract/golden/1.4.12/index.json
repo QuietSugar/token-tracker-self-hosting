@@ -8,7 +8,8 @@
       "group": "install",
       "tags": [
         "L1",
-        "install"
+        "install",
+        "postgres-specific"
       ],
       "steps": 1
     },
@@ -28,14 +29,15 @@
         "install",
         "idempotency"
       ],
-      "steps": 4
+      "steps": 3
     },
     {
       "id": "install/checksum-drift-refused",
       "group": "install",
       "tags": [
         "install",
-        "error"
+        "error",
+        "postgres-specific"
       ],
       "steps": 3
     },
@@ -245,10 +247,10 @@
       "tags": [
         "auth",
         "security",
-        "rls",
-        "L1"
+        "owner-isolation",
+        "L2"
       ],
-      "steps": 1
+      "steps": 2
     },
     {
       "id": "auth/cascade-account-deletion",
@@ -264,7 +266,8 @@
       "group": "aggregation",
       "tags": [
         "aggregation",
-        "timezone"
+        "timezone",
+        "rpc"
       ],
       "steps": 2
     },
@@ -274,7 +277,8 @@
       "tags": [
         "aggregation",
         "cache",
-        "correction"
+        "correction",
+        "rpc"
       ],
       "steps": 4
     },
@@ -283,7 +287,8 @@
       "group": "aggregation",
       "tags": [
         "aggregation",
-        "pricing"
+        "pricing",
+        "rpc"
       ],
       "steps": 2
     },
@@ -319,8 +324,8 @@
       "group": "billing",
       "tags": [
         "billing",
-        "L1",
-        "security"
+        "security",
+        "public-contract"
       ],
       "steps": 1
     },

@@ -33,10 +33,10 @@
         "body": {
           "rows": [
             {
-              "machines": 0,
               "aliases": 0,
               "devices": 0,
-              "hourly": 0
+              "hourly": 0,
+              "machines": 0
             }
           ]
         },

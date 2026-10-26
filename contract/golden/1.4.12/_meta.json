@@ -12,8 +12,8 @@
     "language": "typescript-deno-cjs"
   },
   "seed": "tokentracker-contract-v1",
-  "recordedAt": "2026-10-26T10:22:45.858Z",
-  "durationMs": 157395,
+  "recordedAt": "2026-10-26T12:18:20.545Z",
+  "durationMs": 167563,
   "caseCount": 35,
   "stepCount": 82,
   "scenarioGroups": [
@@ -50,7 +50,7 @@
       "cases": 4
     }
   ],
-  "normalizeVersion": 1,
+  "normalizeVersion": 2,
   "runnerVersion": 1,
   "note": "录制自上游 PGlite fixture（真实 SQL + 真实打包 handler 的 loopback HTTP 响应）。"
 }

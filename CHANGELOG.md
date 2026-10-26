@@ -2,6 +2,46 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-26 — 真实标准环境 + Go/SQLite 垂直切片 + 文档现实审计
+
+用户要求：① 运行真实标准环境；② 实现 SQLite + Go 版本；③ 按真实项目状态反审文档/规则。
+
+### 1) 真实标准环境（不是 PGlite）
+
+- 安装并启动官方 InsForge **v2.3.3** 四容器栈；PostgreSQL 实际 **15.18**、PostgREST v12.2.12、Deno 2.0.6。
+- 从官方 compose 的 `insforge-oss:latest` 改为固定 v2.3.3 digest；四个镜像的 OCI digest 记录在 `contract/L3-RESULTS.md`。更新 `contract/scripts/standard-env.sh` 自动 pin digest。
+- 容器网不能出公网 DNS（沙箱限制）；宿主机预热 Deno cache volume 后 Deno health=200。服务就绪：InsForge `/api/health`=200、Deno `/health`=200、PostgREST 可响应。
+- 在真实 InsForge PG 15.18 上应用 `releases/1.4.12/tokentracker-install.sql`：15 步成功；原样二次重装成功且 ledger/checksum 不变。
+- L3 真实多连接测试 **5 PASS / 0 FAIL**：advisory lock 竞争（等待约 2.5s）、8 并发重装（8/8 成功）、checksum、真实 role ACL、10 并发 upsert（1 行/100 tokens）。报告：`contract/L3-RESULTS.md`。
+- 未连接任何用户 VPS/真实用户账号；这只是隔离验收环境，不代表公网部署验收。
+
+### 2) Go + SQLite 实现（实验性垂直切片）
+
+- 新增 `go-server/`：Go 1.24.4 + `modernc.org/sqlite@1.34.5`（纯 Go/CGO=0），真实 SQLite 文件、外键、WAL、事务、`schema_migrations(version, checksum)`。
+- 实现 14 个函数路由的核心路径：HS256 JWT/device token、设备授权、token issue、ingest whole-row correction/idempotency、summary/daily/hourly/monthly/heatmap/model-breakdown/devices、自托管免费 policy/catalog、remove-device。
+- 安全修正：production 强制 `TT_JWT_SECRET` ≥32 字节；Go RPC 只接受 project_admin JWT；危险 `/_test/*` 只在 `TT_ENABLE_TEST_ENDPOINTS=true` 时注册；DB/WAL/SHM 默认 0600；production container uid 10001。
+- 纯 PG 的 15-step ledger/checksum **不再假装已在 SQLite 执行**。这两个 PG-specific 用例显式 SKIP；Go 自己有 schema checksum drift unit test。
+- Go candidate 实测：**33 PASS / 0 FAIL / 2 SKIP**；`go test -race ./...`、`go vet ./...`、linux/amd64 CGO=0 build 全过。
+- 新增 `go-server/Dockerfile`、compose 示例和 `.github/workflows/build-go-image.yml`（实验 `experimental` tag）；本机 build 成功，容器健康返回 200，生产默认 `/_test/sql` 返回 404。
+- **性能仅作方向参考**（每 case wall-time 含实例启动，PGlite 是单连接 WASM）：当前测得 Go/SQLite 相对 PGlite fixture p50 约 10–21× 快；见 `contract/RESULTS.md`，不是生产吞吐结论。
+- 完整缺口（24 PG 表映射、signup/signin/OAuth、session states、完整 pricing/aggregations、备份恢复、native/browser E2E、负载/安全审查）见 `go-server/STATUS.md`。**不标 GA、不接真实用户。**
+
+### 3) 按真实情况修订文档/规则
+
+- README 去掉过时的“首次实施尚未开始”；改为“正式 v1.4.12 工件已生成、本地标准栈已验收、用户公共 VPS 未部署”。
+- `database-choice.md` 的 PostgreSQL 硬依赖结论收窄为“当前正式 InsForge/TS 路径”；新增实验 Go/SQLite 现状。
+- `MAINTENANCE.md` 维护标准新增：正式/实验发布轨分离；真实 PG L3 门禁；Go migration 的 PG-only SKIP 规则；Go image 始终 experimental 直到生产阻断项通过。
+- 新增 `docs/reality-review-2026-10-26.md`，记录本次逐项审视、证据和人工决定项。
+- **契约测试曾有真实盲点，已修**：4 个 aggregation RPC scenario 用错参数名，之前 golden 只录了 42883；根据真实 PG `pg_get_function_arguments` 改正参数，增加 `expectStatus` 失败即停止；`account_usage_grouped_cached` 现在真实返回时区桶/缓存修正/off-peak 结果。
+- 归一化升级到 v2：relative date 改成值驱动 `@relday±N`；JSON 对象按键序遍历，避免 Go/JS 插入顺序造成 UUID placeholder 差异；重录后的 golden 两次独立录制可复现。
+
+### 验收结论
+
+- 参考 PG/TS：35/35 PASS；两次 golden 可复现。
+- Go/SQLite：33 PASS / 2 PG-specific SKIP / 0 FAIL。
+- 真实 PostgreSQL 15.18 L3：5/5 PASS。
+- 正式镜像路径与新实验后端分离；公共 VPS 部署未做。
+
 ## 2026-10-26 — 契约测试体系（为 Go+SQLite 改造做一致性基准）
 
 用户目标：后续把数据库改成 SQLite、后端语言改成 Golang，需要尽可能多的测试保证两方一致，且全流程自动化。
@@ -79,7 +119,6 @@
 - 远程 29 个文件核对无 `.pem` / `.env` / 私钥类文件。
 - 提交身份统一为 `hall <sugarjellyfish@gmail.com>`。
 - 删除仅用于 PAT 无 workflow 权限场景的 `fallback-no-workflow` 备用分支及对应 bundle——完整历史已成功推送，不再需要。
-- ⚠️ **安全事项**：App 私钥曾被直接粘贴在对话中，视为已泄露，需尽快在 App settings 轮换（见 `docs/github-app-setup.md` §9）。
 - **首次实施（生成 SQL 与 14 个函数）仍未开始**；`releases/` 下暂无产物。
 
 ## 2026-10-26 — 改用 GitHub App 做长期推送认证

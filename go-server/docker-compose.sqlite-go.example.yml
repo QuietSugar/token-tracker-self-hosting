@@ -1,0 +1,45 @@
+# 实验用 Go + SQLite 自托管后端。
+# SQLite 文件保存在 named volume；备份可在停服务后直接复制数据库文件。
+#
+# 用法:
+#   cp .env.sqlite-go.example .env
+#   # 编辑 TT_JWT_SECRET，至少 32 随机字节
+#   docker compose -f docker-compose.sqlite-go.example.yml up -d
+#   curl http://127.0.0.1:8080/health
+#
+# ⚠️ 当前只覆盖 STATUS.md 中明确列出的行为；不是 InsForge 替代品/生产 GA。
+services:
+  tokentracker-go:
+    image: ghcr.io/quietsugar/token-tracker-self-hosting-sqlite-go:experimental
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: experimental
+        VCS_REF: ${GIT_SHA:-local}
+        TARGETARCH: amd64
+    restart: unless-stopped
+    environment:
+      TT_DATABASE_PATH: /data/tokentracker.db
+      TT_LISTEN_ADDR: 0.0.0.0:8080
+      TT_JWT_SECRET: ${TT_JWT_SECRET:?set a strong random secret}
+      TT_DASHBOARD_URL: ${TT_DASHBOARD_URL:-https://your-dashboard.example}
+      TT_NOW: ${TT_NOW:-}
+    ports:
+      - "127.0.0.1:${TT_PORT:-8080}:8080"
+    volumes:
+      - tokentracker-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  tokentracker-data:

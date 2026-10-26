@@ -21,11 +21,11 @@
         },
         "body": {
           "device_code": "@secret:1",
+          "expires_in": 900,
+          "interval": 5,
           "user_code": "@secret:2",
           "verification_uri": "https://private.example.test/device",
-          "verification_uri_complete": "https://private.example.test/device?user_code=@secret:2",
-          "expires_in": 900,
-          "interval": 5
+          "verification_uri_complete": "https://private.example.test/device?user_code=@secret:2"
         },
         "_norm": {
           "uuid": 0,

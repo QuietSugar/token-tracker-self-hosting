@@ -1,6 +1,6 @@
 {
   "group": "billing",
-  "description": "billing 接口：catalog/account 免费响应、无商户密钥、设备列表",
+  "description": "billing 接口：catalog/account 免费响应、商户 provider 均关闭、设备列表",
   "cases": [
     {
       "id": "billing/catalog-empty",
@@ -22,11 +22,12 @@
     },
     {
       "id": "billing/no-merchant-keys",
-      "tags": ["billing", "L1", "security"],
-      "given": { "users": 0 },
+      "tags": ["billing", "security", "public-contract"],
+      "description": "通过公开 catalog API 验证所有商户 provider 关闭；不依赖某个数据库内部表是否存在。",
+      "given": { "users": 1 },
       "steps": [
-        { "op": "query", "sql": "SELECT count(*)::int AS n FROM public.tokentracker_cloud_payment_providers WHERE enabled = true",
-          "expectOptional": true, "capture": ["rows[0].n", "error"] }
+        { "op": "request", "call": "tokentracker-billing", "as": "owner",
+          "query": { "action": "catalog" }, "method": "GET", "capture": ["status", "body.providers", "body.prices", "body.checkout_verified"] }
       ]
     },
     {

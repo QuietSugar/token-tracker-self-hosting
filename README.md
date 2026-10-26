@@ -12,13 +12,13 @@
 >
 > 🤖 **本仓库由 Agent 长期维护**。维护契约、会话启动协议与标准循环见 [`MAINTENANCE.md`](MAINTENANCE.md)——**接手或上下文重置时先读它**。
 >
-> 🐳 **最终交付物是 Docker 镜像**（linux/amd64）：由 GitHub Actions 构建并推送 GHCR，携带已审计的 SQL 基线与 14 个私有函数。见 [`docs/docker-image.md`](docs/docker-image.md)。
+> 🐳 **当前正式交付物**是 Docker 工件镜像（linux/amd64）：携带已审计 SQL 与 14 个私有函数，面向 InsForge + PostgreSQL。另有**实验性 Go+SQLite 后端镜像**，已通过 33 个行为契约 + 2 个 PG 专属 SKIP；尚未达到生产 GA。见 [`docs/docker-image.md`](docs/docker-image.md) 与 [`go-server/STATUS.md`](go-server/STATUS.md)。
 
 ---
 
 ## 当前状态
 
-**计划阶段。首次实施尚未开始。**
+**v1.4.12 正式 InsForge 工件已生成；本地真实标准环境已验收。公共 VPS 部署尚未开始。另有 Go+SQLite 实验性垂直切片（非 GA）。**
 
 - [x] 归档维护提示词、可复用提示词、总体规划
 - [x] 锁定首个上游构建点：v1.4.12 / `8d32a956181bf52fae449c89b8f6520253566283`
@@ -27,9 +27,11 @@
 - [x] 建立长期维护契约与会话启动协议（`MAINTENANCE.md` / `session-start.sh`）
 - [x] **首次实施**：生成 v1.4.12 基线 SQL 与 14 个私有函数产物（`releases/1.4.12/`）
 - [x] 建立 Docker 镜像交付链（Dockerfile / CLI / GHCR 构建流水线 / 可复现性硬门槛）
-- [ ] **首次部署**：应用 SQL、上传函数、配置服务端环境变量（由人在 VPS 上执行）
-- [ ] **首次验收**：按 [`docs/runbook.md`](docs/runbook.md) 逐项打勾
-- [ ] 进入「跟随上游」的稳定循环
+- [x] **本地标准栈验收**：官方 InsForge v2.3.3 + PG 15.18，15 步 SQL / 幂等重装 / L3 并发测试 5 PASS
+- [ ] **首次公共 VPS 部署**：配置自己的域名、密钥，上传 14 个函数（未连接/操作任何用户实例）
+- [ ] **VPS 验收**：按 [`docs/runbook.md`](docs/runbook.md) 逐项打勾
+- [x] 建立 Go+SQLite 实验后端：33 行为 PASS / 2 PG 专属 SKIP；尚不作生产替代
+- [ ] 完成 Go+SQLite 剩余数据模型、安全、运维、native-client E2E 后再评估 GA
 
 ---
 
@@ -104,9 +106,13 @@ tokentracker-selfhost/
 │   ├── scenarios/               # 35 个语言无关用例（8 组）
 │   ├── golden/1.4.12/           # 录制的行为快照 + L1 静态契约 + 校验和
 │   ├── lib/                     # 归一化 / 执行器 / 对比器 / 录制器 / 进程池
-│   ├── adapters/                # 参考实现适配器 + Go+SQLite 适配器模板
+│   ├── adapters/                # 参考实现适配器 + 已连接的 Go+SQLite 实验 adapter
 │   ├── scripts/                 # record / verify / self-test / benchmark
 │   └── RESULTS.md               # 当前结果摘要与改造者下一步
+├── go-server/                   # 实验性 Go + SQLite 后端垂直切片（非生产 GA）
+│   ├── STATUS.md                # 支持范围 / 缺口 / 验收门槛（先读）
+│   ├── Dockerfile               # linux/amd64 实验镜像
+│   └── internal/{app,store}/    # Go HTTP / SQLite 实现
 ├── tracking/
 │   ├── REF                      # 当前锁定的上游 commit（单一构建点）
 │   └── upstream.md              # 版本追踪表（每次拉取后更新，单一事实来源）
@@ -124,10 +130,14 @@ tokentracker-selfhost/
 │   ├── check-encoding.sh        # UTF-8 / 无 BOM 检查
 │   ├── gh-app-token.cjs         # GitHub App JWT → installation token
 │   └── push-with-app.sh         # 用 App token 推送（GIT_ASKPASS 注入）
-├── .github/workflows/verify.yml # CI：密钥扫描 + 编码 + 产物校验
+├── .github/workflows/
+│   ├── verify.yml               # 密钥/编码/产物/contract L1 gate
+│   ├── build-image.yml          # 正式工件镜像 GHCR build
+│   ├── contract.yml             # Golden 可复现 + PG/TS self-test + Go/SQLite candidate
+│   └── build-go-image.yml       # Go+SQLite 实验镜像 build
 └── releases/
     ├── _template/               # review.md / acceptance.md 模板
-    └── v1.4.12/                 # （首次实施后生成）SQL + 14 函数 + 校验和 + 记录
+    └── 1.4.12/                  # 已生成 SQL + 14 函数 + 校验和 + 记录
 ```
 
 上游源码 checkout **不在此仓库内**。默认约定它位于同级目录 `../TokenTracker`；可用环境变量 `UPSTREAM_DIR` 覆盖。

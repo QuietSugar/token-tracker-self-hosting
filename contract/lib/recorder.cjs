@@ -100,7 +100,7 @@ async function main() {
     caseCount: result.cases.length,
     stepCount: result.cases.reduce((n, c) => n + c.steps.length, 0),
     scenarioGroups: loadScenarios().groups.map(g => ({ group: g.group, cases: g.cases.length })),
-    normalizeVersion: 1,
+    normalizeVersion: 2,
     runnerVersion: 1,
     note: "录制自上游 PGlite fixture（真实 SQL + 真实打包 handler 的 loopback HTTP 响应）。",
   };

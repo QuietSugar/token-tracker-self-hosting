@@ -80,10 +80,10 @@ function compareCase(golden, candidate, waivers = []) {
   };
 }
 
-function compareAll(goldenDir, candidateCases, { waiversFile, capabilitiesFile } = {}) {
+function compareAll(goldenDir, candidateCases, { waiversFile, capabilitiesFile, capabilities: capabilityOverride } = {}) {
   const waivers = loadWaivers(waiversFile);
-  const capabilities = capabilitiesFile && fs.existsSync(capabilitiesFile)
-    ? JSON.parse(fs.readFileSync(capabilitiesFile, "utf8")) : { skip: [] };
+  const capabilities = capabilityOverride || (capabilitiesFile && fs.existsSync(capabilitiesFile)
+    ? JSON.parse(fs.readFileSync(capabilitiesFile, "utf8")) : { skip: [] });
   const skipSet = new Set(capabilities.skip || []);
 
   const goldenFiles = fs.readdirSync(goldenDir).filter(f => f.endsWith(".case.json"));

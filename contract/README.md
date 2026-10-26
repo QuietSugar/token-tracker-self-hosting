@@ -1,7 +1,7 @@
 # 契约测试体系（Golden Master / Characterization Tests）
 
-> **目的**：把当前 `PostgreSQL + TypeScript/Deno` 自托管后端的**全部可观测行为**录制成
-> 与实现语言、数据库引擎无关的黄金快照，作为未来 `SQLite + Golang` 改造的一致性基准。
+> **目的**：将当前 `PostgreSQL + TypeScript/Deno` 自托管后端中**已选定、可自动化的 HTTP 行为与静态契约**录制成
+> 与实现语言、数据库引擎无关的黄金快照，作为 `SQLite + Golang` 迁移实验的对比基准。35 个场景并不覆盖全部用户可见行为；剩余范围列在 `../go-server/STATUS.md`。
 > 所有流程可本地一键运行，也在 GitHub Actions 里自动化。
 
 ---
@@ -63,7 +63,8 @@ contract/
 │   └── schema.cjs             快照结构校验
 ├── adapters/
 │   ├── reference.cjs          PG+TS 参考实现适配器（已实现）
-│   └── go-sqlite.example.cjs  Go+SQLite 适配器骨架（模板，待实现）
+│   ├── go-sqlite.cjs          Go+SQLite 实验实现 adapter（已连接）
+│   └── go-sqlite.example.cjs  Go+SQLite adapter 说明性模板
 ├── scripts/
 │   ├── record.sh              录制 golden
 │   ├── verify.sh              对候选实现跑并对比
@@ -104,7 +105,7 @@ CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs \
 |---|---|---|---|
 | **L1 静态契约** | 15 步 id + `sha256(step.sql)`、14 函数清单、SQL 对象清单、函数签名、依赖锁定、响应 schema | 否 | 规格书：告诉你要建哪些表/索引/函数、返回什么字段 |
 | **L2 行为契约** | 每个用例的输入与 HTTP 响应（状态、头、体） | 是（参考实现） | 一致性判据：逐字段对比 |
-| **L3 并发/锁**（规划中） | 多连接 advisory lock、并发上传、事务回滚 | 是（真实 PG） | 单独 gate；SQLite 需要显式设计等效行为 |
+| **L3 并发/锁** | 多连接 advisory lock、并发重装、并发 upsert | 是（真实 PG） | 已在真实 PG 15.18 通过 5 项；SQLite 适配器通过独立单进程互斥/事务用例，不等于压力测试 |
 
 ---
 
@@ -126,13 +127,14 @@ CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs \
 
 - 每次 push / PR：重建 golden（临时目录）→ 与仓库里的 `golden/` 逐字节对比 → 自测 → 静态契约校验。
 - 每周定时：跑完整套件 + 性能基准，把报告作为 artifact。
-- 如果未来 `CONTRACT_ADAPTER` 指向 Go 实现，同一 workflow 会自动做跨实现对比。
+- `contract.yml` 已启用 Go+SQLite candidate job；独立 `build-go-image.yml` 负责候选镜像构建/实验发布。两个 workflow 均不会替代正式 InsForge/PostgreSQL 制品路径。
 
 ---
 
 ## 当前状态
 
 - 上游参考实现：v1.4.12 / `8d32a956181bf52fae449c89b8f6520253566283`
-- 录制时间：见 `golden/v1.4.12/_meta.json`
-- 用例数：见 `scenarios/index.json`
-- 已知限制：PGlite 单连接；真实并发、JWT 时钟、gzip 传输层行为需 L3 补充。
+- 录制时间：见 `golden/1.4.12/_meta.json`
+- 用例数：35（见 `scenarios/index.json`）；Go+SQLite 当前 33 PASS / 2 PG-specific SKIP。
+- L3：真实 PostgreSQL 15.18 多连接锁/并发测试已通过 5 项，见 `L3-RESULTS.md`；这不代表 Go/SQLite 并发压力验收。
+- Go adapter 和服务为实验垂直切片，生产阻断项见 `../go-server/STATUS.md`。

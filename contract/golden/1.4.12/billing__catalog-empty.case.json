@@ -20,33 +20,33 @@
           "content-type": "application/json"
         },
         "body": {
+          "checkout_verified": false,
           "environment": "live",
+          "limits": {
+            "daily_history_months": null,
+            "hourly_history_days": null,
+            "machines": null,
+            "sync_minutes": 0,
+            "trial_days": 0
+          },
+          "paddle_client_token": null,
           "policy": {
-            "phase": "active",
-            "launch_at": "2026-10-26T00:00:00.000Z",
-            "hosting_mode": "self_hosted"
+            "hosting_mode": "self_hosted",
+            "launch_at": "@ts:1",
+            "phase": "active"
           },
           "prices": [],
           "providers": {
-            "waffo": false,
+            "alipay": false,
             "paddle": false,
-            "wechat": false,
-            "alipay": false
-          },
-          "checkout_verified": false,
-          "paddle_client_token": null,
-          "limits": {
-            "machines": null,
-            "sync_minutes": 0,
-            "hourly_history_days": null,
-            "daily_history_months": null,
-            "trial_days": 0
+            "waffo": false,
+            "wechat": false
           }
         },
         "_norm": {
           "uuid": 0,
           "secret": 0,
-          "ts": 0,
+          "ts": 1,
           "rel": 0,
           "referenceNow": "2026-10-26T00:00:00.000Z"
         }

@@ -1,7 +1,9 @@
 # Docker 镜像交付（linux/amd64）
 
-> 目标：把「已审计的自托管应用侧产物」做成可分发的 OCI 镜像，用 GitHub Actions 构建、推送到 GHCR。
+> **正式镜像**：把「已审计的自托管应用侧产物」做成可分发的 OCI 工件镜像，供 InsForge + PostgreSQL 路径使用。
 > 目前只构建 **linux/amd64**（x86_64）。ARM64 未验证，不提供。
+>
+> **另有实验性 Go+SQLite 后端镜像**：`go-server/Dockerfile` / `docker-compose.sqlite-go.example.yml`，状态见 `go-server/STATUS.md`。它是替代后端的原型，不是正式 InsForge 工件镜像，不要混用标签或生产部署。
 
 ---
 

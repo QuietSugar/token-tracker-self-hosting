@@ -205,8 +205,9 @@ jobs:
 - 依赖锁定：`npm:@insforge/sdk@1.4.5`、`alipay-sdk@4.14.0`、`urllib@4.9.1`、`@waffo/pancake-ts@0.25.0`。
 - Node ≥ 20；产物为 async CommonJS（InsForge v2.3.3 worker 的 `new Function` 执行器）。
 - `TOKENTRACKER_DASHBOARD_URL` 必须指向自有 dashboard（HTTPS 或 loopback HTTP），源码锚点校验会拒绝回落官方域名。
-- **v1.4.12 首次产物已生成**：`releases/1.4.12/`（19 个文件，含 SQL/14 函数/SHA256SUMS）。首次**部署**仍未开始。
-- **最终交付物是 Docker 镜像**（linux/amd64），见 [`docs/docker-image.md`](docs/docker-image.md)。
+- **v1.4.12 首次产物已生成**：`releases/1.4.12/`（19 个文件，含 SQL/14 函数/SHA256SUMS）。本地官方 InsForge v2.3.3 + PG 15.18 标准栈已安装/重装验收；用户自己的公共 VPS 部署仍未开始。
+- 正式交付仍是 InsForge 工件 Docker 镜像（linux/amd64），见 [`docs/docker-image.md`](docs/docker-image.md)。
+- 另有 `go-server/` 实验性 Go+SQLite 垂直切片：33 个可移植行为契约 PASS、2 个 PG 专属安装账本用例显式 SKIP；**不代表完整替代，不得标 GA/生产**。详情见 `go-server/STATUS.md`。
 
 ---
 
@@ -221,3 +222,15 @@ jobs:
 5. **GHCR 包默认 private**：首次推送后需在包设置里改为 public（一次性）。
 6. **旧版本镜像与 `releases/<old>/` 都不删**：回滚时唯一的已知函数来源。
 7. 每次升级循环结束，确认新标签镜像的 `info` / `verify` 与 `tracking/REF` 一致，并把 digest 记入 `releases/<ver>/acceptance.md`。
+
+---
+
+## 11. Go + SQLite 迁移实验的维护规则
+
+1. Go 实现是**实验分支/垂直切片**，不得与正式 InsForge 镜像混用标签、配置或发布说明。
+2. 每次改动必须跑 `cd go-server && go test -race ./... && go vet ./...`。
+3. 每次改动必须跑 `CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs ./contract/scripts/verify.sh`；当前基线为 33 PASS / 0 FAIL / 2 SKIP。
+4. 2 个 SKIP 是刻意的 PG 专属 step/checksum ledger，不许把 SQLite schema migration 假装成 15 个 PG SQL step；SQLite 自己用 `schema_migrations(version=1, checksum=...)`。
+5. 每次更改 Go contract，重新跑 PGlite 参考自测和可复现 golden；不要为了 Go 实现而无评审地改 reference golden。
+6. 真实并发/锁语义用 `./contract/scripts/standard-env-test.sh` 在真实 PG 15.18 上验；当前 5 PASS / 0 FAIL。不要用 PGlite 声称并发验证完成。
+7. 生产 GA 前阻断项见 `go-server/STATUS.md`；在完整 schema、更多行为矩阵、安全审查、恢复/备份与客户端 E2E 未通过前，镜像标签只能是 `experimental`。

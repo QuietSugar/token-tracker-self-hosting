@@ -2,7 +2,8 @@
   "id": "install/ledger-15-steps",
   "tags": [
     "L1",
-    "install"
+    "install",
+    "postgres-specific"
   ],
   "group": "install",
   "seed": "tokentracker-contract-v1",
@@ -16,64 +17,64 @@
         "body": {
           "rows": [
             {
-              "step": "01-private-baseline",
-              "checksum": "071ca2557673de115bca98fba2ea1fd577ad056b96ef76ff4a44dcae5fff6470"
+              "checksum": "071ca2557673de115bca98fba2ea1fd577ad056b96ef76ff4a44dcae5fff6470",
+              "step": "01-private-baseline"
             },
             {
-              "step": "02-account-sessions",
-              "checksum": "980d8eeef13d68f95d4fa9c32d925b66715bd342aed9aef0872d8b416cd7eabf"
+              "checksum": "980d8eeef13d68f95d4fa9c32d925b66715bd342aed9aef0872d8b416cd7eabf",
+              "step": "02-account-sessions"
             },
             {
-              "step": "03-device-identity",
-              "checksum": "6967e029ddba62373f5e18b80cecbca2deae8f1dbeb8c2a1891ff15e5b4a85db"
+              "checksum": "6967e029ddba62373f5e18b80cecbca2deae8f1dbeb8c2a1891ff15e5b4a85db",
+              "step": "03-device-identity"
             },
             {
-              "step": "04-private-aggregation",
-              "checksum": "b95a322e4c8f1a2afd038e6f3658cc9236349b8200502bd48d07d79f68204c02"
+              "checksum": "b95a322e4c8f1a2afd038e6f3658cc9236349b8200502bd48d07d79f68204c02",
+              "step": "04-private-aggregation"
             },
             {
-              "step": "10-self-hosted-policy",
-              "checksum": "3808d8964e2f987569fd6d5eb82b2fa349e2bedd6de1ad45a631ead93279cad2"
+              "checksum": "3808d8964e2f987569fd6d5eb82b2fa349e2bedd6de1ad45a631ead93279cad2",
+              "step": "10-self-hosted-policy"
             },
             {
-              "step": "11-token-environment-validation",
-              "checksum": "08a7dd10fde98f8aafc25bd9f7bb719914498ef1b1ce5823d76d81c15af69d3d"
+              "checksum": "08a7dd10fde98f8aafc25bd9f7bb719914498ef1b1ce5823d76d81c15af69d3d",
+              "step": "11-token-environment-validation"
             },
             {
-              "step": "12-pro-gifts",
-              "checksum": "d3929a662143ab38f2e8edca5bcfd9549546e711222f4a20a6ba6c202f73d777"
+              "checksum": "d3929a662143ab38f2e8edca5bcfd9549546e711222f4a20a6ba6c202f73d777",
+              "step": "12-pro-gifts"
             },
             {
-              "step": "13-machine-alias-cascade",
-              "checksum": "002132f9587810337d2e9f1667ce2c33bf5be2b6689cf051fa21ababc9122f53"
+              "checksum": "002132f9587810337d2e9f1667ce2c33bf5be2b6689cf051fa21ababc9122f53",
+              "step": "13-machine-alias-cascade"
             },
             {
-              "step": "20261003120000_cloud-subscriptions",
-              "checksum": "d7ccbed0b936d8ff517a7932799770c944e6942cadb0c949b745ded799c19937"
+              "checksum": "d7ccbed0b936d8ff517a7932799770c944e6942cadb0c949b745ded799c19937",
+              "step": "20261003120000_cloud-subscriptions"
             },
             {
-              "step": "20261004120000_cloud-machine-access",
-              "checksum": "6938d26ea6dc211db83ac6c769e9930c80b147dc2fcbe837c6902ef2dc1a394c"
+              "checksum": "6938d26ea6dc211db83ac6c769e9930c80b147dc2fcbe837c6902ef2dc1a394c",
+              "step": "20261004120000_cloud-machine-access"
             },
             {
-              "step": "20261007120000_cloud-waffo",
-              "checksum": "ee4303a99b3141015b68f960ad111672862ba9b2b2537c3d25c288eedaa66f5c"
+              "checksum": "ee4303a99b3141015b68f960ad111672862ba9b2b2537c3d25c288eedaa66f5c",
+              "step": "20261007120000_cloud-waffo"
             },
             {
-              "step": "20261007130000_cloud-waffo-retry",
-              "checksum": "ad42488cbf8279f98e269067cbfa270c692fb171bbf66d9e2350f8c6341c1a37"
+              "checksum": "ad42488cbf8279f98e269067cbfa270c692fb171bbf66d9e2350f8c6341c1a37",
+              "step": "20261007130000_cloud-waffo-retry"
             },
             {
-              "step": "20261007140000_cloud-waffo-attempts",
-              "checksum": "ad0986bc74bd4840247c898667783fd8153238262ecce0e27865bb7c9311b946"
+              "checksum": "ad0986bc74bd4840247c898667783fd8153238262ecce0e27865bb7c9311b946",
+              "step": "20261007140000_cloud-waffo-attempts"
             },
             {
-              "step": "20261007150000_cloud-waffo-authorizations",
-              "checksum": "f54e4de4009d39e1f1356a5f9fd619fddd0055bf5d836f94cee452b720a799c2"
+              "checksum": "f54e4de4009d39e1f1356a5f9fd619fddd0055bf5d836f94cee452b720a799c2",
+              "step": "20261007150000_cloud-waffo-authorizations"
             },
             {
-              "step": "20261007160000_cloud-waffo-sandbox-periods",
-              "checksum": "396bfab22c09a35a76510644e8ec002fa8ff48763104e1f86369c0c8b2af36d1"
+              "checksum": "396bfab22c09a35a76510644e8ec002fa8ff48763104e1f86369c0c8b2af36d1",
+              "step": "20261007160000_cloud-waffo-sandbox-periods"
             }
           ]
         },

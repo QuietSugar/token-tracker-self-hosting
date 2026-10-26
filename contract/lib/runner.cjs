@@ -247,6 +247,14 @@ async function runCase(adapter, caseDef, opts = {}) {
     const t0 = Date.now();
     try {
       const resp = await executeStep(ctx, step);
+      // 关键规则：用例可以用 expectStatus 声明期望状态。
+      // 若实际不符（例如 RPC 参数名写错导致 42883），必须让用例失败，
+      // 而不是把错误响应静默录进 golden 当成"基准"。
+      if (step.expectStatus !== undefined && resp.status !== step.expectStatus) {
+        const detail = typeof resp.body === "object"
+          ? JSON.stringify(resp.body).slice(0, 300) : String(resp.body).slice(0, 300);
+        throw Error(`expectStatus=${step.expectStatus} but got ${resp.status}: ${detail}`);
+      }
       steps.push({
         op: step.op,
         call: step.call || step.sql?.slice(0, 60),

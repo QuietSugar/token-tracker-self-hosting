@@ -20,47 +20,47 @@
           "content-type": "application/json"
         },
         "body": {
-          "from": "@reldate:1",
-          "to": "@reldate:1",
           "days": 1,
-          "totals": {
-            "total_tokens": 75,
-            "billable_total_tokens": 75,
-            "total_cost_usd": "0.000000",
-            "input_tokens": 75,
-            "output_tokens": 0,
-            "cached_input_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "reasoning_output_tokens": 0,
-            "conversation_count": 1
-          },
+          "from": "@relday-25",
           "rolling": {
+            "last_30d": {
+              "active_days": 1,
+              "avg_per_active_day": 75,
+              "from": "@relday-29",
+              "to": "@relday+0",
+              "totals": {
+                "billable_total_tokens": 75,
+                "conversation_count": 1
+              }
+            },
             "last_7d": {
-              "from": "@reldate:2",
-              "to": "@reldate:3",
               "active_days": 0,
+              "from": "@relday-6",
+              "to": "@relday+0",
               "totals": {
                 "billable_total_tokens": 0,
                 "conversation_count": 0
               }
-            },
-            "last_30d": {
-              "from": "@reldate:4",
-              "to": "@reldate:3",
-              "active_days": 1,
-              "totals": {
-                "billable_total_tokens": 75,
-                "conversation_count": 1
-              },
-              "avg_per_active_day": 75
             }
+          },
+          "to": "@relday-25",
+          "totals": {
+            "billable_total_tokens": 75,
+            "cache_creation_input_tokens": 0,
+            "cached_input_tokens": 0,
+            "conversation_count": 1,
+            "input_tokens": 75,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_cost_usd": "0.000000",
+            "total_tokens": 75
           }
         },
         "_norm": {
           "uuid": 0,
           "secret": 0,
           "ts": 0,
-          "rel": 4,
+          "rel": 0,
           "referenceNow": "2026-10-26T00:00:00.000Z"
         }
       }
@@ -77,31 +77,31 @@
           "content-type": "application/json"
         },
         "body": {
-          "from": "@reldate:1",
-          "to": "@reldate:1",
           "data": [
             {
-              "day": "@reldate:1",
-              "total_tokens": 75,
               "billable_total_tokens": 75,
-              "total_cost_usd": 0,
-              "input_tokens": 75,
-              "output_tokens": 0,
-              "cached_input_tokens": 0,
               "cache_creation_input_tokens": 0,
-              "reasoning_output_tokens": 0,
+              "cached_input_tokens": 0,
               "conversation_count": 1,
+              "day": "@relday-25",
+              "input_tokens": 75,
               "models": {
                 "gpt-6": 75
-              }
+              },
+              "output_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_cost_usd": 0,
+              "total_tokens": 75
             }
-          ]
+          ],
+          "from": "@relday-25",
+          "to": "@relday-25"
         },
         "_norm": {
           "uuid": 0,
           "secret": 0,
           "ts": 0,
-          "rel": 1,
+          "rel": 0,
           "referenceNow": "2026-10-26T00:00:00.000Z"
         }
       }
@@ -119,61 +119,61 @@
           "vary": "Accept-Encoding"
         },
         "body": {
-          "from": "@reldate:1",
-          "to": "@reldate:1",
           "days": 0,
+          "from": "@relday-25",
+          "pricing": {
+            "effective_from": "@relday+0",
+            "model": "per-model",
+            "pricing_mode": "per_token_type",
+            "source": "litellm"
+          },
           "sources": [
             {
-              "source": "codex",
-              "totals": {
-                "total_tokens": 75,
-                "billable_total_tokens": 75,
-                "input_tokens": 75,
-                "output_tokens": 0,
-                "cached_input_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "reasoning_output_tokens": 0,
-                "total_cost_usd": "0.000000"
-              },
               "models": [
                 {
+                  "cost_source": "model_pricing",
                   "model": "gpt-6",
                   "model_id": "gpt-6",
                   "pricing": {
-                    "status": "unpriced",
-                    "source": null,
+                    "cache_read": 0,
+                    "cache_write": 0,
                     "input": 0,
                     "output": 0,
-                    "cache_read": 0,
-                    "cache_write": 0
+                    "source": null,
+                    "status": "unpriced"
                   },
-                  "cost_source": "model_pricing",
                   "totals": {
-                    "total_tokens": 75,
                     "billable_total_tokens": 75,
+                    "cache_creation_input_tokens": 0,
+                    "cached_input_tokens": 0,
                     "input_tokens": 75,
                     "output_tokens": 0,
-                    "cached_input_tokens": 0,
-                    "cache_creation_input_tokens": 0,
                     "reasoning_output_tokens": 0,
-                    "total_cost_usd": "0.000000"
+                    "total_cost_usd": "0.000000",
+                    "total_tokens": 75
                   }
                 }
-              ]
+              ],
+              "source": "codex",
+              "totals": {
+                "billable_total_tokens": 75,
+                "cache_creation_input_tokens": 0,
+                "cached_input_tokens": 0,
+                "input_tokens": 75,
+                "output_tokens": 0,
+                "reasoning_output_tokens": 0,
+                "total_cost_usd": "0.000000",
+                "total_tokens": 75
+              }
             }
           ],
-          "pricing": {
-            "model": "per-model",
-            "pricing_mode": "per_token_type",
-            "source": "litellm",
-            "effective_from": "@reldate:2"
-          }
+          "to": "@relday-25"
         },
         "_norm": {
           "uuid": 0,
           "secret": 0,
           "ts": 0,
-          "rel": 2,
+          "rel": 0,
           "referenceNow": "2026-10-26T00:00:00.000Z"
         }
       }

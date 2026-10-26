@@ -66,9 +66,8 @@ const ANCHOR_KEYS = new Set([
   "pricing_tier", "hosting_mode", "environment", "phase", "role", "source", "model",
   "content-type", "cache-control", "content-encoding",
 ]);
-// 日期类键：值可能是"业务输入日期"（保留）或"滚动窗口日期"（相对化）。
-// 统一走 _relativeDate：以冻结时钟为基准转成 @reldate，跨天可复现。
-const DATE_KEYS = new Set(["from", "to", "day", "date", "hour", "bucket", "week_start", "month", "expires_at"]);
+// 日期类键：以冻结时钟为基准转成值驱动的 @relday±N，避免键顺序影响 placeholder。
+const DATE_KEYS = new Set(["from", "to", "day", "date", "hour", "week_start", "month", "expires_at"]);
 // 敏感字段：即使值看起来不像 token 也归一化。
 const SECRET_KEYS = new Set([
   "token", "device_token", "device_code", "user_code", "jwt", "apikey",
@@ -96,10 +95,11 @@ class Normalizer {
     const d = new Date(s + "T00:00:00Z");
     if (Number.isNaN(d.getTime())) return null;
     const days = Math.round((d - this.referenceNow) / 86400000);
-    // 只归一化"靠近现在"的窗口日期；业务输入日期（如 2026-10-01）若恰好落在窗口内
-    // 也会转，但这对两边实现是同样的规则，不影响一致性判定。
     if (days > 365 || days < -365) return null;
-    return this._map("rel", `@days${days >= 0 ? "+" : ""}${days}`, "@reldate");
+    // 值驱动（而非出现顺序）：占位符只由日期与冻结时钟的差值决定。
+    // 这样两边实现即使 JSON 键顺序不同（Go 按字母序 / Node 按插入序），
+    // 同一个日期也得到同一个占位符。
+    return `@relday${days >= 0 ? "+" : ""}${days}`;
   }
   _string(s, path, keyHint) {
     const key = (keyHint || "").toLowerCase();
@@ -122,7 +122,8 @@ class Normalizer {
     if (DEVICE_CODE_RE.test(s)) return this._map("secret", s, "@secret");
     if (/^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(s)) return this._map("secret", s, "@jwt");
     if (ISO_TS_RE.test(s)) {
-      if (this.keepDates && /T00:00:00(\.000)?Z$/.test(s)) return s;
+      // 所有完整时间戳都归一化；即使恰好是午夜，也可能是运行时 clock_timestamp。
+      // 业务日期应使用 YYYY-MM-DD，或由字段名走 DATE_KEYS 分支。
       return this._map("ts", s, "@ts");
     }
     if (DATE_RE.test(s)) {
@@ -160,7 +161,10 @@ class Normalizer {
       if (this.seen.has(v)) return "@circular";
       this.seen.add(v);
       const out = {};
-      for (const k of Object.keys(v)) out[k] = this.walk(v[k], `${path}.${k}`, k);
+      // 跨语言确定性：JSON object key order is semantically unordered。
+      // 先按 key 排序再遍历，避免 Go encoding/json 与 JS insertion order
+      // 导致 UUID/token placeholder 分配顺序不同。
+      for (const k of Object.keys(v).sort()) out[k] = this.walk(v[k], `${path}.${k}`, k);
       this.seen.delete(v);
       return out;
     }

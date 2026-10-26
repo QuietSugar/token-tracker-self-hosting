@@ -18,32 +18,32 @@
           "content-type": "application/json"
         },
         "body": {
-          "ok": true,
-          "skipped": 0,
           "inserted": 1,
           "membership": {
-            "phase": "active",
-            "status": "self_hosted",
-            "has_gift": false,
-            "expires_at": null,
-            "environment": "live",
-            "hosting_mode": "self_hosted",
             "access_source": "none",
-            "machine_limit": null,
-            "trial_ends_at": null,
             "can_read_cloud": true,
-            "gift_expires_at": null,
-            "read_only_until": null,
-            "trial_available": false,
             "can_upload_cloud": true,
-            "transition_ends_at": null,
-            "hourly_history_days": null,
             "daily_history_months": null,
-            "sync_interval_seconds": 0
+            "environment": "live",
+            "expires_at": null,
+            "gift_expires_at": null,
+            "has_gift": false,
+            "hosting_mode": "self_hosted",
+            "hourly_history_days": null,
+            "machine_limit": null,
+            "phase": "active",
+            "read_only_until": null,
+            "status": "self_hosted",
+            "sync_interval_seconds": 0,
+            "transition_ends_at": null,
+            "trial_available": false,
+            "trial_ends_at": null
           },
-          "upload_scope": "cloud",
           "next_allowed_at": "@ts:1",
-          "sync_interval_seconds": 0
+          "ok": true,
+          "skipped": 0,
+          "sync_interval_seconds": 0,
+          "upload_scope": "cloud"
         },
         "_norm": {
           "uuid": 0,
@@ -65,32 +65,32 @@
           "content-type": "application/json"
         },
         "body": {
-          "ok": true,
-          "skipped": 0,
           "inserted": 1,
           "membership": {
-            "phase": "active",
-            "status": "self_hosted",
-            "has_gift": false,
-            "expires_at": null,
-            "environment": "live",
-            "hosting_mode": "self_hosted",
             "access_source": "none",
-            "machine_limit": null,
-            "trial_ends_at": null,
             "can_read_cloud": true,
-            "gift_expires_at": null,
-            "read_only_until": null,
-            "trial_available": false,
             "can_upload_cloud": true,
-            "transition_ends_at": null,
-            "hourly_history_days": null,
             "daily_history_months": null,
-            "sync_interval_seconds": 0
+            "environment": "live",
+            "expires_at": null,
+            "gift_expires_at": null,
+            "has_gift": false,
+            "hosting_mode": "self_hosted",
+            "hourly_history_days": null,
+            "machine_limit": null,
+            "phase": "active",
+            "read_only_until": null,
+            "status": "self_hosted",
+            "sync_interval_seconds": 0,
+            "transition_ends_at": null,
+            "trial_available": false,
+            "trial_ends_at": null
           },
-          "upload_scope": "cloud",
           "next_allowed_at": "@ts:1",
-          "sync_interval_seconds": 0
+          "ok": true,
+          "skipped": 0,
+          "sync_interval_seconds": 0,
+          "upload_scope": "cloud"
         },
         "_norm": {
           "uuid": 0,
@@ -113,47 +113,47 @@
           "content-type": "application/json"
         },
         "body": {
-          "from": "@reldate:1",
-          "to": "@reldate:1",
           "days": 1,
-          "totals": {
-            "total_tokens": 200,
-            "billable_total_tokens": 200,
-            "total_cost_usd": "0.000000",
-            "input_tokens": 200,
-            "output_tokens": 0,
-            "cached_input_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "reasoning_output_tokens": 0,
-            "conversation_count": 2
-          },
+          "from": "@relday-25",
           "rolling": {
+            "last_30d": {
+              "active_days": 1,
+              "avg_per_active_day": 200,
+              "from": "@relday-29",
+              "to": "@relday+0",
+              "totals": {
+                "billable_total_tokens": 200,
+                "conversation_count": 2
+              }
+            },
             "last_7d": {
-              "from": "@reldate:2",
-              "to": "@reldate:3",
               "active_days": 0,
+              "from": "@relday-6",
+              "to": "@relday+0",
               "totals": {
                 "billable_total_tokens": 0,
                 "conversation_count": 0
               }
-            },
-            "last_30d": {
-              "from": "@reldate:4",
-              "to": "@reldate:3",
-              "active_days": 1,
-              "totals": {
-                "billable_total_tokens": 200,
-                "conversation_count": 2
-              },
-              "avg_per_active_day": 200
             }
+          },
+          "to": "@relday-25",
+          "totals": {
+            "billable_total_tokens": 200,
+            "cache_creation_input_tokens": 0,
+            "cached_input_tokens": 0,
+            "conversation_count": 2,
+            "input_tokens": 200,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_cost_usd": "0.000000",
+            "total_tokens": 200
           }
         },
         "_norm": {
           "uuid": 0,
           "secret": 0,
           "ts": 0,
-          "rel": 4,
+          "rel": 0,
           "referenceNow": "2026-10-26T00:00:00.000Z"
         }
       }

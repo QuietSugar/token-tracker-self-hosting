@@ -18,32 +18,32 @@
           "content-type": "application/json"
         },
         "body": {
-          "ok": true,
-          "skipped": 0,
           "inserted": 1,
           "membership": {
-            "phase": "active",
-            "status": "self_hosted",
-            "has_gift": false,
-            "expires_at": null,
-            "environment": "live",
-            "hosting_mode": "self_hosted",
             "access_source": "none",
-            "machine_limit": null,
-            "trial_ends_at": null,
             "can_read_cloud": true,
-            "gift_expires_at": null,
-            "read_only_until": null,
-            "trial_available": false,
             "can_upload_cloud": true,
-            "transition_ends_at": null,
-            "hourly_history_days": null,
             "daily_history_months": null,
-            "sync_interval_seconds": 0
+            "environment": "live",
+            "expires_at": null,
+            "gift_expires_at": null,
+            "has_gift": false,
+            "hosting_mode": "self_hosted",
+            "hourly_history_days": null,
+            "machine_limit": null,
+            "phase": "active",
+            "read_only_until": null,
+            "status": "self_hosted",
+            "sync_interval_seconds": 0,
+            "transition_ends_at": null,
+            "trial_available": false,
+            "trial_ends_at": null
           },
-          "upload_scope": "cloud",
           "next_allowed_at": "@ts:1",
-          "sync_interval_seconds": 0
+          "ok": true,
+          "skipped": 0,
+          "sync_interval_seconds": 0,
+          "upload_scope": "cloud"
         },
         "_norm": {
           "uuid": 0,
@@ -66,31 +66,31 @@
           "content-type": "application/json"
         },
         "body": {
-          "from": "@reldate:1",
-          "to": "@reldate:2",
           "data": [
             {
-              "day": "@reldate:1",
-              "total_tokens": 100,
               "billable_total_tokens": 100,
-              "total_cost_usd": 0,
-              "input_tokens": 100,
-              "output_tokens": 0,
-              "cached_input_tokens": 0,
               "cache_creation_input_tokens": 0,
-              "reasoning_output_tokens": 0,
+              "cached_input_tokens": 0,
               "conversation_count": 1,
+              "day": "@relday-25",
+              "input_tokens": 100,
               "models": {
                 "gpt-6": 100
-              }
+              },
+              "output_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_cost_usd": 0,
+              "total_tokens": 100
             }
-          ]
+          ],
+          "from": "@relday-25",
+          "to": "@relday-23"
         },
         "_norm": {
           "uuid": 0,
           "secret": 0,
           "ts": 0,
-          "rel": 2,
+          "rel": 0,
           "referenceNow": "2026-10-26T00:00:00.000Z"
         }
       }
@@ -107,31 +107,31 @@
           "content-type": "application/json"
         },
         "body": {
-          "from": "@reldate:1",
-          "to": "@reldate:2",
           "data": [
             {
-              "day": "@reldate:3",
-              "total_tokens": 100,
               "billable_total_tokens": 100,
-              "total_cost_usd": 0,
-              "input_tokens": 100,
-              "output_tokens": 0,
-              "cached_input_tokens": 0,
               "cache_creation_input_tokens": 0,
-              "reasoning_output_tokens": 0,
+              "cached_input_tokens": 0,
               "conversation_count": 1,
+              "day": "@relday-24",
+              "input_tokens": 100,
               "models": {
                 "gpt-6": 100
-              }
+              },
+              "output_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_cost_usd": 0,
+              "total_tokens": 100
             }
-          ]
+          ],
+          "from": "@relday-25",
+          "to": "@relday-23"
         },
         "_norm": {
           "uuid": 0,
           "secret": 0,
           "ts": 0,
-          "rel": 3,
+          "rel": 0,
           "referenceNow": "2026-10-26T00:00:00.000Z"
         }
       }
