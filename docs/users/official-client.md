@@ -90,6 +90,9 @@ export NODE_EXTRA_CA_CERTS=/path/to/ca.pem      # Node 用自己的 CA 库，不
 ANON=$(./scripts/issue-token.sh --role anon --json)
 ```
 
+客户端会自己校验这个 key 是不是"公开 anon key"（`anon_<hex>` 形状，或带 `role=anon` 的 JWT），
+`ik_` 开头的服务密钥会被直接拒绝。上面这条命令签出来的就是 `role=anon` 的 JWT，正好通过。
+
 然后在那台客户端机器上：
 
 ```sh

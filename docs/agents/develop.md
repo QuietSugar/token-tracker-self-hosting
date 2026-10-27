@@ -76,9 +76,10 @@ go vet ./...                 # 必须干净
 go test -race ./...          # 全绿；PG 缺失时相关用例会 SKIP，SKIP 不算过
 ```
 
-**门 2 — 契约**
+**门 2 — 契约**（脚本在仓库根，先 `cd ..` 回去）
 
 ```sh
+cd ..
 CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs \
 GO_POSTGRES_URL="$TT_TEST_DATABASE_URL" \
 ./contract/scripts/verify.sh

@@ -76,8 +76,8 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 ### 时区
 
 所有 `account-*` 端点认官方的 `tz`（IANA 名）与 `tz_offset_minutes`（= `-Date.getTimezoneOffset()`），
-按**本地日**归日：UTC 窗口两侧各放宽一天再按本地日裁剪。summary 的 rolling 窗口锚在本地今天，
-`days` 是本地活跃天数。不传就按 UTC 算。
+按**本地日**归日：查库时把 UTC 窗口向前放宽 1 天、向后放宽 2 天，再按 `(tz)` 的本地日期裁剪
+（覆盖最大 ±14h 时区）。summary 的 rolling 窗口锚在本地今天，`days` 是本地活跃天数。不传就按 UTC 算。
 
 内建看板会自动带上浏览器的时区；用 `curl` 时容易忘，**"今天有数据但查不到"通常是漏了 `tz`**。
 
@@ -92,7 +92,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"device_name":"nas","platform":"linux","machine_id":"m-nas"}' \
   http://127.0.0.1:8080/functions/tokentracker-device-token-issue
-# {"token":"…","device_id":"…","machine_id":"m-nas","device_name":"nas"}
+# {"token":"…","device_id":"…","machine_id":"m-nas","device_name":"nas","membership":{…}}
 
 # 2) 用它上传用量
 curl -s -X POST -H "Authorization: Bearer <token>" -H 'Content-Type: application/json' \
@@ -122,25 +122,31 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/
   http://127.0.0.1:8080/functions/tokentracker-device-rename
 ```
 
-**暂停 / 恢复**（官方 dashboard 设备卡走的就是这两个）：
+**暂停 / 恢复**：按**机器**操作（官方 dashboard 的设备卡片走的就是这两个 action）。
 
 ```sh
-# 列出机器（含 is_current、machine_count、membership）
+# 1) 列出机器，取每项的 machine_id（响应里的 machines[]）
 curl -s -H "Authorization: Bearer $TOKEN" \
   'http://127.0.0.1:8080/functions/tokentracker-billing?action=devices&current_machine_id=m-nas'
+# {"machines":[{"machine_id":"m-nas","name":"nas","platform":"linux","status":"active",
+#               "is_current":true,"last_seen_at":"…"}],"machine_count":1,"machine_limit":null,
+#  "over_machine_limit":null,"membership":{…}}
 
-# 暂停：撤销这台机器的 device token，它就不能再上传
+# 2) 暂停：把这台机器标成 paused，并撤销它名下设备的 device token（不能再上传）
 curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"device_id":"…"}' \
+  -d '{"machine_id":"m-nas"}' \
   'http://127.0.0.1:8080/functions/tokentracker-billing?action=remove-device'
 
-# 恢复
+# 3) 恢复
 curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"device_id":"…"}' \
+  -d '{"machine_id":"m-nas"}' \
   'http://127.0.0.1:8080/functions/tokentracker-billing?action=resume-device'
 ```
 
-暂停只撤销 token，**不删历史用量**。`ingest` 会更新该机器的 `last_seen_at`（设备卡片上的"最后活跃"）。
+- body 里是 **`machine_id`**（`machines[].machine_id`，也接受这行的内部 `id`），**不是 `device_id`** —— 传 `device_id` 会 400 `machine_id is required`。
+- 两个 action 都 POST；响应是操作后的机器列表 + `ok:true`。
+- 恢复**不会**自动发新 token：那台机器要重新 `device-login`（或重新签发）才能继续上传。
+- 暂停只撤销 token、不删历史用量。`ingest` 会更新该机器的 `last_seen_at`（设备卡片上的"最后活跃"）。
 
 ---
 

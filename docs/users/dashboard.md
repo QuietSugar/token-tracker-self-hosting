@@ -31,7 +31,8 @@ access token 1 小时后过期时，页面会用登录拿到的 refresh token **
 ## 它刻意做的两个选择
 
 1. **列出全部设备，包括 0 用量的**（标「无用量」）。官方 dashboard 会把当前周期没量的设备从下拉里藏起来，看起来像"设备丢了"。
-2. **只读**：页面只发 GET，唯一的 POST 是登录。改名、暂停设备、删数据都不在这里做（见 [`devices.md`](devices.md)）。
+2. **只读**：页面只发 GET，全程只有两个 POST —— 登录（`/api/auth/sessions`）和续期（`/api/auth/refresh`）。
+   改名、暂停设备、删数据都不在这里做（见 [`devices.md`](devices.md)）；`TestDashboardIsReadOnly` 会拦下任何新增的写端点。
 
 ## 保证与限制
 

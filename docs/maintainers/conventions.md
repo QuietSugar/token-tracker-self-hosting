@@ -77,6 +77,8 @@ CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs GO_POSTGRES_URL=… ./contr
 
 ## 8. CI 的供应链约束
 
-只用官方 `actions/*` 与少数固定版本的可信 action（`docker/*`）；
-第三方镜像用 digest 固定（见 `contract.yml` 里的 `postgres:15.18`）。
+只用官方 `actions/*` 与少数固定版本的可信 action（`docker/*`）。
+镜像：**随产物一起发布的**（`go-server/Dockerfile` 的构建/运行基镜像）按 digest 固定；
+CI 里的一次性测试库按 tag 取（`postgres:<ver>-alpine`，见 `go-server.yml` 矩阵），
+升级靠显式改矩阵，不引入自动跟随。
 不要为了省事引入来路不明的 action —— 这个仓库没有密钥可偷，但有产物完整性可破。

@@ -37,7 +37,7 @@ billing
 ```
 
 公开入口只有 `authorize` 和 `poll`；其余拒绝未认证请求。未注册的 slug（例如上游客户端会打的
-`tokentracker-telemetry`）返回 404 —— 客户端忽略它，不影响任何流程。
+`tokentracker-telemetry`）返回 404 `{"error":"Function not installed"}` —— 客户端忽略它，不影响任何流程。
 
 数据面：主键 `(user_id, device_id, hour_start, source, model)`，重复上传**整行替换**；时区按
 `tz` / `tz_offset_minutes` 归本地日；heatmap 支持 `format=compact`。这些都由用例锁住。
@@ -46,11 +46,12 @@ billing
 
 | 项 | 官方 | 我们 | 理由 |
 |---|---|---|---|
-| 付费 / 试用 / 赠送码 | 完整计费链路 | `billing` 只保留 `account`/`devices`/`remove-device`/`resume-device`；无支付行、无套餐 | 自托管模式下上游自己也把付费排除在自托管清单外 |
+| 付费 / 试用 / 赠送码 | 完整计费链路 | `billing` 只保留 `account`（默认）/`catalog`（空价格、无商户）/`devices`/`remove-device`/`resume-device`；无支付行、无套餐 | 自托管模式下上游自己也把付费排除在自托管清单外 |
 | 表数量 | 24 张 | 16 张业务表 + 2 张账本 | session states、赠送码审计、支付审计未实现 |
 | 0 用量设备 | dashboard 前端把当前周期无用量的设备藏掉 | **照列并标"无用量"** | 藏起来看起来像设备丢了 |
 | `streak_days` | 上游实现里恒为 0 | 也恒为 0 | 不"修正"上游的 bug，等价优先 |
 | heatmap 星期对齐 | 上游自己前后不一致 | 原样跟随 | 同上 |
+| 暂停后再恢复 | 机器状态恢复即可继续上传 | 我们暂停时撤销了 device token，恢复后需重新 `device-login` | 实现上把"暂停"做成了撤 token，恢复没有反向操作 |
 | 第三方 OAuth / 邮件 / 找回密码 | 有 | 无 | 单使用者场景是负担 |
 | 遥测 | 上报 | 404 | 不收集 |
 

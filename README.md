@@ -49,8 +49,8 @@
 能跑、能接真实客户端，但还不是生产 GA。
 
 - ✅ 官方客户端 v1.4.12 实测通过：`init` / `device-login` / `sync` / `doctor`，含跨设备汇总视图
-- ✅ 契约：33 个行为用例 PASS（PostgreSQL 15/16 都跑），2 个是有意 SKIP
-- ✅ 镜像按 OCI digest 固定，推送前强制跑真实 PG 冒烟
+- ✅ 契约：35 个用例里 **33 PASS / 0 FAIL / 2 SKIP**（PostgreSQL 15/16 都跑；两个 SKIP 是上游专属的安装账本用例）
+- ✅ Go 镜像的构建/运行基镜像按 OCI digest 固定；推送前强制跑真实 PG 冒烟
 - ⚠️ 没有速率限制 / 审计日志 / 多副本锁；`contract` 覆盖不到的边界仍未知
 - ⚠️ 备份与恢复**不在本仓库范围内**：那是数据库维护者的事，用 `pg_dump` / PITR 或托管 PG 自带能力
 

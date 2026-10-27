@@ -6,6 +6,9 @@
 ## 1. 一次跑通
 
 ```sh
+# 先编出 adapter 要用的二进制（它按 go-server/bin/tokentracker-server 找）
+cd go-server && go build -o bin/tokentracker-server ./cmd/server && cd ..
+
 # 行为契约（需要一个真实 PG；Go adapter 自己起实例）
 CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs \
 GO_POSTGRES_URL='postgres://postgres:@/postgres?host=/tmp/pgdata' \
@@ -47,11 +50,11 @@ module.exports = {
 
 **HTTP 面**
 
-| 路径 | 方法 | 认证 |
-|---|---|---|
-| `/functions/<slug>` | GET/POST | JWT / device token / 无（仅 `device-flow-authorize`、`device-flow-poll` 公开） |
-| `/api/database/rpc/<fn>` | POST | `project_admin` |
-| `/rest/v1/<table>` | GET/POST/PATCH | `project_admin` |
+| 路径 | 方法 | 认证 | 我们的实现 |
+|---|---|---|---|
+| `/functions/<slug>` | GET/POST | JWT / device token / 无（仅 `device-flow-authorize`、`device-flow-poll` 公开） | ✅ |
+| `/api/database/rpc/<fn>` | POST | `project_admin` | ✅ |
+| `/rest/v1/<table>` | GET/POST/PATCH | `project_admin` | ❌ 不实现（参考实现有，用例不依赖） |
 
 请求 `Content-Type: application/json`，POST body 为 JSON；响应 body 为 JSON 对象或数组。
 认证模型：HS256 JWT（`{sub, role, exp}`，role ∈ `anon`/`authenticated`/`project_admin`）；
@@ -108,8 +111,10 @@ contract/
 | workflow | 内容 |
 |---|---|
 | `verify.yml` | 密钥扫描、编码校验、`releases/*/SHA256SUMS`、脚本语法、**静态契约 + golden checksums** |
-| `contract.yml` | 真实 PG（digest 固定）上的行为契约 |
-| `go-server.yml` | PG 15 与 16 矩阵上的 `go vet` + `go test -race` + 契约 |
+| `contract.yml` | L1 静态契约 + golden checksums + 参考实现自测（PGlite，无需真 PG）+ 每周一完整回归 |
+| `go-server.yml` | 真实 PG **15 / 16 矩阵**（`postgres:<ver>-alpine`）上的 `go vet` + `go test -race` + 契约对拍 |
+
+CI 里 `CONTRACT_CONCURRENCY=3`（GH runner 内存够）；脚本默认值是 1，本地沙箱请保持 1。
 
 ## 7. 本地起 PG（沙箱/无 docker 时）
 

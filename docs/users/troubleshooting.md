@@ -40,9 +40,11 @@ docker compose -f docker-compose.postgres-go.example.yml logs --tail 50 tokentra
 
 ```sh
 TT_ACCESS_LOG=true docker compose … up -d
-# 日志：access: GET /functions/tokentracker-account-summary 401 auth=no origin=https://tt.lan
+# 日志：access: GET /functions/tokentracker-account-summary 401 auth=no origin=https://tt.lan ua="…"
 #                                              ↑ auth=no 说明请求到服务端时已经没有 Authorization
 ```
+
+`auth=` 的取值：`yes`（有 Bearer）、`no`（没有）、`device-hash`（带客户端自己的 device-token 哈希头）。
 
 解决：让代理透传 `Authorization`；或改用 `X-TokenTracker-Token: Bearer <jwt>`（服务端同样接受，内建看板两个头都发）。
 另外注意有些网关会**改写** `Authorization`（比如换成它自己的 JWT），那也是同一类问题。

@@ -40,8 +40,10 @@
 2. **只有 16 张业务表**（上游 PG 参考清单 24 张）：session states、赠送码审计、支付/账单审计未实现——自托管模式下这些功能本就排除。
 3. **没有速率限制、审计日志、指标导出**。局域网自用的取舍。
 4. **schema 只有 version 1 + 增量 additions**：升级不需要重建库，但也没有自动回滚；升级前请自备数据库备份（备份不在本仓库范围）。
-5. **`/_test/*` 端点**（含可执行任意 SQL 的 `/_test/sql`）只在 `TT_ENABLE_TEST_ENDPOINTS=true` 时挂载，**生产必须保持关闭**。
+5. **`/_test/*` 端点**（含可执行任意 SQL 的 `/_test/sql`）只在 `TT_ENABLE_TEST_ENDPOINTS=true` 时挂载，**生产必须保持关闭**（只有 `/_test/health` 无条件存在，不碰数据）。
 6. **契约覆盖之外的行为未知**：契约只锁了 33 个场景，边界语义（极端时区、超大 batch、异常时间戳）没穷举。
+7. **`resume-device` 不恢复已撤销的 device token**：暂停（`remove-device`）会撤销该机器的设备与 token，恢复只把机器状态改回 `active`，
+   那台机器要重新 `device-login` 才能继续上传（实测 401）。要么改成 resume 时 un-revoke，要么改成 ingest 检查机器状态 —— 两种都还没做。
 
 ## 已知偏差（与官方行为有意不同，或暂时不同）
 

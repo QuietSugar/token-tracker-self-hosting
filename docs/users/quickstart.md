@@ -44,6 +44,7 @@ TokenTracker Go server listening on 0.0.0.0:8080 (engine=postgres, dsn=postgres:
 
 ```sh
 cd go-server
+mkdir -p bin
 CGO_ENABLED=0 go build -trimpath -o bin/tokentracker-server ./cmd/server
 
 TT_JWT_SECRET="$TT_JWT_SECRET" \
