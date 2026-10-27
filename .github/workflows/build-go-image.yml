@@ -215,8 +215,9 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:18080/health || fail "重启后 health 未就绪"
-          # WAL 模式下表名可能只在 -wal 文件里，三份文件一起查
-          if ! cat "$DATA"/tokentracker.db* 2>/dev/null | grep -qa 'schema_migrations'; then
+          # 注意：宿主机 job 以 runner 用户运行，而 DB 文件属 uid 10001 且权限 0600，
+          # 宿主机侧读不到 → 必须在容器内查。WAL 模式下表名可能只在 -wal 文件里，三份一起查。
+          if ! docker exec tt-sqlite sh -c 'grep -qa schema_migrations /data/tokentracker.db*' 2>/dev/null; then
             fail "重启后数据文件中找不到 schema_migrations"
           fi
           docker logs tt-sqlite 2>&1 | grep -qi 'checksum drift' && fail "重启后出现 checksum drift"
