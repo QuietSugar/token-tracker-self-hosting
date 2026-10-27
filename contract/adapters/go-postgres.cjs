@@ -4,7 +4,7 @@
  * 每个 case 起一个全新的 Go 进程 + 一个全新的 PostgreSQL schema
  * （TT_POSTGRES_SCHEMA + TT_POSTGRES_SCHEMA_EPHEMERAL），退出时 DROP SCHEMA CASCADE。
  *
- * 与 go-sqlite.cjs 面对的是同一份 Go 代码、同一批 golden，只有引擎不同：
+ * 与上游 reference adapter 面对的是同一批 golden、同一批 HTTP 契约：
  * 这是「同一实现、两种引擎行为一致」的交叉验证。
  *
  * 用法:
@@ -155,7 +155,7 @@ async function start(opts = {}) {
     throw Error("需要 GO_POSTGRES_URL（或 TT_TEST_DATABASE_URL）指向一个可用的 PostgreSQL");
   }
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tt-go-postgres-"));
-  // 每个 case 一个独立 schema：等价于 go-sqlite 的「每个 case 一个全新数据库文件」。
+  // 每个 case 一个独立 schema：用例之间互不污染，退出时 DROP SCHEMA CASCADE。
   const schema = "tt_case_" + crypto.randomBytes(6).toString("hex");
   const port = freePort();
   const base = `http://127.0.0.1:${port}`;
@@ -202,7 +202,7 @@ module.exports = {
   name: "go-postgres",
   engine: "postgres",
   language: "golang",
-  // 与 go-sqlite 相同：Go 用 schema_migrations(version=1)，
+  // Go 用自己的 schema_migrations(version=1)，
   // 不伪造 PostgreSQL 的 15-step 安装账本与 step checksum。
   capabilities: {
     skip: ["install/ledger-15-steps", "install/checksum-drift-refused"],

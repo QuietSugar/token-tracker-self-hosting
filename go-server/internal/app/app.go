@@ -1,4 +1,4 @@
-// Package app 实现 TokenTracker 自托管后端的 HTTP 层（Go；SQLite / PostgreSQL 共用）。
+// Package app 实现 TokenTracker 自托管后端的 HTTP 层（Go + PostgreSQL）。
 //
 // 覆盖范围（对齐 contract/golden/1.4.12 的行为快照）：
 //   - JWT HS256 认证（anon / authenticated / project_admin）
@@ -48,9 +48,9 @@ type Server struct {
 	authCfg  authConfig
 	now      time.Time
 	testMode bool
-	// mu 串行化写路径（设备签发、ingest 整行修正），使 SQLite 单写者与 PostgreSQL
-	// 多连接在同一个进程里表现一致。注意：它是**进程内**互斥；多实例部署时不同进程
-	// 之间没有 advisory lock 保护（见 STATUS.md「仍然缺什么」）。
+	// mu 串行化写路径（设备签发、ingest 整行修正），避免同一进程内并发写入互相
+	// 覆盖（整行修正的读-改-写不是原子的）。注意：它是**进程内**互斥；多实例部署时
+	// 不同进程之间没有 advisory lock 保护（见 README §9「已知限制」）。
 	mu sync.Mutex
 }
 
@@ -324,37 +324,6 @@ func nullStr(s string) any {
 	return s
 }
 
-// flexibleBool 让布尔列（例如 cloud_machines.is_current）在 SQLite（INTEGER 0/1）
-// 与 PostgreSQL（boolean）上都能 Scan 到同一个 Go 值。
-type flexibleBool bool
-
-func (b *flexibleBool) Scan(v any) error {
-	switch t := v.(type) {
-	case nil:
-		*b = false
-	case bool:
-		*b = flexibleBool(t)
-	case int64:
-		*b = t != 0
-	case []byte:
-		*b = parseBoolText(string(t))
-	case string:
-		*b = parseBoolText(t)
-	default:
-		return fmt.Errorf("cannot scan %T into bool", v)
-	}
-	return nil
-}
-
-func parseBoolText(s string) flexibleBool {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "1", "t", "true":
-		return true
-	default:
-		return false
-	}
-}
-
 func (s *Server) testSQL(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-TT-NoCORS", "1")
 	var b struct {
@@ -412,7 +381,7 @@ func (s *Server) testInstall(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"ok": true, "schema_version": 1, "was_installed": before > 0})
 }
 
-// ---------- 通用 SQL 探针（把 PG 风格查询翻译成 SQLite 等价） ----------
+// ---------- 通用 SQL 探针（把上游 InsForge/RPC 的查询翻译成本仓库的表名） ----------
 
 func (s *Server) queryRows(q string, args ...any) ([]map[string]any, error) {
 	q = strings.TrimSpace(q)

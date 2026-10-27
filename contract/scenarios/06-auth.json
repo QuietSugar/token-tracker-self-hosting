@@ -1,6 +1,6 @@
 {
   "group": "auth",
-  "description": "认证边界：伪造/过期/未知 token、设备撤销、Go/SQLite 应用层 owner isolation、账户级联删除",
+  "description": "认证边界：伪造/过期/未知 token、设备撤销、Go 应用层 owner isolation、账户级联删除",
   "cases": [
     {
       "id": "auth/forged-expired-unknown",

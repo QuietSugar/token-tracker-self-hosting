@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 通用场景执行器：把 scenarios/*.json 里的语言无关用例，转成对某个 adapter 的调用。
- * 录制（reference）与回放（go-sqlite）共用这一份代码——这是公平性的关键。
+ * 录制（reference）与回放（go-postgres）共用这一份代码——这是公平性的关键。
  */
 "use strict";
 const fs = require("node:fs");

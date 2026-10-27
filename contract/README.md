@@ -18,7 +18,7 @@
 - 排序、分页、空数组 vs null、字段名大小写。
 
 这些靠"看代码"发现不了。所以做法是：**把参考实现当成黑盒，录制它的实际响应；
-候选实现（Go，SQLite 或 PostgreSQL）实现同样的 HTTP 接口后，跑同一批用例逐字段对比。**
+候选实现（Go + PostgreSQL）实现同样的 HTTP 接口后，跑同一批用例逐字段对比。**
 
 参考实现运行器直接复用上游的 `test/helpers/self-host-fixture.cjs`：
 它在 PGlite（PostgreSQL WASM 版）上安装 15 步基线，加载真实打包后的 14 个
@@ -63,9 +63,8 @@ contract/
 │   └── schema.cjs             快照结构校验
 ├── adapters/
 │   ├── reference.cjs          PG+TS 参考实现适配器（已实现）
-│   ├── go-sqlite.cjs          Go 实验实现 × SQLite adapter（已连接）
 │   ├── go-postgres.cjs        Go 实验实现 × PostgreSQL adapter（已连接，每 case 独立 schema）
-│   └── go-sqlite.example.cjs  Go adapter 说明性模板
+│   └── go-postgres.cjs        Go 实验实现 × PostgreSQL adapter（已连接，CI 跑 15/16）
 ├── scripts/
 │   ├── record.sh              录制 golden
 │   ├── verify.sh              对候选实现跑并对比
@@ -90,8 +89,8 @@ cd /path/to/token-tracker-self-hosting
 # 2) 自测：用参考实现对比自己，应当 100% 通过
 ./contract/scripts/self-test.sh
 
-# 3) 对 Go 实现跑同一批用例并对比（sqlite / postgres 两个 adapter）
-CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs \
+# 3) 对 Go 实现跑同一批用例并对比（需要先有一个 PostgreSQL）
+CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs \
   ./contract/scripts/verify.sh
 
 # 4) 性能基准（可选）
@@ -106,7 +105,7 @@ CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs \
 |---|---|---|---|
 | **L1 静态契约** | 15 步 id + `sha256(step.sql)`、14 函数清单、SQL 对象清单、函数签名、依赖锁定、响应 schema | 否 | 规格书：告诉你要建哪些表/索引/函数、返回什么字段 |
 | **L2 行为契约** | 每个用例的输入与 HTTP 响应（状态、头、体） | 是（参考实现） | 一致性判据：逐字段对比 |
-| **L3 并发/锁** | 多连接 advisory lock、并发重装、并发 upsert | 是（真实 PG） | 已在真实 PG 15.18 通过 5 项；SQLite 适配器通过独立单进程互斥/事务用例，不等于压力测试 |
+| **L3 并发/锁** | 多连接 advisory lock、并发重装、并发 upsert | 是（真实 PG） | 已在真实 PG 15.18 通过 5 项；这不等于 Go 实现的并发压力测试 |
 
 ---
 
@@ -128,7 +127,7 @@ CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs \
 
 - 每次 push / PR：重建 golden（临时目录）→ 与仓库里的 `golden/` 逐字节对比 → 自测 → 静态契约校验。
 - 每周定时：跑完整套件 + 性能基准，把报告作为 artifact。
-- `go-server.yml` 在 SQLite 与 PostgreSQL 15/16 上跑同一批 unit + 契约；独立 `build-go-image.yml` 负责候选镜像构建/实验发布。两个 workflow 均不会替代正式 InsForge/PostgreSQL 制品路径。
+- `go-server.yml` 在 PostgreSQL 15/16 上跑同一批 unit + 契约；独立 `build-go-image.yml` 负责候选镜像构建/实验发布。两个 workflow 均不会替代正式 InsForge/PostgreSQL 制品路径。
 
 ---
 
@@ -136,6 +135,6 @@ CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs \
 
 - 上游参考实现：v1.4.12 / `8d32a956181bf52fae449c89b8f6520253566283`
 - 录制时间：见 `golden/1.4.12/_meta.json`
-- 用例数：35（见 `scenarios/index.json`）；Go 实现在 SQLite 与 PostgreSQL 上都是 33 PASS / 2 PG-specific SKIP。
+- 用例数：35（见 `scenarios/index.json`）；Go 实现是 33 PASS / 2 PG-specific SKIP（跑在真实 PostgreSQL 上）。
 - L3：真实 PostgreSQL 15.18 多连接锁/并发测试已通过 5 项，见 `L3-RESULTS.md`；这不代表 Go 实现的并发压力验收。
 - Go adapter 和服务为实验垂直切片，生产阻断项见 `../go-server/STATUS.md`。

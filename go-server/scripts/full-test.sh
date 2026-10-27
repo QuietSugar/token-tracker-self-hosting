@@ -3,15 +3,16 @@
 #
 # 覆盖：
 #   L0  gofmt / go vet / CGO=0 构建
-#   L1  go test -race（SQLite）
-#   L2  go test -race（真实 PostgreSQL；需 TT_TEST_DATABASE_URL）
-#   L3  契约 go-sqlite（33 用例 + 2 PG 专属 SKIP）
-#   L4  契约 go-postgres（需 GO_POSTGRES_URL）
-#   L5  Docker 镜像 smoke（需 docker；可选）
+#   L1  go test -race（真实 PostgreSQL；需 TT_TEST_DATABASE_URL）
+#   L2  契约 go-postgres（33 用例 + 2 PG 专属 SKIP）
+#   L3  Docker 镜像 smoke（需 docker；可选）
+#
+# 存储层只支持 PostgreSQL，没有"零依赖默认引擎"。没给库时 L1/L2 记为 SKIP，
+# 而不是偷偷跑一个别的引擎。
 #
 # 用法:
-#   cd go-server && ./scripts/full-test.sh
-#   TT_POSTGRES_URL='postgres://user:pass@127.0.0.1:5432/db?sslmode=disable' ./scripts/full-test.sh
+#   cd go-server && ./scripts/test-with-pg.sh --full     # 起临时 PG 并跑全量
+#   TT_TEST_DATABASE_URL='postgres://user:pass@127.0.0.1:5432/db?sslmode=disable' ./scripts/full-test.sh
 #   SKIP_DOCKER=1 ./scripts/full-test.sh
 #
 # 退出码：0 = 全部通过（跳过项会明确列出）；非 0 = 有失败。
@@ -62,36 +63,26 @@ else
 fi
 
 # ---------------------------------------------------------------- L1/L2
-step "L1 go test -race（SQLite）"
-run "go test -race (sqlite)" go test -race -count=1 ./...
-
 if [ -n "$PG_URL" ]; then
-  step "L2 go test -race（PostgreSQL）"
+  step "L1 go test -race（PostgreSQL）"
   if TT_TEST_DATABASE_URL="$PG_URL" go test -race -count=1 ./...; then
     record "go test -race (postgres)" "PASS"
   else
     record "go test -race (postgres)" "FAIL"
   fi
 else
+  step "L1 go test -race（PostgreSQL）"
+  echo "  跳过：未设置 TT_TEST_DATABASE_URL（用 ./scripts/test-with-pg.sh 起库，或导出连接串）"
   record "go test -race (postgres)" "SKIP"
 fi
 
-# ---------------------------------------------------------------- L3/L4
+# ---------------------------------------------------------------- L2
 cd "$ROOT" || exit 1
 export CONTRACT_CONCURRENCY="${CONTRACT_CONCURRENCY:-2}"
 export GO_SERVER_BIN="$BIN"
 
-step "L3 契约 go-sqlite"
-if CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs ./contract/scripts/verify.sh >/tmp/tt-contract-sqlite.log 2>&1; then
-  grep -E '^\[L2\]' /tmp/tt-contract-sqlite.log || true
-  record "契约 go-sqlite" "PASS"
-else
-  tail -40 /tmp/tt-contract-sqlite.log
-  record "契约 go-sqlite" "FAIL"
-fi
-
 if [ -n "$PG_URL" ]; then
-  step "L4 契约 go-postgres"
+  step "L2 契约 go-postgres"
   if GO_POSTGRES_URL="$PG_URL" CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs \
        ./contract/scripts/verify.sh >/tmp/tt-contract-postgres.log 2>&1; then
     grep -E '^\[L2\]' /tmp/tt-contract-postgres.log || true
@@ -104,9 +95,11 @@ else
   record "契约 go-postgres" "SKIP"
 fi
 
-# ---------------------------------------------------------------- L5
-step "L5 Docker 镜像 smoke"
-if [ -n "${SKIP_DOCKER:-}" ]; then
+# ---------------------------------------------------------------- L3
+step "L3 Docker 镜像 smoke（PostgreSQL）"
+if [ -z "$PG_URL" ]; then
+  echo "未设置 TT_TEST_DATABASE_URL，跳过"; record "docker smoke" "SKIP"
+elif [ -n "${SKIP_DOCKER:-}" ]; then
   echo "SKIP_DOCKER 已设置，跳过"; record "docker smoke" "SKIP"
 elif ! command -v docker >/dev/null 2>&1; then
   echo "未安装 docker，跳过"; record "docker smoke" "SKIP"
@@ -114,22 +107,25 @@ elif ! docker info >/dev/null 2>&1; then
   echo "docker daemon 不可用，跳过"; record "docker smoke" "SKIP"
 else
   IMG="tokentracker-go:full-test"
-  DATA="$(mktemp -d)"; chmod 777 "$DATA"
   if docker build -q -f go-server/Dockerfile -t "$IMG" go-server >/tmp/tt-docker-build.log 2>&1; then
     docker rm -f tt-fulltest >/dev/null 2>&1 || true
-    docker run -d --name tt-fulltest \
+    # host 网络：容器里的 127.0.0.1 直接指向宿主机上的 PG。
+    docker run -d --name tt-fulltest --network host \
       -e TT_JWT_SECRET=full-test-secret-at-least-32-bytes!! \
-      -e TT_DATABASE_PATH=/data/tokentracker.db -e TT_LISTEN_ADDR=0.0.0.0:8080 \
-      -v "$DATA:/data" -p 18099:8080 "$IMG" >/dev/null
+      -e TT_DATABASE_URL="$PG_URL" \
+      -e TT_POSTGRES_SCHEMA=full_test \
+      -e TT_LISTEN_ADDR=0.0.0.0:18099 "$IMG" >/dev/null
     ok=1
-    for _ in $(seq 1 60); do
-      curl -fsS http://127.0.0.1:18099/health >/dev/null 2>&1 && { ok=0; break; }; sleep 1
+    for _ in $(seq 1 90); do
+      curl -fsS http://127.0.0.1:18099/health >/dev/null 2>&1 && { ok=0; break; }
+      [ "$(docker inspect -f '{{.State.Running}}' tt-fulltest 2>/dev/null || echo false)" = "true" ] || break
+      sleep 1
     done
     if [ "$ok" = 0 ] \
        && [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18099/_test/sql)" = "404" ] \
-       && [ "$(stat -c '%a' "$DATA/tokentracker.db")" = "600" ] \
-       && [ "$(docker exec tt-fulltest id -u)" = "10001" ]; then
-      echo "health 200 / _test/sql 404 / db 0600 / uid 10001"
+       && [ "$(docker exec tt-fulltest id -u)" = "10001" ] \
+       && docker logs tt-fulltest 2>&1 | grep -q 'engine=postgres'; then
+      echo "health 200 / _test/sql 404 / uid 10001 / engine=postgres"
       record "docker smoke" "PASS"
     else
       docker logs tt-fulltest | tail -20
@@ -140,7 +136,6 @@ else
     tail -20 /tmp/tt-docker-build.log
     record "docker smoke" "FAIL"
   fi
-  rm -rf "$DATA"
 fi
 
 # ---------------------------------------------------------------- 汇总
@@ -148,7 +143,7 @@ printf '\n\033[1m===== 全量测试结果 =====\033[0m\n'
 for r in "${RESULTS[@]}"; do
   printf '  %-6s %s\n' "${r%%|*}" "${r#*|}"
 done
-printf '\n详细日志: /tmp/tt-contract-sqlite.log /tmp/tt-contract-postgres.log\n'
+printf '\n详细日志: /tmp/tt-contract-postgres.log\n'
 if [ "$FAILED" = 0 ]; then
   echo "结论: 全部通过（SKIP 项已列明）"
   exit 0

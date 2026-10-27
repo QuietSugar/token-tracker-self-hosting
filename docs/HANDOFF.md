@@ -16,7 +16,7 @@
 4. `docs/reality-review-2026-10-26.md` — 项目现状审计与设计决策。
 5. `contract/RESULTS.md`、`contract/L3-RESULTS.md` — 行为契约、真实 PostgreSQL 并发验收结果。
 6. `go-server/STATUS.md` — Go 实验实现（SQLite / PostgreSQL）的覆盖范围、缺口和生产阻断项。
-   `docs/go-postgres.md` — 双引擎设计、PG 用法与「是否保留 SQLite」的成本分析。
+   `docs/go-postgres.md` — 为什么只用 PostgreSQL、「删掉 SQLite」的决定记录与验收证据。
 
 会话开始时依照 `MAINTENANCE.md` 执行：
 
@@ -30,7 +30,7 @@
 ## 2. 架构与范围边界
 
 - **正式自托管路径**：上游 TokenTracker v1.4.12 的 SQL / 14 个 handler 工件，运行于 InsForge + PostgreSQL。交付路径和说明见 `releases/1.4.12/`、`docs/docker-image.md`。
-- **实验性替代方向**：`go-server/` 是 Go 垂直切片（存储层可用 SQLite 或 PostgreSQL），不是完整重写、不是 InsForge 内的 SQLite，也不是生产 GA。禁止与正式工件镜像混用或据当前结果接入真实用户。
+- **实验性替代方向**：`go-server/` 是 Go 垂直切片（存储层只用 PostgreSQL），不是完整重写、不是 InsForge 内的 SQLite，也不是生产 GA。禁止与正式工件镜像混用或据当前结果接入真实用户。
 - 上游源代码应保持只读，当前锁定 commit 见 `tracking/REF`。未经明确授权，不修改上游 checkout 或部署到用户 VPS。
 
 ## 3. 已记录的验证结果
@@ -38,7 +38,7 @@
 | 检查 | 记录结果 | 解释 |
 |---|---:|---|
 | 参考实现 vs Golden 自测 | 35 PASS / 0 FAIL | PGlite + 上游 handler 的自洽测试 |
-| Go 候选契约（SQLite） | 33 PASS / 0 FAIL / 2 SKIP | 两个 SKIP 是明确的 PostgreSQL 专属迁移账本行为，不代表全功能等价 |
+| Go 候选契约（PostgreSQL） | 33 PASS / 0 FAIL / 2 SKIP | 两个 SKIP 是明确的 PostgreSQL 专属迁移账本行为，不代表全功能等价 |
 | Go 候选契约（PostgreSQL 16.2） | 33 PASS / 0 FAIL / 2 SKIP | 同一份代码、同一批 golden，只换引擎 |
 | 真实 PG 15.18 L3 | 5 PASS / 0 FAIL | advisory lock、并发重装、权限矩阵、并发 upsert；不是 Go/SQLite 压力测试 |
 | Go race / vet / linux-amd64 构建 | 曾通过 | 在新的环境接手时应重新运行并确认工具链版本 |
@@ -51,7 +51,8 @@
 1. 在 GitHub Actions 中检查 commit `7a2c58f` 对应的 contract、Go candidate、image 和 L3 jobs；处理失败并更新状态记录。
 2. 在具备 Go 1.24.4 和 Docker 的环境重跑 Go race tests、vet、合同对比和镜像 smoke。空间受限时将 Go module cache 放到临时目录，或验收后清理 `~/go/pkg/mod`。
 3. 继续补充 `go-server/STATUS.md` 中的数据模型、边界行为、安全审查、备份恢复、负载和客户端 E2E 缺口；每次变更都更新结果文档。
-4. 保持 Go 标签为 `experimental`。是否继续推进到 GA、是否移除 SQLite 支持，由用户另行明确决定。
+4. 保持 Go 标签为 `experimental`。是否继续推进到 GA 由用户另行明确决定。
+   （SQLite 支持已于 2026-10-27 移除，归档 tag `sqlite-final`。）
 
 ## 5. 常用验证命令
 
@@ -65,15 +66,16 @@ node contract/lib/verify.cjs --static-only
 # 参考实现自测（需要固定版本的上游 checkout 和 Node 依赖）
 ./contract/scripts/self-test.sh
 
-# Go 候选实现（SQLite + PostgreSQL 双引擎）
+# Go 候选实现（PostgreSQL）
 cd go-server
-go test -race ./...                                                   # SQLite
+export TT_TEST_DATABASE_URL='postgres://…?sslmode=disable'  # 存储层只支持 PG，没有默认库
+go test -race ./...
 TT_TEST_DATABASE_URL='postgres://user:pass@127.0.0.1:5432/db?sslmode=disable' \
   go test -race ./...                                                 # 真实 PostgreSQL
 go vet ./...
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o bin/tokentracker-server ./cmd/server
 cd ..
-CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs ./contract/scripts/verify.sh
+CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs ./contract/scripts/verify.sh
 GO_POSTGRES_URL='postgres://user:pass@127.0.0.1:5432/db?sslmode=disable' \
   CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs ./contract/scripts/verify.sh
 

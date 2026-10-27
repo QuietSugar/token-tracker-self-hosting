@@ -46,7 +46,7 @@ services:
       tokentracker-postgres:
         condition: service_healthy
     environment:
-      # 同一个二进制同时内置 sqlite 与 postgres 驱动，用 URL scheme 选择引擎。
+      # 只支持 PostgreSQL：这里的 DSN 就是唯一的数据源配置。
       TT_DATABASE_URL: postgres://tokentracker:${POSTGRES_PASSWORD}@tokentracker-postgres:5432/tokentracker?sslmode=disable
       TT_LISTEN_ADDR: 0.0.0.0:8080
       TT_JWT_SECRET: ${TT_JWT_SECRET:?set a strong random secret}

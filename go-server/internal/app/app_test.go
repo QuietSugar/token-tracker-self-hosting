@@ -7,44 +7,41 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/QuietSugar/tokentracker-selfhost-go/internal/store"
 	_ "github.com/lib/pq"
-	_ "modernc.org/sqlite"
 )
 
-// testDB 返回一个隔离的存储层实例：
-//   - 默认用临时目录里的 SQLite 文件（每个测试独立）；
-//   - 设置了 TT_TEST_DATABASE_URL（postgres://...）时，跑在真实 PostgreSQL 上，
-//     每个测试用独立 schema（tt_test_<hex>）并在结束时 DROP SCHEMA CASCADE。
-//
-// 同一批测试因此在两种引擎上都执行，assertEquals 的语义必须一致。
+// ttTestDSN 是测试库连接串。存储层只支持 PostgreSQL，所以没有"零依赖默认值"：
+// 未设置时直接失败并给出起库命令，而不是悄悄跳过测试。
+const ttTestDSNEnv = "TT_TEST_DATABASE_URL"
+
+func requireTestDSN(t *testing.T) string {
+	t.Helper()
+	dsn := os.Getenv(ttTestDSNEnv)
+	if dsn == "" {
+		t.Fatalf("%s is not set: the store layer is PostgreSQL-only.\n"+
+			"  go-server/scripts/test-with-pg.sh            # 起一个临时 PG 并打印 DSN\n"+
+			"  export TT_TEST_DATABASE_URL=postgres://tokentracker:tokentracker-dev@127.0.0.1:55432/tokentracker?sslmode=disable\n"+
+			"  go test -race ./...", ttTestDSNEnv)
+	}
+	return dsn
+}
+
+// testDB 返回一个隔离的存储层实例：每个测试用独立 schema（tt_test_<hex>），
+// 结束时 DROP SCHEMA CASCADE，因此测试可以并发跑同一个库。
 func testDB(t *testing.T) *store.DB {
 	t.Helper()
 	ctx := context.Background()
-	if dsn := os.Getenv("TT_TEST_DATABASE_URL"); dsn != "" {
-		db, err := store.Open(ctx, store.Config{
-			Dialect:           store.Postgres,
-			DSN:               dsn,
-			Schema:            "tt_test_" + strings.ToLower(randomHex(6)),
-			DropSchemaOnClose: true,
-		})
-		if err != nil {
-			t.Fatalf("open postgres: %v", err)
-		}
-		t.Cleanup(func() { _ = db.Close() })
-		if err := store.Install(ctx, db); err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("test using PostgreSQL schema %s", db.Dialect())
-		return db
-	}
-	db, err := store.Open(ctx, store.Config{DSN: filepath.Join(t.TempDir(), "test.db")})
+	db, err := store.Open(ctx, store.Config{
+		DSN:               requireTestDSN(t),
+		Schema:            "tt_test_" + strings.ToLower(randomHex(6)),
+		DropSchemaOnClose: true,
+	})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("open postgres: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	if err := store.Install(ctx, db); err != nil {

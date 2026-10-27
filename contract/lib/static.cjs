@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * L1 静态契约提取：不依赖运行时，从 releases/<version>/ 提取实现者规格书。
- * 这是 Go+SQLite 改造的"要建什么"清单。
+ * 这是替代后端改造的"要建什么"清单。
  */
 "use strict";
 const fs = require("node:fs");

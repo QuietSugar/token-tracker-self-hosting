@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "description": "候选实现声明不支持的用例。SKIP 必须在报告里可见，不能静默跳过。",
-  "implementation": "go-sqlite (template)",
+  "implementation": "go-postgres",
   "skip": [],
   "reasons": {},
   "note": "把确实无法实现的用例 id 加进 skip，并在 reasons 里写明原因。空数组 = 全部参与对比。"

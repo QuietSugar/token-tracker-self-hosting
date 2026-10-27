@@ -347,7 +347,8 @@ func (s *Server) deviceRename(w http.ResponseWriter, r *http.Request, sub string
 	writeJSON(w, 200, map[string]any{"ok": true, "device_id": b.DeviceID, "device_name": name})
 }
 
-// isUniqueViolation 判断是否唯一约束冲突（SQLite / PostgreSQL 两种报错文案）。
+// isUniqueViolation 判断是否唯一约束冲突（lib/pq 的 "duplicate key value …"；
+// 兼容 SQLite 的报错文案只是历史残留，不影响判断）。
 func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false

@@ -1,7 +1,7 @@
 # 数据库选型：PostgreSQL 是硬依赖吗？
 
 > 结论按实现版本区分：**当前正式自托管后端（InsForge + TypeScript edge functions）硬依赖 PostgreSQL**，不能直接换 MySQL/SQLite/MongoDB。
-> 我们后来建立了一个**实验性 Go 兼容实现**，同一份代码支持 SQLite 与 PostgreSQL（用 `TT_DATABASE_URL` 切换），
+> 我们后来建立了一个**实验性 Go 兼容实现**，最初同时支持 SQLite 与 PostgreSQL，2026-10-27 起只保留 PostgreSQL，
 > 两者都通过 33 个可移植行为契约（另 2 个 PG 专属安装账本测试显式 SKIP）；但它目前只覆盖垂直切片，
 > **不等价于完整正式后端，也不是生产替代品**。详见 [`../go-server/STATUS.md`](../go-server/STATUS.md) 与
 > [`go-postgres.md`](go-postgres.md)。
@@ -108,9 +108,12 @@ InsForge 官方自托管栈就是四个容器：`postgres` / `postgrest` / `insf
   在 `go-server/internal/store` 加一层方言适配（`?`→`$n`、布尔/幂等插入/DDL 渲染、连接池、schema 隔离），
   业务代码保持单份。同一批 33 个契约用例在 **SQLite 与真实 PostgreSQL 上都 33 PASS / 0 FAIL / 2 SKIP**；
   CI 新增 PG 15/16 矩阵。设计与取舍见 [`go-postgres.md`](go-postgres.md)。
-- **关于"只留 PG 是否更省维护"**：会少一个引擎与一条流水线，但省不掉真正的成本大头
-  （24 表映射、session states、客户端 E2E、安全审查）；SQLite 的边际成本已降到"同一批测试跑两遍"。
-  结论与观察期计划写在 [`go-postgres.md`](go-postgres.md) §5，未做删除决定。
+- **关于"只留 PG 是否更省维护"**：当时的判断是"会少一个引擎与一条流水线，但省不掉真正的成本大头"，
+  所以留了观察期。
+- **2026-10-27（删除 SQLite）**：观察期结论是删——不是因为维护成本，而是因为**保真度**：
+  SQLite 分支的通过率不能证明 PG 上的并发/约束/类型语义正确，却让人误以为两种引擎都验证过了。
+  删除前打了归档 tag `sqlite-final`。代价只有一个：`go test` 必须有一个 PG 才能跑。
+  详见 [`go-postgres.md`](go-postgres.md) §5。
 - 触发原因：用户先问 PG 是否必需，后要求进行 SQLite + Golang 改造并尽可能保持行为一致。
 - 依据：本仓库 `releases/1.4.12/tokentracker-install.sql`、上游 `docs/self-hosting*.md`、InsForge/PostgREST 官方架构、真实 PostgreSQL 15.18 验收、契约 golden 与 Go adapter 对比结果。
 

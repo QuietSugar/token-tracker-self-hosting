@@ -2,7 +2,9 @@
 // PostgreSQL reference migration checksums are an audit crosswalk only.
 package store
 
-// PostgreSQLReferenceSteps contains PG step IDs/checksums; these are NOT applied to SQLite.
+// PostgreSQLReferenceSteps contains the upstream PG migration step IDs/checksums.
+// 它们只作为审计对照（audit crosswalk），不会被本服务执行——本服务用自己的
+// schema_migrations / schema_additions 账本，不伪造上游的 15-step 安装记录。
 var PostgreSQLReferenceSteps = []struct{ ID, Checksum string }{
 	{"01-private-baseline", "071ca2557673de115bca98fba2ea1fd577ad056b96ef76ff4a44dcae5fff6470"},
 	{"02-account-sessions", "980d8eeef13d68f95d4fa9c32d925b66715bd342aed9aef0872d8b416cd7eabf"},
