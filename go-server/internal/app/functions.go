@@ -3,6 +3,7 @@ package app
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -136,6 +137,47 @@ func (s *Server) ensureAccount(sub string) error {
 	return err
 }
 
+// deviceFor 返回可用的设备 id：**已存在同名或同机的 active 设备时复用**，否则新建。
+//
+// 为什么需要：devices 上有两个 partial unique index
+// (user_id,machine_id) 与 (user_id,platform,device_name)（均限定 revoked_at IS NULL）。
+// 自托管没有注册流程，客户端重装 / 重新登录 / 导入脚本重跑都会再次调
+// device-token-issue；若直接 INSERT 会撞唯一约束并返回 500，表现为「重装后登录不了」。
+// 复用设备行 + 新签一个 token 才符合「同一台设备重新登录」的语义。
+func (s *Server) deviceFor(sub, name, platform, machineID, newDeviceID string) (string, error) {
+	var existing string
+	err := s.db.QueryRow(`SELECT id FROM devices
+		WHERE user_id=? AND revoked_at IS NULL AND (machine_id=? OR (platform=? AND device_name=?))
+		ORDER BY created_at DESC LIMIT 1`, sub, machineID, platform, name).Scan(&existing)
+	if err == nil {
+		return existing, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	if _, err := s.db.Exec(`INSERT INTO devices(id,user_id,device_name,platform,machine_id,created_at) VALUES(?,?,?,?,?,?)`,
+		newDeviceID, sub, name, platform, machineID, s.nowISO()); err != nil {
+		return "", err
+	}
+	return newDeviceID, nil
+}
+
+// machineFor 确保 cloud_machines 里有一台 active 的机器记录（同一 machine_id 不重复插入）。
+// 设备配额/machine 列表都读这张表，重复行会让 /devices 响应里出现同名多台。
+func (s *Server) machineFor(sub, name, machineID, platform string) error {
+	var n int
+	if err := s.db.QueryRow(`SELECT count(*) FROM cloud_machines
+		WHERE user_id=? AND machine_id=? AND status='active'`, sub, machineID).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := s.db.Exec(`INSERT INTO cloud_machines(id,user_id,name,machine_id,platform,status,created_at)
+		VALUES(?,?,?,?,?,'active',?)`, newID(), sub, name, machineID, nullStr(platform), s.nowISO())
+	return err
+}
+
 func (s *Server) deviceGrant(w http.ResponseWriter, r *http.Request, sub string) {
 	var b struct {
 		UserCode string `json:"user_code"`
@@ -157,14 +199,16 @@ func (s *Server) deviceGrant(w http.ResponseWriter, r *http.Request, sub string)
 		return
 	}
 	tok := randomHex(32)
-	did := newID()
 	actualMid := mid.String
 	if actualMid == "" {
 		actualMid = newID()
 	}
-	_, err = s.db.Exec(`INSERT INTO devices(id,user_id,device_name,platform,machine_id,created_at) VALUES(?,?,?,?,?,?)`,
-		did, sub, "Device Flow", "cli", actualMid, s.nowISO())
+	did, err := s.deviceFor(sub, "Device Flow", "cli", actualMid, newID())
 	if err != nil {
+		fail(w, 500, err.Error())
+		return
+	}
+	if err := s.machineFor(sub, "Device Flow", actualMid, "cli"); err != nil {
 		fail(w, 500, err.Error())
 		return
 	}
@@ -209,8 +253,7 @@ func (s *Server) deviceIssue(w http.ResponseWriter, r *http.Request, sub string)
 		fail(w, 500, err.Error())
 		return
 	}
-	_, err := s.db.Exec(`INSERT INTO devices(id,user_id,device_name,platform,machine_id,created_at) VALUES(?,?,?,?,?,?)`,
-		id, sub, b.DeviceName, platform, mid, s.nowISO())
+	id, err := s.deviceFor(sub, b.DeviceName, platform, mid, id)
 	if err != nil {
 		fail(w, 500, err.Error())
 		return
@@ -221,8 +264,10 @@ func (s *Server) deviceIssue(w http.ResponseWriter, r *http.Request, sub string)
 		fail(w, 500, err.Error())
 		return
 	}
-	_, _ = s.db.Exec(`INSERT INTO cloud_machines(id,user_id,name,machine_id,platform,status,created_at) VALUES(?,?,?,?,?,'active',?)`,
-		newID(), sub, b.DeviceName, mid, platform, s.nowISO())
+	if err := s.machineFor(sub, b.DeviceName, mid, platform); err != nil {
+		fail(w, 500, err.Error())
+		return
+	}
 	writeJSON(w, 200, map[string]any{
 		"token": tok, "device_id": id, "machine_id": mid, "device_name": b.DeviceName,
 		"membership": s.membership(sub),

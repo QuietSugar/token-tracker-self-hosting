@@ -2,6 +2,36 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — 接入真实数据：导入脚本 + 设备重复签发修复
+
+用户要"真实使用 go+postgres 版本、把真实数据接进去"。为此补上「数据怎么进来」这一段。
+
+### 新增 `go-server/scripts/import-usage.py`（独立工具，不改主体程序）
+
+- 输入：CSV/TSV（列名别名，大小写/下划线不敏感）、JSONL/NDJSON、JSON 数组（含 `{"buckets":[...]}` 包裹）。
+- 时间归一化：带偏移/空格分隔/epoch 秒毫秒 → **UTC 整点**（服务端按字符串比较时间，非 UTC 会查不到）。
+- 缺字段兜底：`total_tokens` 按 input+output+reasoning+cache_creation 计算；cost 支持 `$`/千分位。
+- 去重与幂等：批内按 `(hour_start,source,model)` 去重；重跑靠服务端整行替换，不重复计数。
+- 自动分批（默认 200，上限 500，≤512KB）、网络/5xx 退避重试 4 次、401 自动重签一次。
+- device token 缓存 `~/.cache/token-tracker/device-tokens.json`（0600），重跑不会撞「同名设备已存在」。
+- `--dry-run` / `--since` / `--until`（只给日期时 since 取 00:00、until 含当天）。
+- 实测：CSV 5 行（1 行坏时间）→ 4 条入库，summary 41200 tokens / cost 1.07；
+  重跑 3 次数据不变；1200 行自动去重为 600 键并分 2 批上传。
+
+### 修复：同名设备重复签发
+
+`device-token-issue`（以及设备授权 grant）在 `(user, machine_id)` 或 `(user, platform, device_name)`
+已存在时直接 500（`UNIQUE constraint failed`）。客户端重装 / 重新登录 / 导入脚本重跑都会踩到。
+改为复用已有 active 设备行 + 新签 token，`cloud_machines` 同样去重；契约用例未覆盖该场景，行为变更已记录。
+回归测试 `TestDeviceIssueIsRepeatableForSameDevice`（3 次调用：同 device_id、3 个不同 token、1 台设备、1 台机器）。
+
+### 文档
+
+- `go-server/README.md` 新增 **§3.5 把已有用量数据导进来**：三步导入、格式与列名别名表、
+  数据处理语义（时间归一化/去重/幂等）、设备与 token 缓存、常见报错、定时推送示例。
+
+---
+
 ## 2026-10-27 — 定位澄清：局域网自用（不做注册登录）+ 首次使用可用性修复
 
 用户明确：本项目定位是**自己部署到局域网、自己使用，不涉及注册登录**；主体程序尽量少改；HTTPS 不用管。
