@@ -20,8 +20,10 @@
 | 跨设备汇总（account 视图） | `/api/auth/sessions` → `/api/auth/refresh` → `account-*` | ✅ | ✅ `X-TokenTracker-Account-View: 1`，7500 tokens |
 | 匿名遥测 | `POST /functions/tokentracker-telemetry` | 404 | ⚪ 客户端忽略 |
 
-**能替代的部分**：设备接入 + 用量上传 + 数据留存（这就是"官方云收费"真正卡住的地方）。
-**不能替代的部分**：官方 dashboard 的跨设备聚合视图（需要 InsForge OAuth 会话，见 §5）。
+**能替代的部分**：设备接入 + 用量上传 + 数据留存（这就是"官方云收费"真正卡住的地方），
+以及 dashboard / 菜单栏的**跨设备聚合视图**——本服务自建了同流程的 `/api/auth/*`，见 §5。
+
+**不能替代的部分**：第三方 OAuth 登录、社区排行榜、付费/赠送码（自托管下这些有意不做）。
 
 ---
 
@@ -134,9 +136,10 @@ open "https://tt.lan:8443/device"      # 输入 ABCD-EFGH 点批准
 ./scripts/approve-device.sh ABCD-EFGH --base https://tt.lan:8443
 ```
 
-> ⚠️ `auto` 与 `page` **都等于"任何能访问本服务的人都能接入默认账户"**。
-> 这是"局域网自用、不做注册登录"定位下的有意取舍；**不要**把带这两个模式的实例暴露到公网。
-> 需要认证时的接入点仍然是 `Server.auth()` 与 ingest 的 device token 校验。
+> ⚠️ `auto` 与 `page` **都等于"任何能访问本服务的人都能接入这台机器的 owner 账户"**。
+> 这是"局域网自用、不开放自助注册"定位下的有意取舍；**不要**把带这两个模式的实例暴露到公网。
+> 需要收紧时改用默认的 `TT_DEVICE_APPROVE=jwt`：批准请求必须带有效 JWT（owner 登录拿到的
+> access token，或你用 `scripts/issue-token.sh` 自签的 token），没有凭据的人拿不到 device token。
 
 服务端会把 device token 绑到 `machine_id`（客户端用它自己的机器指纹上报），
 同一台机器重复 `device-login` 会**复用同一台设备行、发新 token**，不会积累重复设备。

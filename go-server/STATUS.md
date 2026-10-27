@@ -1,7 +1,7 @@
 # Go 后端状态（SQLite + PostgreSQL，实验性垂直切片）
 
 > **状态：实验性（experimental）。**
-> **定位：局域网自用、单用户、单实例；不做注册登录（见 [`README.md`](README.md) §0）。**
+> **定位：局域网自用、单账户（owner）、单实例；账号体系默认关闭，不做第三方登录（见 [`README.md`](README.md) §0）。**
 > 这不是完整重写，也不能替代当前官方 InsForge + PostgreSQL 部署；它有自己明确的使用边界。
 > 当前完成的是可运行的 Go HTTP 服务 + 双引擎存储层（SQLite / PostgreSQL），针对 v1.4.12 行为契约实现了核心垂直切片。
 
@@ -49,8 +49,7 @@
   为此新增：`TT_DEVICE_APPROVE`（`jwt`/`page`/`auto`）、`/device` 批准页、
   `TT_DASHBOARD_URL` 留空时按 `Host`+`X-Forwarded-Proto` 推导（客户端要求 `verification_uri` 与
   `base_url` 同源）、`scripts/approve-device.sh`。文档 `docs/official-client.md`。
-  **仍缺**：`/api/auth/refresh` 与 OAuth 会话，所以客户端「跨设备 account 视图」在自托管下不可用
-  （上传与本机视图不受影响）。
+  （`/api/auth/refresh` 等会话端点随后补齐，见下方 `auth_owner` 与 §6 的 `/api/auth/*`。）
 - **账户归属收敛**：`auth_owner` 单例 + 自动解析（凭据 / 首个身份），设备批准与
   注册/引导都指向它。**没有任何"默认账户"常量或环境变量**（`TT_DEFAULT_ACCOUNT`、
   `TT_OWNER_ACCOUNT` 全部删除，连同历史认领与 merge-account 的兼容路径）。
@@ -195,16 +194,17 @@ Go 版本则通过独立的 33 个 HTTP 行为用例（SQLite 与 PostgreSQL 各
 
 这些曾经被列为「阻断项」，但按**局域网自用**的定位它们不是缺口：
 
-- **账户 signup/signin/password reset/OAuth**：不做。token 由 `scripts/issue-token.sh` 用
-  `TT_JWT_SECRET` 自签（§1.0），首次使用自动建账户行。将来若要接正式认证，
-  接入点在 `Server.auth()` 与 ingest 的 device token 校验，属于明确的增量改动。
+- **第三方登录 / 邮件验证 / 找回密码 / 多账户后台**：不做。本地账号体系（`/api/auth/*`）
+  已实现，见 §6；但**不做**的是 OAuth provider、发信、密码重置、用户管理后台——
+  自托管单账户场景下这些只是维护面。token 仍可用 `scripts/issue-token.sh` 自签（§1.0），
+  不建账户也能上传。
 - **InsForge SDK / PostgREST 兼容 API**：不做。现有 dashboard 若硬编码 InsForge endpoint，
   需要改 base URL/路由，这是使用者的适配工作，不是本服务的目标。
 - **多副本 / 多实例并发**：不做。ingest 的整行修正靠进程内互斥，单实例足够；
   真要跑多副本，需要先补 `pg_advisory_xact_lock`（记在这里，不排期）。
 - **公网暴露能力**（速率限制、WAF、TLS 终止）：不做。定位是内网；需要时由反代/网络层负责。
 
-### 6. 客户端 E2E：已验收上传链路，跨设备视图未接
+### 6. 客户端 E2E：上传链路与跨设备视图均已验收
 
 - ✅ 已用上游 **v1.4.12 官方 CLI** 实测：`init` / `device-login` / `sync` / `doctor`，
   两条链路（`http://localhost` 明文、`https://` + 私有 CA + `NODE_EXTRA_CA_CERTS`）都通。

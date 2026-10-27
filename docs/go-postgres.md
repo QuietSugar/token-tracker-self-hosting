@@ -1,6 +1,6 @@
 # Go 后端的 PostgreSQL 支持（以及「留不留 SQLite」的成本账）
 
-> 定位前提：本后端面向**局域网自用**（单实例、单用户、不做注册登录）。
+> 定位前提：本后端面向**局域网自用**（单实例、单账户 owner、账号体系默认关闭）。
 > 这个前提决定了很多取舍，见 [`../go-server/README.md`](../go-server/README.md) §0。
 >
 > 结论先说：
@@ -133,7 +133,8 @@ go-server/internal/store/
 
 ## 3. 验证证据（可复现）
 
-本机（沙箱）实测，Go 1.27 工具链、`modernc.org/sqlite v1.34.5`、`github.com/lib/pq v1.10.9`、
+验收环境：**Go ≥1.24** 工具链（版本要求以 `go-server/go.mod` 为准，验收时沙箱为 1.27）、
+`modernc.org/sqlite v1.34.5`、`github.com/lib/pq v1.10.9`、
 PostgreSQL **16.2**（`pgserver` 自带二进制）：
 
 ```sh

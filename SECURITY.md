@@ -19,7 +19,7 @@
 4. 自托管模式**不配置** Waffo / Paddle / 微信 / 支付宝密钥——付费与赠送码功能在自托管清单里被有意排除。
 5. **GitHub App 私钥**放在 `~/.config/tokentracker-gh-app/private-key.pem`（仓库之外，chmod 600），`config.env` 只放非密钥的 ID 配置。私钥不进仓库、不进聊天记录、不进 CI 日志。installation token 只有 1 小时寿命，用后立即删除临时文件。
 6. **每次推送前**：`./scripts/check-secrets.sh`；失败就不要推。CI 会再查一遍，但不要把 CI 当作唯一防线。
-6. `releases/<ver>/acceptance.md` 只写结论与取证方式，**不要粘原始日志、抓包内容、截图或数据库 dump**（这些文件会入库并公开）。
+7. `releases/<ver>/acceptance.md` 只写结论与取证方式，**不要粘原始日志、抓包内容、截图或数据库 dump**（这些文件会入库并公开）。
 
 ## 误提交处置（公有仓库 = 已泄露）
 

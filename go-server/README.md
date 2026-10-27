@@ -10,9 +10,12 @@
 这个后端的目标场景是**自己部署在局域网、自己用**：一台 mini PC / NAS / 树莓派，
 单实例、几个自己的设备往上传统计数据。因此：
 
-- **不做注册/登录**。没有 signup / signin / OAuth / 找回密码——这是**设计选择，不是缺口**。
-  服务只**验证** JWT（HS256，密钥 `TT_JWT_SECRET`），token 用附带的脚本自己签（见 §1.0）。
-- **不做多租户隔离**。你签出来的 token 归一个固定 `sub`，所有设备都属于这个账户。
+- **一个账户（owner），不开放自助注册**。账号体系是有的（`/api/auth/*`，见 §3.7），
+  但第一个出现的身份就是 owner：设备接入、`TT_AUTH_EMAIL` 启动引导、或首次注册，
+  三选一，之后注册默认关闭（`TT_AUTH_ALLOW_SIGNUP=true` 才放开）。
+- **不做第三方登录**。没有 OAuth provider、邮件验证、找回密码、多账户管理后台——
+  这是**设计选择，不是缺口**。要跨设备视图就建一个本地邮箱密码，仅此而已。
+- **没有多租户**。所有设备、所有用量都属于 owner 这一个账户，`sub` 必须是它。
 - **不假设有公网入口**。默认只监听 `127.0.0.1` / 局域网地址，不要求域名、证书、反向代理。
 - **不做计费**。付费/试用 RPC 明确拒绝，自托管策略固定为免费可用。
 
@@ -23,17 +26,17 @@
 | ❌ 不是 | 公网多用户服务，也不是 InsForge + PostgREST 的替代品（不提供 InsForge SDK 兼容 API）。 |
 | ❌ 不是 | 生产 GA。没有速率限制、审计日志、多副本锁；见 [STATUS.md](STATUS.md)。 |
 
-> 将来若要接正式认证（账号体系 / 多用户），改动点是明确的：在 `Server.auth()`
-> 与 ingest 的 device token 校验处接入即可，本仓库不预留死配置项，避免增加维护面。
-> 现在不加，是因为局域网自用加认证只会带来额外摩擦。
+> **账号体系是可选的，不是必需的**：只想把用量存到自己机器上，`device-login` + device token
+> 就够（见 §3.6），不用碰登录；想让官方 dashboard / 菜单栏显示**跨设备**汇总，才需要建
+> owner 账户并登录（见 §3.7）。两条路收敛到同一个账户，不会出现"设备在一个账户、登录在另一个"。
 
 ---
 
 ## 1. 60 秒快速开始
 
-### 1.0 先拿到 token（没有登录，用脚本签）
+### 1.0 先拿到 token（不建账户，用脚本签）
 
-服务只验证 JWT，所以第一次使用只需要签一个 token：
+不想建账号时的最短路径：服务会用 `TT_JWT_SECRET` 验签，你直接用脚本签一个 token 即可。
 
 ```sh
 export TT_JWT_SECRET="$(openssl rand -hex 32)"   # 与服务端必须完全一致，≥32 字节
@@ -82,7 +85,9 @@ cd token-tracker-self-hosting/go-server
 
 export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
 export TT_JWT_SECRET="$(openssl rand -hex 32)"     # ≥32 字节；签 token 时用同一个值
-export TT_DASHBOARD_URL="http://192.168.1.10:8080"  # 设备授权页地址，仅网页授权流程才用到
+# TT_DASHBOARD_URL：**建议留空**（服务端按请求的 Host + X-Forwarded-Proto 推导）。
+# 只有设备授权页与客户端 base_url 不同源时才需要设，且必须是 https:// 或 http://localhost
+# —— 官方客户端会拒绝局域网 IP 的明文 http（见 ../docs/official-client.md §2）。
 
 docker compose -f docker-compose.postgres-go.example.yml up -d
 curl -fsS http://127.0.0.1:8080/health && echo OK
@@ -94,7 +99,7 @@ docker compose -f docker-compose.postgres-go.example.yml logs -f tokentracker-go
 
 ```sh
 export TT_JWT_SECRET="$(openssl rand -hex 32)"
-export TT_DASHBOARD_URL="https://你的-dashboard-域名"
+# TT_DASHBOARD_URL 留空（compose 里默认就是空），服务端按请求推导设备授权页地址
 docker compose -f docker-compose.sqlite-go.example.yml up -d
 curl -fsS http://127.0.0.1:8080/health && echo OK
 docker compose -f docker-compose.sqlite-go.example.yml logs | grep engine=sqlite
@@ -384,7 +389,7 @@ tracker sync
 | `device-login` 拿 device token | ✅ 实测通过（`auto`/`page`/`jwt` 三种批准模式） |
 | `sync` 上传用量（≤500 桶/批、幂等） | ✅ 实测通过，重传不重复计数 |
 | 菜单栏/仪表盘的**本机**用量视图 | ✅ 客户端自己算，与服务端无关 |
-| `account-*` **跨设备汇总**视图 | ❌ 需要 InsForge OAuth refresh token（官方 dashboard 登录才有）；本服务只用 JWT + device token，跨设备汇总请直接查 §2 的 `account-summary` 或见 `docs/official-client.md` §5 |
+| `account-*` **跨设备汇总**视图 | ✅ 已实现（`/api/auth/*` + `account-*`，实测 7500 tokens）。前提是建了 owner 账户并登录，见 §3.7 与 [`../docs/official-client.md`](../docs/official-client.md) §5 |
 | `tokentracker-telemetry` | ⚪ 本服务返回 404，客户端忽略，无影响 |
 
 ---
@@ -587,7 +592,9 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tokentracker
 - [ ] `TT_ENABLE_TEST_ENDPOINTS` 未设置（或为 `false`）；反代对 `/_test` 直接 404
 - [ ] PostgreSQL：独立低权限账号（只在目标库/schema 上有 DML+DDL），不从公网暴露 5432
 - [ ] SQLite：数据目录 `0700`，DB 文件 `0600`（服务默认 umask 077 已保证）
-- [ ] 容器：`read_only` + `cap_drop: [ALL]` + `no-new-privileges` + 非 root（uid 10001），compose 示例已配
+- [ ] 容器：`read_only` + `cap_drop: [ALL]` + `no-new-privileges` + 非 root（uid 10001）。
+      **非 root 来自镜像**（`go-server/Dockerfile` 的 `USER 10001:10001`），两个 compose 示例都**没有**写
+      `user:`；自行写 compose 时不要以为示例里有而漏配，也不要另加 `user:` 覆盖成别的 uid
 - [ ] 备份能落地、能恢复（演练过一次），备份文件加密/限权
 - [ ] 主机防火墙只开 22/80/443
 - [ ] 知道「没有速率限制」这件事，必要时在反代层加 `limit_req`
@@ -614,7 +621,9 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tokentracker
 
 ## 9. 已知限制（会影响你的架构决策）
 
-1. **没有注册/登录**：按 §1.0 用脚本签 token。这是定位选择，不是待补功能。
+1. **账号体系默认关闭**：第一个身份成为 owner（`TT_AUTH_EMAIL` 引导 / 首次注册 / 设备接入），
+   之后 `POST /api/auth/users` 默认拒绝；不做第三方 OAuth、邮件验证、找回密码、多账户后台。
+   不想建账户也能用：按 §1.0 用脚本签 token。
 2. **没有 InsForge/PostgREST 兼容 API**：dashboard 若硬编码 InsForge endpoint，需要改 base URL/路由。
 3. **只有 14 张表**（PG 参考清单 24 张）：session states、赠送码审计、支付/Waffo 审计等未实现。
    自托管模式下这些功能是有意排除的（付费 RPC 返回明确拒绝）。
