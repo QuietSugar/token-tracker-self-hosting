@@ -7,10 +7,15 @@
 #
 # 用法:
 #   export TT_JWT_SECRET="$(openssl rand -hex 32)"      # 与服务端一致
-#   ./issue-token.sh                                     # 365 天、authenticated、自动生成 sub
-#   ./issue-token.sh --sub 11111111-1111-4111-8111-111111111111
+#   ./issue-token.sh                                     # sub 自动取本机 owner 账户
+#   ./issue-token.sh --sub <用户的 user id>               # 显式指定（远程机器用这个）
 #   ./issue-token.sh --role project_admin --days 30       # 调 /api/database/rpc/* 时用
 #   ./issue-token.sh --json                               # 只输出 token，便于脚本取值
+#   ./issue-token.sh --base https://tt.lan --json         # 指定查询 owner 的服务地址
+#
+# sub 怎么来的：设备与数据的归属账户叫「owner」（见服务端 internal/app/owner.go）。
+# 它不再是一个写死的常量，所以本脚本会问服务端：GET <base>/api/auth/owner（仅回环可读）。
+# 服务不可达时才退回历史 UUID，并往 stderr 打一行警告（老部署仍能继续用）。
 #
 # 依赖：python3（几乎所有发行版自带）。没有 python3 时回退到 openssl。
 set -euo pipefail
@@ -18,8 +23,30 @@ set -euo pipefail
 usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 
 SUB=""; ROLE="authenticated"; DAYS="365"; JSON_ONLY="0"; SECRET="${TT_JWT_SECRET:-}"
-# 固定一个默认账户 UUID，方便首次使用后多处复用同一账户
-DEFAULT_SUB="11111111-1111-4111-8111-111111111111"
+BASE="${TT_BASE_URL:-http://127.0.0.1:8080}"
+# 历史 UUID：只在**问不到 owner** 时兜底，绝不主动创建（新装机器上它不存在）
+LEGACY_SUB="11111111-1111-4111-8111-111111111111"
+
+resolve_owner() {
+  # 1) 显式配置优先（服务端也认这个变量，语义是"钉住 owner id"）
+  if [ -n "${TT_OWNER_ACCOUNT:-}" ]; then printf '%s' "$TT_OWNER_ACCOUNT"; return 0; fi
+  if [ -n "${TT_DEFAULT_ACCOUNT:-}" ]; then printf '%s' "$TT_DEFAULT_ACCOUNT"; return 0; fi
+  # 2) 问本机服务端（不可达会被 curl 判失败；可达但 owner 为空则返回 "none"）
+  local out
+  if ! out="$(curl -fsS --max-time 3 "${BASE%/}/api/auth/owner" 2>/dev/null)"; then
+    return 2
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    local uid
+    uid="$(printf '%s' "$out" | python3 -c 'import json,sys
+try:
+    print(json.load(sys.stdin).get("user_id") or "")
+except Exception:
+    print("")' 2>/dev/null || true)"
+    if [ -n "$uid" ]; then printf '%s' "$uid"; return 0; fi
+  fi
+  return 1
+}
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -27,13 +54,26 @@ while [ $# -gt 0 ]; do
     --role)   ROLE="${2:?}"; shift 2 ;;
     --days)   DAYS="${2:?}"; shift 2 ;;
     --secret) SECRET="${2:?}"; shift 2 ;;
+    --base)   BASE="${2:?}"; shift 2 ;;
     --json)   JSON_ONLY="1"; shift ;;
     -h|--help) usage ;;
     *) echo "未知参数: $1" >&2; usage ;;
   esac
 done
 
-[ -n "$SUB" ] || SUB="$DEFAULT_SUB"
+if [ -z "$SUB" ]; then
+  RC=0; SUB="$(resolve_owner)" || RC=$?
+  case "$RC" in
+    0) : ;;
+    1) # 服务可达，但还没有 owner：用历史 UUID 作为"第一个身份"，服务端会认领它
+       SUB="$LEGACY_SUB"
+       echo "提示: 这台机器还没有 owner 账户。本次用 $SUB 作为初始身份，" >&2
+       echo "      服务端会在首次使用时认领它；之后注册/登录（TT_AUTH_EMAIL）会挂到同一账户。" >&2 ;;
+    *) SUB="$LEGACY_SUB"
+       echo "警告: 连不上 $BASE，无法确认 owner 账户，暂用 $SUB。" >&2
+       echo "      远程部署请加 --base https://你的地址，或用 --sub 显式指定。" >&2 ;;
+  esac
+fi
 [ -n "$SECRET" ] || { echo "错误: 未设置 TT_JWT_SECRET（或用 --secret 传入）" >&2; exit 1; }
 SECRET_LEN=$(printf '%s' "$SECRET" | wc -c | tr -d ' ')
 [ "$SECRET_LEN" -ge 32 ] || { echo "错误: TT_JWT_SECRET 必须 ≥32 字节（当前 $SECRET_LEN）" >&2; exit 1; }

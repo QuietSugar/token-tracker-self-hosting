@@ -40,10 +40,13 @@ type Server struct {
 	// deviceApprove 决定「设备授权怎么被批准」：
 	//   jwt  （默认）POST /functions/tokentracker-device-flow-grant，需 JWT
 	//   page        GET /device 页面点按钮（无认证，局域网自用）
-	//   auto        申请即批准到 defaultSub（官方客户端 tracker device-login 零交互）
+	//   auto        申请即批准到 owner 账户（官方客户端 tracker device-login 零交互）
 	deviceApprove string
-	// defaultSub 是没有登录体系时唯一的账户（与 scripts/issue-token.sh 的默认 sub 一致）。
-	defaultSub string
+	// ownerAccount 是**可选**的"钉住所有者 id"配置（TT_OWNER_ACCOUNT，兼容旧名 TT_DEFAULT_ACCOUNT）。
+	// 留空时 owner 由库里的 auth_owner / 已有的唯一凭据账户 / 历史数据自动解析（见 owner.go）。
+	ownerAccount string
+	// ownerKnown 缓存「owner 已解析」，避免每个请求都查 auth_owner（见 owner.go）。
+	ownerKnown bool
 	// authCfg 是 /api/auth/* 的运行时配置（见 oauth.go）。
 	authCfg  authConfig
 	now      time.Time
@@ -61,6 +64,9 @@ func New(db *store.DB) *Server {
 			now = t.UTC()
 		}
 	}
+	if os.Getenv("TT_DEFAULT_ACCOUNT") != "" && os.Getenv("TT_OWNER_ACCOUNT") == "" {
+		log.Printf("config: TT_DEFAULT_ACCOUNT 已改名为 TT_OWNER_ACCOUNT（旧名仍接受，含义变了：只用于钉住 id，不再是默认账户）")
+	}
 	return &Server{
 		db:     db,
 		secret: []byte(envOr("TT_JWT_SECRET", "contract-test-secret")),
@@ -68,7 +74,7 @@ func New(db *store.DB) *Server {
 		// base_url 无论填 localhost 还是局域网 https 域名都对得上。
 		dashboard:     envOr("TT_DASHBOARD_URL", ""),
 		deviceApprove: envOr("TT_DEVICE_APPROVE", "jwt"),
-		defaultSub:    envOr("TT_DEFAULT_ACCOUNT", "11111111-1111-4111-8111-111111111111"),
+		ownerAccount:  envOr("TT_OWNER_ACCOUNT", os.Getenv("TT_DEFAULT_ACCOUNT")),
 		authCfg:       loadAuthConfig(),
 		now:           now,
 		testMode:      os.Getenv("TT_ENABLE_TEST_ENDPOINTS") == "true",
@@ -234,6 +240,10 @@ func (s *Server) auth(r *http.Request) (sub, role, token string, ok bool) {
 	}
 	token = strings.TrimPrefix(h, "Bearer ")
 	sub, role, ok = s.verifyJWT(token)
+	if ok {
+		// 还没有 owner 时，第一个出现的身份成为 owner（见 owner.go）。
+		s.maybeClaimOwner(sub)
+	}
 	return
 }
 

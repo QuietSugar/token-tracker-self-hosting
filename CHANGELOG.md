@@ -2,6 +2,63 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — 账户归属收敛：device-login 与登录是同一个账户，`TT_DEFAULT_ACCOUNT` 退场
+
+问题：上一轮引入 `/api/auth/*` 后，同一台机器有**两条账户**——
+`device-login` 的数据落在配置常量 `11111111-1111-4111-8111-111111111111`，
+登录拿到的 access token 属于随机 user id，于是跨设备汇总互相看不见。
+
+### 移除「默认账户」这个概念
+
+那个 UUID 从来不是账户，只是没有账号体系时的占位字符串（`issue-token.sh` 的 `DEFAULT_SUB`，
+后来被服务端照抄成 `TT_DEFAULT_ACCOUNT`）。现在：
+
+- 新增 `auth_owner` 单例表（`slot=1`），**唯一真相**；按优先级自动解析并固定：
+  `auth_owner` → 唯一带密码账户 → 配置钉住的 id → 历史固定 sub（有数据）→ 第一个出现的身份。
+- 设备批准（`auto`/`page`）一律归属 owner；`POST /api/auth/users` 与
+  `TT_AUTH_EMAIL` 引导**挂到已有 owner 上**，不再新建第二个账户。
+- 新装机器上那个 UUID **不会被创建**（有测试断言）。
+- `TT_DEFAULT_ACCOUNT` 的"默认账户"语义删除；旧名仅作为 `TT_OWNER_ACCOUNT`
+  的别名被读取（含义变成"把 owner id 钉死"，可选）。
+
+### 新增端点
+
+| 方法 | 路径 | 用途 |
+|---|---|---|
+| GET | `/api/auth/owner` | 当前 owner（**仅回环地址**）。`scripts/issue-token.sh` 用它解析 `--sub` |
+| POST | `/api/auth/merge-account` | 把无密码账户的数据并入 owner（收拾存量分裂；设备 token 原样保留） |
+
+`scripts/issue-token.sh` / `approve-device.sh` 不再猜账户：优先 `--sub`/`TT_OWNER_ACCOUNT`，
+否则问本机服务；连不上才退回历史 UUID 并打印明确提示。
+
+### 实测（官方 v1.4.12 客户端 + 真实服务）
+
+```
+全新库 → device-login（先设备、后账号）→ sync: Uploaded 2 inserted
+GET /api/auth/owner → {"user_id":"d717…","source":"device"}
+注册 owner@lan.test → signup user_id = d717…   ← 与设备同一账户
+account-summary     → total_tokens=7500 cost=0.161000
+库里：auth_users=1 行、auth_owner=1 行、devices 的 user_id 与 owner 相同
+
+另一条顺序（先 issue-token 导数据、再注册）：
+owner source=first-use → 注册后 auth_users 仍只有 1 行
+```
+
+### 测试
+
+- 新增 6 个回归测试：设备先/账号先都收敛、历史 UUID 认领（老库升级）、
+  新装机器不创建历史 UUID、`/api/auth/owner` 仅回环、`merge-account`（越权/有密码拒绝/搬迁生效）。
+- `go test -race ./...`：SQLite ✅ / PostgreSQL 16 ✅
+- 契约：`go-sqlite`、`go-postgres` 均 **33 PASS / 0 FAIL / 2 SKIP**
+- `check-oauth.sh` 全链路通过；`check-encoding.sh` / `check-secrets.sh` ✅
+
+### 文档
+
+`docs/oauth-selfhosted.md` 新增 §4.5（UUID 的来历、解析规则表、迁移与 merge-account）、
+端点表与配置表更新；`official-client.md`、`go-server/README.md`、`STATUS.md`、`CHANGELOG.md` 同步。
+
+---
+
 ## 2026-10-27 — 认证层：/api/auth/*（同 InsForge 流程，自写实现）
 
 上一轮把「设备上报」跑通了，但官方客户端的**跨设备 account 视图**还挂在 `/api/auth/*` 上——

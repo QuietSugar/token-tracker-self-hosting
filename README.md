@@ -35,6 +35,7 @@
 - [x] Go 后端支持 PostgreSQL：同一份代码/镜像，PG 上同样 33 PASS（CI 覆盖 PG 15/16）
 - [x] **官方客户端接入实测**（v1.4.12 CLI：`device-login` / `sync` / `doctor` 全通，见 [`docs/official-client.md`](docs/official-client.md)）
 - [x] **认证层 `/api/auth/*`**（同 InsForge 流程）：登录 / 刷新轮换 / 撤销 / 跨设备 account 视图，见 [`docs/oauth-selfhosted.md`](docs/oauth-selfhosted.md)
+- [x] **账户归属收敛**：`auth_owner` 单例，`device-login` 与登录同一账户；移除「默认账户 UUID」概念（§4.5）
 - [ ] 完成 Go 后端剩余数据模型、安全、运维后再评估 GA
 - [ ] 决定是否保留 SQLite（成本分析见 [`docs/go-postgres.md`](docs/go-postgres.md) §5）
 

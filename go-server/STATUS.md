@@ -51,6 +51,10 @@
   `base_url` 同源）、`scripts/approve-device.sh`。文档 `docs/official-client.md`。
   **仍缺**：`/api/auth/refresh` 与 OAuth 会话，所以客户端「跨设备 account 视图」在自托管下不可用
   （上传与本机视图不受影响）。
+- **账户归属收敛**：`auth_owner` 单例 + 自动解析（凭据/配置/历史认领/首个身份），
+  设备批准与注册/引导都指向它；`TT_DEFAULT_ACCOUNT` 作为"默认账户"的语义已删除
+  （仅保留为 `TT_OWNER_ACCOUNT` 的旧别名，用于钉住 id）。新增 `/api/auth/owner`（仅回环）
+  与 `/api/auth/merge-account`（收拾存量分裂）。
 - `scripts/check-oauth.sh`：一键自检认证链路（登录 → 轮换 → 旧 token 拒绝 → 撤销 → account 读取）。
 - 增量迁移机制：新增表走 `schema_additions` 账本（已发布的 step 改动即 fail closed），
   不动 core schema 的 checksum，老库升级不会 drift。新增 `auth_credentials` / `auth_sessions`。

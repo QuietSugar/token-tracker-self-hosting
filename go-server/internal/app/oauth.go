@@ -121,6 +121,10 @@ func (s *Server) authAPI(w http.ResponseWriter, r *http.Request) {
 		s.authPublicConfig(w, r)
 	case path == "profiles/current" && r.Method == http.MethodGet:
 		s.authProfile(w, r)
+	case path == "owner" && r.Method == http.MethodGet:
+		s.authOwnerInfo(w, r)
+	case path == "merge-account" && r.Method == http.MethodPost:
+		s.authMergeAccount(w, r)
 	default:
 		writeJSON(w, 404, map[string]any{"error": "Not found", "code": "NOT_FOUND"})
 	}
@@ -179,10 +183,20 @@ func (s *Server) authSignUp(w http.ResponseWriter, r *http.Request) {
 			"This instance already has an owner account; sign-up is closed. Set TT_AUTH_ALLOW_SIGNUP=true to allow more accounts.")
 		return
 	}
-	uid := newID()
-	if err := s.ensureAccount(uid); err != nil {
+	// owner 已存在但还没有密码（例如先跑过 device-login）→ 把凭据挂到它身上，
+	// 不再另建账户，否则又会出现"设备在一个账户、数据在另一个账户"。
+	uid, err := s.adoptableOwner()
+	if err != nil {
 		authFail(w, 500, "INTERNAL", err.Error())
 		return
+	}
+	fresh := uid == ""
+	if fresh {
+		uid = newID()
+		if err := s.ensureAccount(uid); err != nil {
+			authFail(w, 500, "INTERNAL", err.Error())
+			return
+		}
 	}
 	if _, err := s.db.Exec(`UPDATE auth_users SET email=? WHERE id=?`, email, uid); err != nil {
 		authFail(w, 500, "INTERNAL", err.Error())
@@ -192,6 +206,12 @@ func (s *Server) authSignUp(w http.ResponseWriter, r *http.Request) {
 		uid, email, hashPassword(b.Password), s.nowISO()); err != nil {
 		authFail(w, 409, "EMAIL_TAKEN", "That email is already registered on this instance")
 		return
+	}
+	if fresh {
+		if err := s.claimOwner(uid, "signup"); err != nil {
+			authFail(w, 500, "INTERNAL", err.Error())
+			return
+		}
 	}
 	s.respondWithSession(w, r, uid, "browser")
 }
@@ -589,9 +609,26 @@ func (s *Server) EnsureAuthBootstrap() (created bool, email string, err error) {
 	case !errors.Is(err, sql.ErrNoRows):
 		return false, "", err
 	}
-	uid := newID()
-	if err := s.ensureAccount(uid); err != nil {
+	// owner 可能已经因为 device-login 而存在（还没有密码）：把凭据挂上去，
+	// 而不是新建一个账户 —— 否则设备的用量与登录后的账户会分裂。
+	uid, err := s.adoptableOwner()
+	if err != nil {
 		return false, "", err
+	}
+	fresh := uid == ""
+	if fresh {
+		uid = newID()
+		if err := s.ensureAccount(uid); err != nil {
+			return false, "", err
+		}
+	} else {
+		var existing string
+		if err := s.db.QueryRow(`SELECT email FROM auth_users WHERE id=?`, uid).Scan(&existing); err != nil {
+			return false, "", err
+		}
+		if existing != "" && normalizeEmail(existing) != email {
+			return false, "", fmt.Errorf("owner account already uses %s; refusing to add %s as a second identity", existing, email)
+		}
 	}
 	if _, err := s.db.Exec(`UPDATE auth_users SET email=? WHERE id=?`, email, uid); err != nil {
 		return false, "", err
@@ -599,6 +636,11 @@ func (s *Server) EnsureAuthBootstrap() (created bool, email string, err error) {
 	if _, err := s.db.Exec(`INSERT INTO auth_credentials(user_id,email,password_hash,created_at) VALUES(?,?,?,?)`,
 		uid, email, hashPassword(pass), s.nowISO()); err != nil {
 		return false, "", err
+	}
+	if fresh {
+		if err := s.claimOwner(uid, "bootstrap"); err != nil {
+			return false, "", err
+		}
 	}
 	return true, email, nil
 }
@@ -622,4 +664,80 @@ func decodePercent(s string) (string, error) {
 		i += 2
 	}
 	return b.String(), nil
+}
+
+// ---------- owner 身份 ----------
+
+// authOwnerInfo 让本机脚本知道"设备与数据归属哪个账户"。
+//
+// 为什么需要：以前那个 sub 是写死的常量，脚本无需询问；现在 owner 可能是
+// 注册/引导/历史认领决定的随机 id。限制为**仅回环地址**可读（不含任何凭据，
+// 只是本机自用时的身份查询）；远程机器请用 --sub / JWT 里的 sub。
+func (s *Server) authOwnerInfo(w http.ResponseWriter, r *http.Request) {
+	if !isLoopbackRequest(r) {
+		authFail(w, 403, "LOCAL_ONLY", "owner lookup is only available from 127.0.0.1/::1 on the server host")
+		return
+	}
+	info, err := s.ownerInfo()
+	if err != nil {
+		authFail(w, 500, "INTERNAL", err.Error())
+		return
+	}
+	writeJSON(w, 200, info)
+}
+
+// authMergeAccount 把另一个账户的数据并入 owner（收拾"两条账户"的存量实例）。
+// 需要 owner 自己的 access token；from 侧必须是**没有密码凭据**的账户，
+// 避免误删真实登录账户。
+func (s *Server) authMergeAccount(w http.ResponseWriter, r *http.Request) {
+	sub, _, _, ok := s.auth(r)
+	if !ok {
+		authFail(w, 401, "AUTH_UNAUTHORIZED", "Authentication required")
+		return
+	}
+	owner, err := s.ownerSub()
+	if err != nil {
+		authFail(w, 500, "INTERNAL", err.Error())
+		return
+	}
+	if owner == "" || sub != owner {
+		authFail(w, 403, "OWNER_ONLY", "only the owner account may merge accounts")
+		return
+	}
+	var b struct {
+		FromUserID string `json:"from_user_id"`
+	}
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&b) != nil || b.FromUserID == "" {
+		authFail(w, 400, "INVALID_BODY", `expected {"from_user_id": "..."}`)
+		return
+	}
+	var creds int
+	if err := s.db.QueryRow(`SELECT count(*) FROM auth_credentials WHERE user_id=?`, b.FromUserID).Scan(&creds); err != nil {
+		authFail(w, 500, "INTERNAL", err.Error())
+		return
+	}
+	if creds > 0 {
+		authFail(w, 409, "HAS_CREDENTIALS",
+			"refusing to merge an account that has a password; sign in as that account and merge the other way instead")
+		return
+	}
+	moved, err := s.mergeAccount(b.FromUserID, owner)
+	if err != nil {
+		authFail(w, 500, "MERGE_FAILED", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "owner": owner, "from": b.FromUserID, "moved": moved})
+}
+
+// isLoopbackRequest 判断请求是否来自本机（直连回环，或反代自回环且未带 X-Forwarded-For）。
+func isLoopbackRequest(r *http.Request) bool {
+	if r.Header.Get("X-Forwarded-For") != "" {
+		return false
+	}
+	host := r.RemoteAddr
+	if i := strings.LastIndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	host = strings.Trim(host, "[]")
+	return host == "127.0.0.1" || host == "::1" || host == "localhost"
 }

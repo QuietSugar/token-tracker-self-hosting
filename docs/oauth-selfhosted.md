@@ -41,6 +41,8 @@ GET /functions/tokentracker-account-*   Authorization: Bearer <accessToken>
 | `GET` | `/api/auth/sessions` | 列出该用户的会话（已登录设备页用） |
 | `GET` | `/api/auth/profiles/current` | 当前用户档案（自托管恒为 `null`，客户端会容忍） |
 | `GET` | `/api/auth/public-config` | `{emailSignIn,emailSignUp,passwordMinLength,oauthProviders:[],selfHosted:true}` |
+| `GET` | `/api/auth/owner` | 当前 owner 账户（**仅回环地址**；脚本用它解析 `--sub`） |
+| `POST` | `/api/auth/merge-account` | 把另一个（无密码的）账户的数据并入 owner，见 §4.5 |
 
 **access token 就是本服务原有的 HS256 JWT**（`sub`=用户 id，`role=authenticated`），
 所以 `/functions/*` 的鉴权不需要第二套逻辑 —— 官方客户端拿到的 accessToken 能直接读 `account-*`。
@@ -79,7 +81,8 @@ GET /functions/tokentracker-account-*   Authorization: Bearer <accessToken>
 
 | 环境变量 | 默认 | 说明 |
 |---|---|---|
-| `TT_AUTH_EMAIL` / `TT_AUTH_PASSWORD` | – | 启动时若库里还没有账户，用它创建 owner（幂等，**不会**覆盖已存在账户的密码） |
+| `TT_AUTH_EMAIL` / `TT_AUTH_PASSWORD` | – | 给 owner 账户设邮箱密码（幂等，**不会**覆盖已有密码；owner 已存在时挂到它身上而不是新建账户） |
+| `TT_OWNER_ACCOUNT` | 空（自动解析） | 可选：把 owner 的用户 id 钉死。旧名 `TT_DEFAULT_ACCOUNT` 仍被接受，但语义已从"默认账户"变为"钉住 id" |
 | `TT_ACCESS_TOKEN_TTL` | `3600` | access token 秒数 |
 | `TT_REFRESH_TOKEN_TTL` | `7776000`（90 天） | refresh token 秒数（也是 cookie Max-Age） |
 | `TT_AUTH_ALLOW_SIGNUP` | `false` | 有 owner 后是否仍允许自助注册 |
@@ -99,6 +102,86 @@ TT_DEVICE_APPROVE=auto \
 
 ---
 
+## 4.5 「所有者账户」与 `TT_DEFAULT_ACCOUNT` 的下场
+
+### 那个 UUID 是怎么来的
+
+最早这一层**根本不存在**（没有 `/api/auth/*`），但设备上报总得有个 user id，于是：
+
+1. `scripts/issue-token.sh` 里写死了一个常量 `DEFAULT_SUB=11111111-1111-4111-8111-111111111111`，
+   没有 `--sub` 就用它；
+2. 后来加设备授权（`TT_DEVICE_APPROVE=auto|page`）时，服务端照抄同一个常量，
+   命名为 `TT_DEFAULT_ACCOUNT`，作为"设备归属的账户"。
+
+也就是说它**从来不是一个账户**，只是「没有账号体系时的占位字符串」。
+一旦引入真正的账号（注册/登录产生随机 user id），它就变成了第二个身份来源：
+
+```
+device-login  →  数据落在 1111…（配置常量）
+登录          →  access token 的 sub 是 3f2a…（随机 id）
+                  ⇒ 跨设备汇总互相看不见，菜单栏 account 视图是空的
+```
+
+### 现在怎么处理（已经移除这个概念）
+
+`auth_owner` 表（`slot=1` 单例）成为**唯一真相**，按优先级自动解析一次，然后固定下来：
+
+| 顺序 | 规则 | source |
+|---|---|---|
+| 1 | `auth_owner` 已有行 | 原样 |
+| 2 | 库里只有一个带密码的账户 | `credentials` |
+| 3 | 配置钉住了 id 且该账户存在（`TT_OWNER_ACCOUNT`） | `config` |
+| 4 | 存在历史固定 sub **且有设备/用量**（老部署升级） | `legacy` |
+| 5 | 以上都没有 → **第一个出现的身份**成为 owner | `device` / `signup` / `bootstrap` / `first-use` |
+
+解析出来之后：
+
+- 设备批准（`auto`/`page`）一律归属 owner；
+- 注册 / `TT_AUTH_EMAIL` 引导**挂到已有 owner 上**（不新建账户），所以"先 device-login 再登录"
+  和"先登录再 device-login"都会收敛到同一个账户；
+- 新装机器上那个 `1111…` **不会**被创建（有测试盯着）；
+- `scripts/issue-token.sh` 不再猜 sub：它问 `GET /api/auth/owner`（仅回环可读）。
+
+### `TT_DEFAULT_ACCOUNT` / `TT_OWNER_ACCOUNT` 现在是什么
+
+`TT_DEFAULT_ACCOUNT` **作为"默认账户"的语义已经删除**。旧名字仍被读取，但含义变了：
+它只是"**把 owner id 钉死**"的可选配置（新名字 `TT_OWNER_ACCOUNT`），用于迁移或
+想让账户 id 可预测的场合。留空即可，绝大多数部署不需要设。
+
+> 迁移提示：老库第一次用新版本启动时，若原本就用过那个固定 UUID，会被第 4 条规则认领，
+> 数据不会丢；若你已经踩到"两个账户"（owner 是新注册的、设备数据还在 1111…），
+> 用下一节的 `merge-account` 收拾。
+
+### 收拾存量分裂：`/api/auth/merge-account`
+
+```sh
+ACCESS=$(curl -s -X POST -H 'Content-Type: application/json' \
+  -d '{"email":"me@lan.test","password":"…"}' https://tt.lan/api/auth/sessions \
+  | python3 -c 'import json,sys;print(json.load(sys.stdin)["accessToken"])')
+
+curl -s -H "Authorization: Bearer $ACCESS" -H 'Content-Type: application/json' \
+  -d '{"from_user_id":"11111111-1111-4111-8111-111111111111"}' \
+  https://tt.lan/api/auth/merge-account
+# → {"ok":true,"owner":"<随机 id>","from":"1111…","moved":{"devices":1,"hourly":36,…}}
+```
+
+约束（都测过）：
+
+- 只能由 **owner 自己**调用；
+- 源账户**不能有密码凭据**（防止误删真实的登录账户）→ 409 `HAS_CREDENTIALS`；
+- 同一台设备两边都有时，源侧那行先软删（`revoked_at`）避免唯一索引冲突；
+- `device_tokens` 原样搬走，**设备不需要重新登录**；
+- 搬完删掉空的源账户。
+
+查当前 owner（仅服务器本机可读）：
+
+```sh
+curl -s http://127.0.0.1:8080/api/auth/owner
+# {"user_id":"…","email":"me@lan.test","has_credentials":true,"source":"bootstrap"}
+```
+
+---
+
 ## 5. 数据落库
 
 走**增量迁移**（`store` 的 additive steps，见 `internal/store/schema.go`）新增两张表，
@@ -108,8 +191,10 @@ TT_DEVICE_APPROVE=auto \
 auth_credentials(user_id PK → auth_users, email UNIQUE, password_hash, created_at)
 auth_sessions(id PK, user_id → auth_users, token_hash UNIQUE, csrf_hash,
               client, created_at, expires_at, revoked_at)
+auth_owner(slot PK CHECK slot=1, user_id UNIQUE → auth_users, source, created_at)   -- 所有者单例
 ```
 
+两个 step：`{1: auth-sessions}`、`{2: auth-owner}`。
 升级行为：老库启动时只跑缺的 step，账本在 `schema_additions(version,name,checksum,applied_at)`。
 已发布的 step 被改动 → 启动报 checksum drift（和 core schema 同等强度的保护）。
 
