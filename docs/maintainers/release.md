@@ -39,7 +39,9 @@ docker pull ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental-<short
 实验镜像不允许成为任何人的隐式默认。
 
 CI 顺序是硬的：**build amd64 → 真 PG 冒烟 → 多平台 build+push**。
-冒烟不过就不产生任何 tag。冒烟内容：起 PG、起容器、`/health` 200、签 device token、ingest 一个桶、读回 summary。
+冒烟不过就不产生任何 tag。冒烟内容（`build-go-image.yml` 的 `Smoke test — PostgreSQL mode`）：真 PG 上起容器、
+`/health` 200、启动日志 `engine=postgres` 且密码已脱敏、`/_test/sql` 返回 404。
+数据面（ingest / 读回）由 `go-server.yml` 的契约对拍覆盖，不在镜像冒烟里重复。
 
 GHCR 包默认私有，要给别人用需要在包设置里改可见性。
 

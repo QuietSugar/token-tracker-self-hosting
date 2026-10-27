@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# TokenTracker 自托管 Go 后端实验镜像（linux/amd64）。
+# TokenTracker 自托管 Go 后端实验镜像（linux/amd64 + linux/arm64）。
 #
 # 只支持 PostgreSQL：用 TT_DATABASE_URL 给一个 postgres://... 连接串。
 # （SQLite 支持已移除，归档 tag `sqlite-final`。）
@@ -22,13 +22,15 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
 FROM alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 ARG VERSION=experimental
 ARG VCS_REF=unknown
+# 多平台构建时必须是实际架构；写死会给出错误的镜像元数据。
+ARG TARGETARCH=amd64
 LABEL org.opencontainers.image.title="TokenTracker Go experimental backend (PostgreSQL)" \
       org.opencontainers.image.description="Experimental Go vertical slice on PostgreSQL; not a production GA replacement for InsForge" \
       org.opencontainers.image.source="https://github.com/QuietSugar/token-tracker-self-hosting" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.version="${VERSION}" \
       dev.tokentracker.status="experimental-vertical-slice" \
-      dev.tokentracker.platform="linux/amd64"
+      dev.tokentracker.platform="linux/${TARGETARCH}"
 RUN addgroup -g 10001 -S tokentracker \
  && adduser -u 10001 -S -G tokentracker -h /app tokentracker
 COPY --from=build --chown=tokentracker:tokentracker /out/tokentracker-server /usr/local/bin/tokentracker-server

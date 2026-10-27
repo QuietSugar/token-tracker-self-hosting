@@ -84,7 +84,8 @@ curl -s http://127.0.0.1:8080/health
 
 ```sh
 cd go-server
-export TT_JWT_SECRET=$(grep TT_JWT_SECRET ../.env 2>/dev/null || grep TT_JWT_SECRET .env | cut -d= -f2)
+# .env 里是 KEY=VALUE；必须只取等号后面的部分，否则签出来的 JWT 校验不过
+export TT_JWT_SECRET="$(sed -n 's/^TT_JWT_SECRET=//p' .env | head -1)"
 TOKEN=$(./scripts/issue-token.sh --base http://127.0.0.1:8080 --json)
 DTOK=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"device_name":"smoke","platform":"linux","machine_id":"m-smoke"}' \
@@ -92,14 +93,21 @@ DTOK=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: appli
 curl -s -X POST -H "Authorization: Bearer $DTOK" -H 'Content-Type: application/json' \
   -d '{"buckets":[{"hour_start":"2026-10-20T10:00:00Z","source":"codex","model":"gpt-6","input_tokens":1234,"total_tokens":1234,"billable_total_tokens":1234}]}' \
   http://127.0.0.1:8080/functions/tokentracker-ingest
-# 期望：{"inserted":1,"skipped":0}
+# 期望：{"ok":true,"inserted":1,"skipped":0,…}
 curl -s -H "Authorization: Bearer $TOKEN" \
   'http://127.0.0.1:8080/functions/tokentracker-account-summary?from=2026-10-01&to=2026-10-31&tz=Asia/Shanghai'
 # 期望：total_tokens ≥ 1234
 ```
 
-这一步过了，"装好了"才算成立。之后把 `smoke` 设备用
-`billing?action=remove-device` 停掉（历史留着无妨），或者留着当哨兵。
+这一步过了，"装好了"才算成立。之后把 `smoke` 设备停掉（历史留着无妨），或者留着当哨兵：
+
+```sh
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"machine_id":"m-smoke"}' \
+  'http://127.0.0.1:8080/functions/tokentracker-billing?action=remove-device'
+```
+
+注意 body 是 **`machine_id`**（签发时给的那个），不是 `device_id`。
 
 ---
 
@@ -108,21 +116,24 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 前提：Linux、root、PG 已在跑。
 
 ```sh
-# 1) 找发布产物（GHCR 之外，仓库的 release 里有二进制；否则自己编）
-#    自己编：需要 Go ≥1.22
-cd go-server && go build -trimpath -o /usr/local/bin/tokentracker ./cmd/server
+# 1) 编二进制（仓库不发预编译产物，只有 GHCR 镜像；需要 Go ≥1.24）
+cd go-server
+mkdir -p bin
+CGO_ENABLED=0 go build -trimpath -o bin/tokentracker-server ./cmd/server
+install -m 0755 bin/tokentracker-server /usr/local/bin/
 
-# 2) 配置
-install -d -m 750 /etc/tokentracker
-cat > /etc/tokentracker/env <<EOF
+# 2) 服务用户 + 配置（env 必须让服务用户读得到）
+useradd --system --no-create-home --shell /usr/sbin/nologin tokentracker || true
+install -d -m 0750 -g tokentracker /etc/token-tracker
+cat > /etc/token-tracker/env <<EOF
 TT_LISTEN_ADDR=127.0.0.1:8080
 TT_DATABASE_URL=postgres://tokentracker:PASS@127.0.0.1:5432/tokentracker?sslmode=disable
 TT_JWT_SECRET=$(openssl rand -hex 32)
 EOF
-chmod 600 /etc/tokentracker/env
+chown root:tokentracker /etc/token-tracker/env
+chmod 0640 /etc/token-tracker/env
 
 # 3) systemd 单元
-useradd --system --no-create-home --shell /usr/sbin/nologin tokentracker || true
 cat > /etc/systemd/system/tokentracker.service <<'EOF'
 [Unit]
 Description=TokenTracker self-hosted backend
@@ -131,8 +142,8 @@ Wants=network-online.target
 
 [Service]
 User=tokentracker
-EnvironmentFile=/etc/tokentracker/env
-ExecStart=/usr/local/bin/tokentracker
+EnvironmentFile=/etc/token-tracker/env
+ExecStart=/usr/local/bin/tokentracker-server
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=yes

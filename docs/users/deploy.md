@@ -59,6 +59,7 @@ postgres://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require
 
 ```sh
 cd go-server
+mkdir -p bin
 CGO_ENABLED=0 go build -trimpath -o bin/tokentracker-server ./cmd/server
 sudo install -m 0755 bin/tokentracker-server /usr/local/bin/
 sudo useradd --system --home /var/lib/tokentracker tokentracker
@@ -164,7 +165,7 @@ server {
 | `TT_POSTGRES_SCHEMA_EPHEMERAL` | `false` | 退出时 `DROP SCHEMA … CASCADE`。**只用于测试。** |
 | `TT_ACCESS_LOG` | `false` | 每请求一行访问日志：`access: GET /path 200 auth=yes origin=-`。 |
 | `TT_NOW` | 真实时间 | 冻结时钟（RFC3339）。**仅测试**用。 |
-| `TT_ENABLE_TEST_ENDPOINTS` | `false` | 打开 `/_test/*`（含可执行任意 SQL 的 `/_test/sql`）。**生产必须关闭。** |
+| `TT_ENABLE_TEST_ENDPOINTS` | `false` | 打开 `/_test/*`（含可执行任意 SQL 的 `/_test/sql`）。**生产必须关闭。** 只有 `/_test/health` 是无条件挂载的。 |
 
 已移除：`TT_DATABASE_PATH`、`TT_DATABASE_DRIVER`（SQLite 时代变量，设了会打一行警告然后忽略）。
 

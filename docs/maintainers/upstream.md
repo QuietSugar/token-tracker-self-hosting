@@ -80,9 +80,11 @@ dashboard/edge-patches/cloud  scripts/build-cloud-functions.cjs  migrations
 
 ## 6. 依赖锁定
 
-构建期校验（`build-functions.cjs` 比对 `package-lock.json`，不一致直接报错）：
-`@insforge/sdk@1.4.5`、`alipay-sdk@4.14.0`、`urllib@4.9.1`、`@waffo/pancake-ts@0.25.0`。
-升级评审必须高亮任何依赖版本变化。
+参考实现构建时钉住的依赖，录在 `contract/golden/<ver>/static.json` 的 `dependencies` 里
+（当前：`@insforge/sdk@1.4.5`、`alipay-sdk@4.14.0`、`urllib@4.9.1`、`@waffo/pancake-ts@0.25.0`）。
+我们自己的 Go 依赖只有 `github.com/lib/pq`（`go.mod`）。
+
+升级评审必须高亮任何依赖版本变化；`static.json` 变了就是 golden 变了，要按 [`contract.md`](contract.md) §5 解释。
 
 ## 7. 客户端行为的取证方式
 

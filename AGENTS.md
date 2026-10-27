@@ -29,7 +29,8 @@
 cd go-server
 go vet ./... && go test -race ./...        # 单测（PG 相关会 SKIP）
 
-# 契约对拍（需要 PG）
+# 契约对拍（需要 PG）；脚本在仓库根，先 cd 回去
+cd ..
 CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs \
 GO_POSTGRES_URL='postgres://…' ./contract/scripts/verify.sh
 # 门槛：33 PASS / 0 FAIL / 2 SKIP
