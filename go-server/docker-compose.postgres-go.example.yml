@@ -10,7 +10,7 @@
 # 升级：docker compose pull tokentracker-go && docker compose up -d tokentracker-go
 #       （schema 安装幂等；PG 连接池会在重启时重建）
 #
-# ⚠️ 当前只覆盖 STATUS.md 中明确列出的行为；不是 InsForge 替代品/生产 GA。
+# ⚠️ 能力与已知缺口见 docs/status.md；不是生产 GA。
 # ⚠️ 这里的 postgres:15-alpine 为了示例可读性用 tag；生产请按 OCI digest 固定，
 #    并自行负责 pg_dump/物理备份、PITR、监控与升级窗口。
 services:

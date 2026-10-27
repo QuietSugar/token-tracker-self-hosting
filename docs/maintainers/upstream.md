@@ -38,7 +38,7 @@
 ./scripts/upstream.sh review <new-sha>  # 契约路径 diff + 两个结论
 ```
 
-`review` 判定的路径（与 `docs/maintainer-prompt.md` 时代一致，已固化进脚本）：
+`review` 判定的路径（已固化进脚本）：
 
 ```
 scripts/self-host  'docs/self-hosting*'
@@ -59,7 +59,7 @@ dashboard/edge-patches/cloud  scripts/build-cloud-functions.cjs  migrations
 ./scripts/verify.sh releases/<version>         # SHA256 + 编码 + 函数数量
 ```
 
-然后 `git add releases/<version> tracking/upstream.md tracking/REF` 并提交。
+然后更新本文件的版本追踪表，`git add releases/<version> tracking/REF docs/maintainers/upstream.md` 并提交。
 
 ## 4. 为什么产物线不能退役
 

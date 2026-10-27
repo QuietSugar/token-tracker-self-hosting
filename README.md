@@ -63,10 +63,10 @@
 ```
 go-server/          运行时：Go 后端（代码、镜像、脚本、测试）
 docs/               所有文档（索引在 docs/README.md）
-contract/           契约：golden 快照、场景、SPEC、Go adapter
+contract/           标准：契约用例、golden 快照、Go adapter（机器资产）
 releases/           从上游生成的工件（SQL + 14 个函数），按上游版本分目录
-tracking/           上游锁定点（REF）与版本追踪表
-scripts/            仓库级校验（编码、密钥、产物）
+tracking/REF        上游锁定点（版本 + commit），构建与 CI 的唯一来源
+scripts/            工件线工具（upstream / build / verify / check-*）
 docker/             工件镜像内的部署 CLI
 env/                环境变量示例
 ```

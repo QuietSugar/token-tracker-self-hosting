@@ -17,7 +17,7 @@ VERSION="$(ref VERSION)"
 COMMIT="$(ref COMMIT)"
 [ -n "$REPO_URL" ] && [ -n "$COMMIT" ] || die "tracking/REF 内容不完整"
 
-# 与 docs/maintainer-prompt.md 工作流 1) 保持一致的契约路径
+# 契约路径（判定规则见 docs/maintainers/upstream.md）
 CONTRACT_PATHS=(scripts/self-host 'docs/self-hosting*' dashboard/edge-patches/cloud scripts/build-cloud-functions.cjs migrations)
 
 need_upstream() {
@@ -94,7 +94,7 @@ cmd_review() {
   else
     echo "$diffstat"
     echo
-    echo "结论：自托管契约可能变化 → 走 docs/prompts.md 提示词 B 做升级评审。"
+    echo "结论：自托管契约可能变化 → 按 docs/maintainers/upstream.md §3 做升级评审。"
     echo
     echo "--- manifest.cjs 差异（steps/privateFunctions）---"
     git -C "$UPSTREAM_DIR" diff "$old" "$new" -- scripts/self-host/manifest.cjs | head -100 || true
@@ -103,7 +103,7 @@ cmd_review() {
   echo "=== 客户端侧变化规模（参考）==="
   git -C "$UPSTREAM_DIR" diff --stat "$old" "$new" -- src dashboard/src | tail -8 || true
   echo
-  echo "提醒：评审后请更新 tracking/upstream.md 的版本追踪表（两个结论）。"
+  echo "提醒：评审后请更新 docs/maintainers/upstream.md 的版本追踪表（两个结论）。"
 }
 
 cmd_pin() {

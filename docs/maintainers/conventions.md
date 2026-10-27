@@ -57,7 +57,7 @@ CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs GO_POSTGRES_URL=… ./contr
 - 按读者分层：`users/`（怎么用）、`agents/`（AI 剧本）、`design/`（为什么）、`maintainers/`（怎么维护）。
 - **每个事实只有一个出处**，别处只链接。写第二遍就一定会和第一遍不一致。
 - `users/` 里不写维护者流程、工件、InsForge；`design/` 里不写操作步骤。
-- 改了行为就同步文档：端点/参数 → `docs/users/*` + `contract/SPEC.md`；环境变量 → `docs/users/deploy.md`；
+- 改了行为就同步文档：端点/参数 → `docs/users/*` + 契约用例；环境变量 → `docs/users/deploy.md`；
   对外可见变化 → `CHANGELOG.md`（每版本 3–5 条）。
 - 不写"曾经打算怎么做"的历史论证：git 历史里查得到。
 
@@ -67,9 +67,9 @@ CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs GO_POSTGRES_URL=… ./contr
 
 | 已退役 | 现在怎么做 |
 |---|---|
-| GitHub App 推送（`gh-app-token.cjs`、`push-with-app.sh`） | 直接 `git push`；CI 用 `GITHUB_TOKEN` |
-| `bootstrap.sh`、`session-start.sh`、MAINTENANCE 会话启动协议 | 每项工作照 `docs/agents/develop.md` 与各 PR 检查单走 |
-| `docs/maintainer-prompt.md` 里的提示词编排 | 判定规则已经固化进 `scripts/upstream.sh` 与文档 |
+| GitHub App 推送（`gh-app-token.cjs`、`push-with-app.sh`，已删除） | 直接 `git push`；CI 用 `GITHUB_TOKEN` |
+| `bootstrap.sh`、`session-start.sh`、`MAINTENANCE.md` 会话启动协议（已删除） | 每项工作照 `docs/agents/develop.md` 与各 PR 检查单走 |
+| 提示词编排文档（`maintainer-prompt.md` / `prompts.md`） | 判定规则已固化进 `scripts/upstream.sh`，流程写在 `agents/` 与 `maintainers/` |
 
 仍在用、**不要删**：`scripts/upstream.sh`、`build.sh`、`verify.sh`、`check-secrets.sh`、
 `check-encoding.sh`、`reproduce.sh`、`summarize.cjs`、`tracking/REF`。

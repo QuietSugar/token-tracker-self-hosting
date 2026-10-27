@@ -16,7 +16,7 @@
 ## 硬不变量（违反即错）
 
 1. **不改官方客户端**。客户端只在它自己的仓库里；本仓库只提供它要的后端行为。
-2. **契约只增不改**。`contract/SPEC.md` 里已发布的行为不能改语义；新增行为单独加，并补 golden。
+2. **契约只增不改**。已发布的行为不能改语义；新增行为单独加用例并补 golden（规则见 `docs/maintainers/contract.md`）。
 3. **schema 只加不删**。core DDL 的 checksum 与迁移账本绑定；改 DDL = 新的迁移，不是改旧的。
 4. **单 owner**。`auth_owner` 是单例，不存在"第二个人能读数据"的路径。多用户后台不是目标。
 5. **PostgreSQL 是唯一引擎**。SQLite 已删除，不要以任何形式引回。
@@ -46,7 +46,7 @@ GO_POSTGRES_URL='postgres://…' ./contract/scripts/verify.sh
 
 | 你改了什么 | 同步更新 |
 |---|---|
-| 端点行为 / 参数 / 返回形状 | `docs/users/*` 对应页 + `contract/SPEC.md` |
+| 端点行为 / 参数 / 返回形状 | `docs/users/*` 对应页 + 契约新用例 |
 | 环境变量 / 部署方式 | `docs/users/deploy.md` |
 | 设计取舍 | `docs/design/*` |
 | 上游跟进 / 发版 | `docs/maintainers/*` |

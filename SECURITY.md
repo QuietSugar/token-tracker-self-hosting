@@ -1,36 +1,47 @@
-# 凭据处理规则
+# 安全说明
 
-> ⚠️ **本仓库托管在 GitHub public 仓库**：<https://github.com/QuietSugar/token-tracker-self-hosting.git>
-> 任何 `git push` 后内容立即对全网可见，且可能被爬虫/密钥扫描机器人即时抓取。
-> **删掉提交、改历史、force push 都不能视为「已撤销」——轮换密钥永远优先于清理历史。**
+> 本仓库是**公有仓库**：<https://github.com/QuietSugar/token-tracker-self-hosting>
+> 任何 push 都立即对全网可见。**删提交 / 改历史 / force push 都不等于「已撤销」——轮换密钥永远优先于清理历史。**
 
-本仓库**不存储任何真实凭据**。以下内容只允许存在于实例持有者的 VPS / 本地环境：
+## 凭据放哪
 
-- `INSFORGE_SERVICE_ROLE_KEY`（服务端专用，最高敏感）
-- `JWT_SECRET` / `JWT_PUBLIC_KEY`（平台签名密钥）
-- `ANON_KEY`（公开匿名键；虽是公开值，也不必写进仓库）
-- OAuth / 邮件服务商凭据、数据库口令、API key
+本仓库**不存储任何真实凭据**。下面这些只允许存在于你的机器上：
 
-## 做法
+| 凭据 | 位置 | 权限 |
+|---|---|---|
+| `TT_JWT_SECRET` | `go-server/.env` 或 `/etc/tokentracker/env` | `600` |
+| PostgreSQL 口令 | 同上（写在 `TT_DATABASE_URL` 里） | `600` |
+| `POSTGRES_PASSWORD` | `go-server/.env` | `600` |
+| 客户端 `~/.tokentracker/tracker/config.json` | 客户端机器，**不要复制进本仓库** | `600` |
 
-1. 复制 `env/server.env.example` 为 `env/server.env`，填入真实值。该路径已被 `.gitignore` 忽略。
-2. 文件权限 `chmod 600`；密钥只存在于服务器，不进 shell 历史、不进截图、不进浏览器构建产物。
-3. 客户端 `~/.tokentracker/config.json` 权限 `600`，且**不复制到本仓库**。
-4. 自托管模式**不配置** Waffo / Paddle / 微信 / 支付宝密钥——付费与赠送码功能在自托管清单里被有意排除。
-5. **GitHub App 私钥**放在 `~/.config/tokentracker-gh-app/private-key.pem`（仓库之外，chmod 600），`config.env` 只放非密钥的 ID 配置。私钥不进仓库、不进聊天记录、不进 CI 日志。installation token 只有 1 小时寿命，用后立即删除临时文件。
-6. **每次推送前**：`./scripts/check-secrets.sh`；失败就不要推。CI 会再查一遍，但不要把 CI 当作唯一防线。
-7. `releases/<ver>/acceptance.md` 只写结论与取证方式，**不要粘原始日志、抓包内容、截图或数据库 dump**（这些文件会入库并公开）。
+持有 `TT_JWT_SECRET` 就能伪造任何身份，它是唯一必须守住的东西。自托管不需要付费 / OAuth / 邮件服务商密钥。
+
+推送前：
+
+```sh
+./scripts/check-secrets.sh    # 命中即非零退出
+./scripts/check-encoding.sh
+```
+
+CI（`.github/workflows/verify.yml`）会再查一遍，但不要把 CI 当作唯一防线。
+
+## 部署时的真实边界
+
+- **`TT_DEVICE_APPROVE=page|auto` 不要暴露到公网**：这两种模式下，能访问服务并拿到 `user_code` 的人就能把设备接进 owner 账户。
+  需要审批边界用 `jwt`（`scripts/approve-device.sh`）。详见 [`docs/design/auth.md`](docs/design/auth.md) §5。
+- **`TT_ENABLE_TEST_ENDPOINTS` 生产必须关闭**：`/_test/sql` 可执行任意 SQL。
+- 没有速率限制、爆破防护、审计日志 —— 这是局域网单实例自用的取舍。真要公网访问，请在前面加一层网关。
+- 反代必须透传 `Authorization`；否则表现为「密码能登录但所有 API 401」。排查用 `TT_ACCESS_LOG=true`。
 
 ## 误提交处置（公有仓库 = 已泄露）
 
-1. **立刻轮换**该密钥 / token（InsForge 平台、服务商、OAuth provider）。把这一步当第一步，不要先去改 git 历史。
-2. 检查该服务的访问日志，确认有无异常使用。
-3. `git rm --cached` 移除文件并提交；若已推送，用 `git filter-repo` 清历史并强推（改写历史，先与协作者协调）。
-4. 即使清理完成，也**保留已轮换**的假设：历史可能已被 clone / fork / 缓存。
-5. 若泄露的是 GitHub App 私钥：立刻在 App settings 生成新私钥（旧私钥立即失效），更新本地 `private-key.pem`；installation token 最多 1 小时自动过期。
-6. 复盘：把该文件模式加入 `.gitignore` 与 `check-secrets.sh` 的模式表，避免重犯。
+1. **立刻轮换**该密钥 / token。把这一步当第一步，不要先去改 git 历史。
+2. 检查相关服务的访问日志，确认有无异常使用。
+3. `git rm --cached` 移除并提交；若已推送，可用 `git filter-repo` 清历史并强推（先与协作者协调）。
+4. 清理完成后仍按"已泄露"处理：历史可能已被 clone / fork / 缓存。
+5. 复盘：把该文件模式加进 `.gitignore` 与 `scripts/check-secrets.sh`，避免重犯。
 
-## 报告
+## 报告问题
 
-这是公有仓库，**不要**在公开 issue / PR 里贴日志、配置片段或实例地址。
-如发现安全问题，请通过 GitHub 私有漏洞报告（Private vulnerability reporting）或直接联系仓库所有者。
+不要在公开 issue / PR 里贴日志、配置片段或实例地址。
+请用 GitHub 的 Private vulnerability reporting，或直接联系仓库所有者。
