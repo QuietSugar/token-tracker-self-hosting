@@ -229,8 +229,9 @@
   "use strict";
 
   var TOKEN_KEY = "tt.dash.token";
+  var REFRESH_KEY = "tt.dash.refresh";
   var PERIODS = { day: "day", week: "week", month: "month", total: "total" };
-  var state = { token: "", period: "month", device: "", busy: false, devices: [] };
+  var state = { token: "", refresh: "", period: "month", device: "", busy: false, devices: [], refreshing: null };
 
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), gate = $("gate");
@@ -283,23 +284,70 @@
   }
 
   // ---------------- 网络 ----------------
-  function api(path, params) {
+  function unauth(path, status, body) {
+    var e = new Error("HTTP " + status + " " + (body || "Unauthorized"));
+    e.unauthorized = true;
+    e.path = path;
+    e.status = status;
+    e.body = body;
+    return e;
+  }
+
+  function requestOnce(path, params, token) {
     var qs = new URLSearchParams(params || {});
     var tz = tzParams();
     Object.keys(tz).forEach(function (k) { if (!qs.has(k)) qs.set(k, tz[k]); });
     return fetch(path + "?" + qs.toString(), {
-      headers: { Authorization: "Bearer " + state.token },
+      // 同时带两个头：Authorization 是标准用法；X-TokenTracker-Token 是兜底，
+      // 供那些会把 Authorization 当自己凭据吃掉的反向代理/预览隧道后使用。
+      headers: { Authorization: "Bearer " + token, "X-TokenTracker-Token": "Bearer " + token },
       credentials: "same-origin"
     }).then(function (res) {
       if (res.status === 401) {
-        var e = new Error("登录已失效");
-        e.unauthorized = true;
-        throw e;
+        return res.text().then(function (t) { throw unauth(path, res.status, t.slice(0, 120)); });
       }
       if (!res.ok) {
         return res.text().then(function (t) { throw new Error("HTTP " + res.status + " " + t.slice(0, 160)); });
       }
       return res.json();
+    });
+  }
+
+  // access token 只有 1 小时（TT_ACCESS_TOKEN_TTL 默认 3600）。过期的常见表现就是
+  // "用着用着突然说登录失效"，所以 401 先换一次 refresh token 再重试，
+  // 换不到才真的把用户请回登录页。
+  function refreshSession() {
+    if (!state.refresh) return Promise.reject(unauth("/api/auth/refresh", 401, "没有 refresh token"));
+    if (!state.refreshing) {
+      state.refreshing = fetch("/api/auth/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ refreshToken: state.refresh })
+      }).then(function (res) {
+        return res.json().then(function (b) { return { status: res.status, body: b }; });
+      }).then(function (r) {
+        var at = r.body && (r.body.accessToken || r.body.access_token);
+        if (r.status !== 200 || !at) throw unauth("/api/auth/refresh", r.status, "refresh 失败");
+        state.token = at;
+        var rt = r.body.refreshToken || r.body.refresh_token;
+        if (rt) state.refresh = rt;  // 服务端每次刷新都会轮换 refresh token
+        persist();
+        state.refreshing = null;
+      }, function () {
+        state.refreshing = null;
+        throw unauth("/api/auth/refresh", 0, "连不上服务");
+      });
+    }
+    return state.refreshing;
+  }
+
+  function api(path, params) {
+    return requestOnce(path, params, state.token).catch(function (err) {
+      if (!err || !err.unauthorized) throw err;
+      return refreshSession().then(function () {
+        return requestOnce(path, params, state.token);
+      });
     });
   }
 
@@ -513,7 +561,7 @@
         banner("注意：" + idle.length + " 台设备在当前时间范围内没有用量（已列在「按设备」里，可选中后查看），所以它们的数字是 0。");
       }
     }).catch(function (err) {
-      if (err && err.unauthorized) { signOut(true); return; }
+      if (err && err.unauthorized) { signOut(true, err); return; }
       banner("加载失败：" + (err && err.message ? err.message : String(err)));
     }).then(function () {
       state.busy = false;
@@ -522,18 +570,37 @@
   }
 
   // ---------------- 登录 / 会话 ----------------
-  function signOut(lost) {
+  function persist() {
+    try {
+      sessionStorage.setItem(TOKEN_KEY, state.token);
+      if (state.refresh) sessionStorage.setItem(REFRESH_KEY, state.refresh);
+    } catch (e) { /* 隐私模式：只是刷新页面后要重新登录 */ }
+  }
+
+  function signOut(lost, cause) {
     state.token = "";
-    try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* 隐私模式 */ }
+    state.refresh = "";
+    try {
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(REFRESH_KEY);
+    } catch (e) { /* 隐私模式 */ }
     app.hidden = true;
     gate.classList.remove("hidden");
-    $("gateErr").textContent = lost ? "登录已失效，请重新登录。" : "";
+    // 把"到底哪个请求、什么状态、返回了什么"写出来：401 可能来自服务端，
+    // 也可能来自中间那层反代（它把 Authorization 头吃掉时表现就是这样）。
+    var detail = "";
+    if (lost && cause) {
+      detail = "（" + (cause.path || "接口") + " → HTTP " + (cause.status || "?") +
+        (cause.body ? "：" + String(cause.body).replace(/\s+/g, " ").slice(0, 100) : "") + "）";
+    }
+    $("gateErr").textContent = lost ? "登录已失效，请重新登录。" + detail : "";
     $("password").value = "";
   }
 
-  function enter(token) {
+  function enter(token, refresh) {
     state.token = token;
-    try { sessionStorage.setItem(TOKEN_KEY, token); } catch (e) { /* 隐私模式 */ }
+    state.refresh = refresh || "";
+    persist();
     gate.classList.add("hidden");
     app.hidden = false;
     $("gateErr").textContent = "";
@@ -555,7 +622,8 @@
       return res.json().then(function (body) { return { status: res.status, body: body }; });
     }).then(function (r) {
       var token = r.body && (r.body.accessToken || r.body.access_token);
-      if (r.status === 200 && token) { enter(token); return; }
+      var refresh = r.body && (r.body.refreshToken || r.body.refresh_token);
+      if (r.status === 200 && token) { enter(token, refresh); return; }
       var msg = (r.body && (r.body.error || r.body.message)) || ("HTTP " + r.status);
       $("gateErr").textContent = msg === "Invalid email or password"
         ? "邮箱或密码不对。若没有账户，请用下面的 JWT 方式进入。"
@@ -594,7 +662,8 @@
   // 恢复上次的 token（同一个标签页）
   try {
     var saved = sessionStorage.getItem(TOKEN_KEY);
-    if (saved) enter(saved);
+    var savedRefresh = sessionStorage.getItem(REFRESH_KEY);
+    if (saved) enter(saved, savedRefresh);
   } catch (e) { /* 隐私模式下忽略 */ }
 })();
 </script>

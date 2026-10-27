@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"regexp"
+	"time"
 	"strings"
 	"testing"
 )
@@ -158,11 +159,14 @@ func TestAccountDailySumsCost(t *testing.T) {
 // 以及唯一一个 POST（拿登录 session）。多出任何写端点都意味着页面越权。
 func TestDashboardIsReadOnly(t *testing.T) {
 	body := string(homeHTML)
-	if n := strings.Count(body, "method:"); n != 1 {
-		t.Fatalf("看板里有 %d 处显式 method:，只允许登录那一处", n)
+	// 只允许两个 POST，且都必须是 /api/auth/ 下的会话端点（登录 / 续期）。
+	if n := strings.Count(body, `method: "POST"`); n != 2 {
+		t.Fatalf("看板里有 %d 处 POST，只允许登录与续期这两处", n)
 	}
-	if !strings.Contains(body, `method: "POST"`) {
-		t.Fatal("唯一的 POST 应该用于建立登录会话")
+	for _, ep := range []string{"/api/auth/sessions", "/api/auth/refresh"} {
+		if !strings.Contains(body, ep) {
+			t.Fatalf("缺少会话端点 %q", ep)
+		}
 	}
 	for _, banned := range []string{
 		"tokentracker-ingest", "device-token-issue", "remove-device",
@@ -216,5 +220,53 @@ func TestHealthExposesBuildInfo(t *testing.T) {
 	}
 	if body["version"] != "1.2.3" || body["ref"] != "abc1234" {
 		t.Fatalf("/health version=%v ref=%v", body["version"], body["ref"])
+	}
+}
+
+// 有些反向代理/预览隧道会把 Authorization 当成自己的凭据吃掉，
+// 于是"密码能登录、一读数据就 401"。兜底头要能独立认证。
+func TestFallbackAuthHeader(t *testing.T) {
+	s, db := testServer(t)
+	h := s.Handler()
+	uid := "33333333-3333-4333-8333-333333333333"
+	if _, err := db.Exec(`INSERT INTO auth_users(id,email) VALUES(?,?)`, uid, "fallback@local.test"); err != nil {
+		t.Fatal(err)
+	}
+	jwt := s.signJWT(uid, "authenticated", s.now.Unix()+3600)
+	path := "/functions/tokentracker-account-summary?from=2026-10-01&to=2026-10-26&tz=UTC"
+
+	// X-TokenTracker-Token 接受带/不带 "Bearer " 两种写法；Authorization 仍按标准只认 Bearer。
+	for _, c := range []struct{ header, value string }{
+		{"X-TokenTracker-Token", "Bearer " + jwt},
+		{"X-TokenTracker-Token", jwt},
+		{"Authorization", "Bearer " + jwt},
+	} {
+		header, value := c.header, c.value
+		{
+			r := httptest.NewRequest("GET", path, nil)
+			r.Header.Set(header, value)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			if w.Code != 200 {
+				t.Fatalf("%s=%q… status=%d body=%s", header, value[:12], w.Code, w.Body.String())
+			}
+		}
+	}
+
+	// 没有 token 时仍然是 401（不能因为多了兜底头就放行）。
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+	if w.Code != 401 {
+		t.Fatalf("无 token status=%d, want 401", w.Code)
+	}
+}
+
+// 生产默认时钟必须是真实时间：曾经写死成 2026-10-26T00:00:00Z，
+// 结果「今日」永远是空的、heatmap 的 to 与 rolling 窗口全部错位。
+func TestDefaultClockIsRealTime(t *testing.T) {
+	t.Setenv("TT_NOW", "")
+	s := New(testDB(t))
+	if d := s.now.Sub(time.Now().UTC()); d > 5*time.Minute || d < -5*time.Minute {
+		t.Fatalf("默认时钟偏离真实时间 %v（s.now=%s）", d, s.now)
 	}
 }

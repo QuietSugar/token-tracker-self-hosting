@@ -160,6 +160,12 @@ docker pull ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental-<short
 - 设备下拉**列出全部设备**，包括当前时间范围内 0 用量的（标注"无用量"）。官方 dashboard 会
   把 0 用量的设备藏起来，看起来像"设备丢了"，这里刻意不藏。
 
+- access token 只有 1 小时（`TT_ACCESS_TOKEN_TTL`）。过期时页面会用登录拿到的 refresh token
+  自动续一次再重试，续不上才回登录页，并写明是哪个请求、什么状态码、返回了什么。
+- 如果你的反代/网关会把 `Authorization` 当自己的凭据吃掉（表现：密码能登录，一读数据全是 401），
+  看板同时发的 `X-TokenTracker-Token: Bearer <jwt>` 能兜住；服务端接受任意一个。
+  确认是不是这一层的问题：`TT_ACCESS_LOG=true` 起服务，请求那一行会显示 `auth=no`。
+
 想换成官方 dashboard，按 §3.6 配 `TT_DASHBOARD_URL` 即可，两者不冲突。
 
 ---
@@ -184,7 +190,8 @@ docker pull ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental-<short
 | `TT_AUTH_ALLOWED_ORIGINS` | 空 = 回显任意 Origin | `/api/auth/*` 允许的跨域来源（逗号分隔）。带 cookie 的跨域不能用 `*`。 |
 | `TT_AUTH_COOKIE_SECURE` | `auto` | cookie 的 `Secure`：`auto`（直连看 TLS、反代看 `X-Forwarded-Proto`）/ `true` / `false`。 |
 | `TT_AUTH_REVOKE_ON_REUSE` | `false` | 旧 refresh token 被重放时是否撤销该用户全部会话（默认只拒绝，避免并发刷新误伤）。 |
-| `TT_NOW` | 真实时间 | 冻结时钟（RFC3339）。**仅测试**用。 |
+| `TT_NOW` | 真实时间 | 冻结时钟（RFC3339）。**仅测试**用；不设就用真实时间。 |
+| `TT_ACCESS_LOG` | `false` | 打开后每个请求打一行 `access: GET /path 200 auth=yes origin=-`。排查"密码能登录、一读数据就 401"时用它确认代理有没有把 `Authorization` 吃掉。 |
 | `TT_ENABLE_TEST_ENDPOINTS` | `false` | 打开 `/_test/*`（含**可执行任意 SQL** 的 `/_test/sql`）。**生产必须保持 false。** |
 
 ### 2.1 JWT 约定
@@ -613,6 +620,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tokentracker
 | 启动即退：`schema migration 1 checksum drift` | 用新版本二进制连了旧 schema 的库（或有人手改了表） | 用与备份/旧数据同版本的镜像启动；不要手改表结构 |
 | `sql: unknown driver "postgres"` | 用了自行裁剪的构建，缺少驱动 import | 用官方镜像或完整 `go build ./cmd/server` |
 | 401 一直返回 | JWT 密钥与签发方不一致 / `exp` 过期 / 缺 `role` | 用 jwt.io 解 payload 对比 `TT_JWT_SECRET` |
+| **登录成功但所有 `/functions/*` 都 401** | 反向代理/SSO/预览隧道把 `Authorization` 头吃了（它在那一层被当成自己的凭据） | 开 `TT_ACCESS_LOG=true` 看请求行是不是 `auth=no`；是的话让代理透传该头，或用 `X-TokenTracker-Token`（内建看板两个都发） |
 | 403 `server role required` | 调了 `/api/database/rpc/*` 但 JWT `role` 不是 `project_admin` | 用服务角色 token，或改用 `/functions/*` |
 | 上传报 `Upload too large` / `Too many buckets` | 单次 body >1 MiB / >500 桶 | 客户端分批 |
 | 容器 `read_only` 下启动失败 | `/tmp` 不可写 | compose 已加 `tmpfs: /tmp`，自行部署时别忘 |
