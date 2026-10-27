@@ -5,22 +5,72 @@
 
 ---
 
-## 0. 它是什么、不是什么
+## 0. 定位：局域网自用
+
+这个后端的目标场景是**自己部署在局域网、自己用**：一台 mini PC / NAS / 树莓派，
+单实例、几个自己的设备往上传统计数据。因此：
+
+- **不做注册/登录**。没有 signup / signin / OAuth / 找回密码——这是**设计选择，不是缺口**。
+  服务只**验证** JWT（HS256，密钥 `TT_JWT_SECRET`），token 用附带的脚本自己签（见 §1.0）。
+- **不做多租户隔离**。你签出来的 token 归一个固定 `sub`，所有设备都属于这个账户。
+- **不假设有公网入口**。默认只监听 `127.0.0.1` / 局域网地址，不要求域名、证书、反向代理。
+- **不做计费**。付费/试用 RPC 明确拒绝，自托管策略固定为免费可用。
 
 | | |
 |---|---|
-| ✅ 是 | 一个**独立**的 Go HTTP 服务，实现了 TokenTracker v1.4.12 的 14 个私有函数核心路径：设备授权、设备 token、用量上传（整行修正/幂等）、账户 summary/daily/hourly/monthly/heatmap/model-breakdown/devices、自托管免费策略、billing catalog。 |
-| ✅ 是 | 同一份二进制、同一个镜像，**两种数据库**：SQLite（零依赖单文件）或 PostgreSQL（推荐）。 |
-| ❌ 不是 | InsForge + PostgREST 的替代品。**没有** signup/signin/OAuth/password reset，不会提供 InsForge SDK/PostgREST 兼容 API。 |
-| ❌ 不是 | 生产 GA。没有速率限制、审计日志、多实例 advisory lock、完整 24 表映射、备份自动化。 |
+| ✅ 是 | 独立的 Go HTTP 服务，实现 TokenTracker v1.4.12 的 14 个私有函数核心路径：设备 token、用量上传（整行修正/幂等）、账户 summary/daily/hourly/monthly/heatmap/model-breakdown/devices、自托管免费策略、billing catalog。 |
+| ✅ 是 | 同一份二进制、同一个镜像，**两种数据库**：PostgreSQL（推荐）或 SQLite（零依赖单文件）。 |
+| ❌ 不是 | 公网多用户服务，也不是 InsForge + PostgREST 的替代品（不提供 InsForge SDK 兼容 API）。 |
+| ❌ 不是 | 生产 GA。没有速率限制、审计日志、多副本锁；见 [STATUS.md](STATUS.md)。 |
 
-**认证怎么来？** 服务只**验证** JWT（HS256，`TT_JWT_SECRET` 签发），不负责发放。
-也就是说：**你必须自己在前面放一个签发 JWT 的认证层**（现有 dashboard/客户端后端的登录取 token 逻辑），
-把 `Authorization: Bearer <jwt>` 转发给本服务。设备侧则用本服务签发的 device token。
+> 将来若要接正式认证（账号体系 / 多用户），改动点是明确的：在 `Server.auth()`
+> 与 ingest 的 device token 校验处接入即可，本仓库不预留死配置项，避免增加维护面。
+> 现在不加，是因为局域网自用加认证只会带来额外摩擦。
 
 ---
 
 ## 1. 60 秒快速开始
+
+### 1.0 先拿到 token（没有登录，用脚本签）
+
+服务只验证 JWT，所以第一次使用只需要签一个 token：
+
+```sh
+export TT_JWT_SECRET="$(openssl rand -hex 32)"   # 与服务端必须完全一致，≥32 字节
+
+cd go-server
+./scripts/issue-token.sh                          # 打印 token + curl 示例（默认 365 天）
+./scripts/issue-token.sh --json                   # 只输出 token，方便脚本取值
+./scripts/issue-token.sh --role project_admin     # 需要调 /api/database/rpc/* 时
+```
+
+- 默认 `sub` 是固定的 `11111111-1111-4111-8111-111111111111`，**首次使用会自动建账户行**，
+  所以不需要任何注册步骤；也可以 `--sub <你自己编的 UUID>` 换一个。
+- token 等于该账户的全部读写权限：别提交到 git、别贴到聊天里。
+- 轮换：换掉 `TT_JWT_SECRET` 并重启服务，旧 token 立即全部失效。
+- 这个脚本不参与服务端逻辑，将来接入正式认证后可以直接弃用。
+
+拿到 token 后的完整最小流程（局域网内、服务已启动）：
+
+```sh
+TOKEN=$(./scripts/issue-token.sh --json)
+
+# 1) 换设备 token（上传用量用它，不是 JWT；首次会自动建账户）
+DEV=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"device_name":"desktop","platform":"linux","machine_id":"m-local"}' \
+  http://127.0.0.1:8080/functions/tokentracker-device-token-issue)
+DTOK=$(echo "$DEV" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+
+# 2) 上传一个小时的用量
+curl -s -X POST -H "Authorization: Bearer $DTOK" -H 'Content-Type: application/json' \
+  -d '{"buckets":[{"hour_start":"2026-10-20T10:00:00Z","source":"codex","model":"gpt-6",
+       "input_tokens":1234,"total_tokens":1234,"billable_total_tokens":1234,"conversation_count":1}]}' \
+  http://127.0.0.1:8080/functions/tokentracker-ingest
+
+# 3) 读回来
+curl -s -H "Authorization: Bearer $TOKEN" \
+  'http://127.0.0.1:8080/functions/tokentracker-account-summary?from=2026-10-20&to=2026-10-20'
+```
 
 ### 1.1 Docker Compose + PostgreSQL（推荐）
 
@@ -29,8 +79,8 @@ git clone https://github.com/QuietSugar/token-tracker-self-hosting.git
 cd token-tracker-self-hosting/go-server
 
 export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
-export TT_JWT_SECRET="$(openssl rand -hex 32)"     # ≥32 字节，必须保密且与你的认证层一致
-export TT_DASHBOARD_URL="https://你的-dashboard-域名"
+export TT_JWT_SECRET="$(openssl rand -hex 32)"     # ≥32 字节；签 token 时用同一个值
+export TT_DASHBOARD_URL="http://192.168.1.10:8080"  # 设备授权页地址，仅网页授权流程才用到
 
 docker compose -f docker-compose.postgres-go.example.yml up -d
 curl -fsS http://127.0.0.1:8080/health && echo OK
@@ -333,7 +383,8 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tokentracker
 ## 7. 安全清单（上线前逐项打勾）
 
 - [ ] `TT_JWT_SECRET` 由 `openssl rand -hex 32` 生成，只存在 `EnvironmentFile`/secret 里，权限 `0600`，未提交 git
-- [ ] 服务只绑定 `127.0.0.1`，公网流量经反代 + TLS
+- [ ] 服务只绑定 `127.0.0.1` 或内网地址；**不做端口转发/公网映射**
+- [ ] HTTPS：纯内网可信环境可以不启用（token 会在局域网内明文传输）；一旦要跨网络访问，请自行加 TLS 反代
 - [ ] `TT_ENABLE_TEST_ENDPOINTS` 未设置（或为 `false`）；反代对 `/_test` 直接 404
 - [ ] PostgreSQL：独立低权限账号（只在目标库/schema 上有 DML+DDL），不从公网暴露 5432
 - [ ] SQLite：数据目录 `0700`，DB 文件 `0600`（服务默认 umask 077 已保证）
@@ -364,7 +415,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tokentracker
 
 ## 9. 已知限制（会影响你的架构决策）
 
-1. **没有注册/登录**：必须自备 JWT 签发层（见 §0）。
+1. **没有注册/登录**：按 §1.0 用脚本签 token。这是定位选择，不是待补功能。
 2. **没有 InsForge/PostgREST 兼容 API**：dashboard 若硬编码 InsForge endpoint，需要改 base URL/路由。
 3. **只有 14 张表**（PG 参考清单 24 张）：session states、赠送码审计、支付/Waffo 审计等未实现。
    自托管模式下这些功能是有意排除的（付费 RPC 返回明确拒绝）。
