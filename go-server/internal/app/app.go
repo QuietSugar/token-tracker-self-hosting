@@ -37,8 +37,15 @@ type Server struct {
 	db        *store.DB
 	secret    []byte
 	dashboard string
-	now       time.Time
-	testMode  bool
+	// deviceApprove 决定「设备授权怎么被批准」：
+	//   jwt  （默认）POST /functions/tokentracker-device-flow-grant，需 JWT
+	//   page        GET /device 页面点按钮（无认证，局域网自用）
+	//   auto        申请即批准到 defaultSub（官方客户端 tracker device-login 零交互）
+	deviceApprove string
+	// defaultSub 是没有登录体系时唯一的账户（与 scripts/issue-token.sh 的默认 sub 一致）。
+	defaultSub string
+	now        time.Time
+	testMode   bool
 	// mu 串行化写路径（设备签发、ingest 整行修正），使 SQLite 单写者与 PostgreSQL
 	// 多连接在同一个进程里表现一致。注意：它是**进程内**互斥；多实例部署时不同进程
 	// 之间没有 advisory lock 保护（见 STATUS.md「仍然缺什么」）。
@@ -53,11 +60,15 @@ func New(db *store.DB) *Server {
 		}
 	}
 	return &Server{
-		db:        db,
-		secret:    []byte(envOr("TT_JWT_SECRET", "contract-test-secret")),
-		dashboard: envOr("TT_DASHBOARD_URL", "https://private.example.test"),
-		now:       now,
-		testMode:  os.Getenv("TT_ENABLE_TEST_ENDPOINTS") == "true",
+		db:     db,
+		secret: []byte(envOr("TT_JWT_SECRET", "contract-test-secret")),
+		// 留空 = 用请求自己的 Host 推导（见 dashboardFor），这样官方客户端的
+		// base_url 无论填 localhost 还是局域网 https 域名都对得上。
+		dashboard:     envOr("TT_DASHBOARD_URL", ""),
+		deviceApprove: envOr("TT_DEVICE_APPROVE", "jwt"),
+		defaultSub:    envOr("TT_DEFAULT_ACCOUNT", "11111111-1111-4111-8111-111111111111"),
+		now:           now,
+		testMode:      os.Getenv("TT_ENABLE_TEST_ENDPOINTS") == "true",
 	}
 }
 
@@ -204,6 +215,8 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("/_test/manifest", s.testManifest)
 		mux.HandleFunc("/_test/install", s.testInstall)
 	}
+	mux.HandleFunc("/device", s.devicePage)
+	mux.HandleFunc("/device/approve", s.deviceApproveHTTP)
 	mux.HandleFunc("/functions/", s.functions)
 	mux.HandleFunc("/api/database/rpc/", s.rpc)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 404, map[string]any{"error": "not found"}) })

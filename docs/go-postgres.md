@@ -61,7 +61,9 @@ PG 连接串注意 `sslmode`：容器内网通常 `sslmode=disable`；云上托�
 
 服务端起来只是"空账本"，两种方式填数据：
 
-1. **装官方客户端**，把它上报的 `baseUrl` 指向这台机器（见 `docs/runbook.md`）——之后自动累积。
+1. **装官方客户端**，把它上报的 `baseUrl` 指向这台机器——之后自动累积。
+   完整步骤、`base_url` 必须 HTTPS 的限制、设备批准三种模式见
+   **[`docs/official-client.md`](official-client.md)**（已用官方 CLI v1.4.12 实测 device-login + sync）。
 2. **已经有历史用量**（CSV / 客户端导出 / 自建脚本的日志）：用
    [`go-server/scripts/import-usage.py`](../go-server/scripts/import-usage.py) 导入，
    完整用法见 **`go-server/README.md` §3.5**（三步导入、列名别名表、重复导入不重复计数、常见报错）。

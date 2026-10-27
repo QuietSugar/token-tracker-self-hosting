@@ -44,6 +44,13 @@
 - 已发布实验镜像 `ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental`（linux/amd64+arm64，含 SBOM/provenance，不发布 latest）；推送前强制 SQLite+PG 双模式 smoke。
 - 新增运维脚本：`scripts/full-test.sh`（L0–L5 全量测试）、`scripts/backup.sh`（SQLite/PG 备份/恢复/清理）、
   `scripts/issue-token.sh`（自签 JWT，替换「注册登录」的替代品）。
+- **官方客户端兼容（native-client E2E）**：用上游 v1.4.12 CLI 实测
+  `init` / `device-login` / `sync` / `doctor` 全部通过（HTTPS + 私有 CA、以及 localhost 明文两条链路）。
+  为此新增：`TT_DEVICE_APPROVE`（`jwt`/`page`/`auto`）、`/device` 批准页、
+  `TT_DASHBOARD_URL` 留空时按 `Host`+`X-Forwarded-Proto` 推导（客户端要求 `verification_uri` 与
+  `base_url` 同源）、`scripts/approve-device.sh`。文档 `docs/official-client.md`。
+  **仍缺**：`/api/auth/refresh` 与 OAuth 会话，所以客户端「跨设备 account 视图」在自托管下不可用
+  （上传与本机视图不受影响）。
 - `scripts/import-usage.py`：把本地已有用量（CSV/JSONL/JSON）导入服务，含时间归一化（任意时区→UTC 整点）、
   列名别名、按主键去重、自动分批（≤500/批、≤512KB）、退避重试、device token 缓存；
   与服务端的「整行替换」语义配合，可反复重跑不重复计数。用于**接入真实数据**（见 README §3.5）。
@@ -182,10 +189,14 @@ Go 版本则通过独立的 33 个 HTTP 行为用例（SQLite 与 PostgreSQL 各
   真要跑多副本，需要先补 `pg_advisory_xact_lock`（记在这里，不排期）。
 - **公网暴露能力**（速率限制、WAF、TLS 终止）：不做。定位是内网；需要时由反代/网络层负责。
 
-### 6. 客户端 E2E 仍未验收
+### 6. 客户端 E2E：已验收上传链路，跨设备视图未接
 
-- 原生客户端的真实 base URL/config 路由、设备授权浏览器页、回调还未对 Go server 做 E2E。
-- HTTPS、反向代理、账号删除恢复流程均未验收（按定位也不强求）。
+- ✅ 已用上游 **v1.4.12 官方 CLI** 实测：`init` / `device-login` / `sync` / `doctor`，
+  两条链路（`http://localhost` 明文、`https://` + 私有 CA + `NODE_EXTRA_CA_CERTS`）都通。
+  设备批准三种模式（`jwt`/`page`/`auto`）与 `/device` 批准页见 `../docs/official-client.md`。
+- ❌ **未实现 `/api/auth/refresh`**（官方 InsForge OAuth 层）：客户端「跨设备 account 视图」
+  在自托管下退回本机视图。补齐它不需要改客户端，是纯服务端工作。
+- 未验收：账号删除/恢复流程、菜单栏 App 的原生（非 CLI）路径。
 
 ---
 

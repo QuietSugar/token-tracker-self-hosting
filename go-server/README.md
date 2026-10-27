@@ -158,7 +158,9 @@ PostgreSQL 模式（连真实 PG 建 schema、health 200、日志脱敏、`/_tes
 | `TT_POSTGRES_SCHEMA` | 默认 search_path | 仅 PG：把表放进指定 schema（多实例共用一个库、或测试隔离）。启动时 `CREATE SCHEMA IF NOT EXISTS`。 |
 | `TT_POSTGRES_SCHEMA_EPHEMERAL` | `false` | 仅 PG：进程退出时 `DROP SCHEMA … CASCADE`。**只用于测试，别在生产开。** |
 | `TT_LISTEN_ADDR` | `127.0.0.1:8080` | 监听地址。容器里用 `0.0.0.0:8080`。 |
-| `TT_DASHBOARD_URL` | `https://private.example.test` | 设备授权返回的 `verification_uri` / `verification_uri_complete` 前缀。 |
+| `TT_DASHBOARD_URL` | 空 = 按请求推导 | 设备授权返回的 `verification_uri` / `verification_uri_complete` 前缀。**留空时**用 `X-Forwarded-Proto` + `Host` 推导（推荐，官方客户端要求它与客户端 `base_url` 同源）。 |
+| `TT_DEVICE_APPROVE` | `jwt` | 设备授权怎么被批准：`jwt`（POST `device-flow-grant` 带 JWT）/ `page`（访问 `/device` 点按钮，无认证）/ `auto`（申请即批准，官方客户端 `device-login` 零交互）。详见 [`../docs/official-client.md`](../docs/official-client.md)。 |
+| `TT_DEFAULT_ACCOUNT` | `11111111-1111-4111-8111-111111111111` | `page` / `auto` 批准时归属的账户 sub（与 `scripts/issue-token.sh` 默认值一致）。 |
 | `TT_NOW` | 真实时间 | 冻结时钟（RFC3339）。**仅测试**用。 |
 | `TT_ENABLE_TEST_ENDPOINTS` | `false` | 打开 `/_test/*`（含**可执行任意 SQL** 的 `/_test/sql`）。**生产必须保持 false。** |
 
@@ -328,6 +330,40 @@ timestamp,provider,model,prompt_tokens,completion_tokens,cached_tokens,reasoning
 ```
 
 > 注意 `--jwt` 用文件里的长期 token 时，请把该文件设为 `0600`。
+
+---
+
+## 3.6 用官方客户端连上来（替代官方云服务）
+
+这是本项目**最主要的使用方式**：官方 TokenTracker 客户端（CLI / 菜单栏 App）照常安装使用，
+只把它的 `base_url` 指向你自托管的这个服务。官方云要收费之后，这条路让你继续有云端同步。
+
+**三步**（完整说明与排错见 [`docs/official-client.md`](../docs/official-client.md)）：
+
+```sh
+# ① 服务端：打开"零交互设备批准"，让客户端 device-login 直接过
+TT_DEVICE_APPROVE=auto ./bin/tokentracker-server
+
+# ② 客户端：一个 anon key（公开、无权限，只用来通过客户端的前置校验）
+ANON=$(./scripts/issue-token.sh --role anon --json)
+tracker init --base-url http://localhost:8080 --anon-key "$ANON"
+tracker device-login --base-url http://localhost:8080 --anon-key "$ANON"
+
+# ③ 之后照常用：tracker sync / 菜单栏 App 都指向你自己的服务
+tracker sync
+```
+
+⚠️ **客户端硬性要求**：`base_url` 只能是 `https://…` 或 `http://localhost`（`127.0.0.1`/`::1`）。
+局域网 IP 走明文 HTTP 会被客户端自己拒掉 —— 见 `docs/official-client.md` §2 的三条出路
+（单机用 localhost 最简单；局域网用反代 + 私有 CA + `NODE_EXTRA_CA_CERTS`，已实测）。
+
+| 能力 | 官方客户端 ↔ 本服务 |
+|---|---|
+| `device-login` 拿 device token | ✅ 实测通过（`auto`/`page`/`jwt` 三种批准模式） |
+| `sync` 上传用量（≤500 桶/批、幂等） | ✅ 实测通过，重传不重复计数 |
+| 菜单栏/仪表盘的**本机**用量视图 | ✅ 客户端自己算，与服务端无关 |
+| `account-*` **跨设备汇总**视图 | ❌ 需要 InsForge OAuth refresh token（官方 dashboard 登录才有）；本服务只用 JWT + device token，跨设备汇总请直接查 §2 的 `account-summary` 或见 `docs/official-client.md` §5 |
+| `tokentracker-telemetry` | ⚪ 本服务返回 404，客户端忽略，无影响 |
 
 ---
 

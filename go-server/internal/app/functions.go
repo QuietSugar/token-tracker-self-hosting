@@ -86,10 +86,17 @@ func (s *Server) deviceAuthorize(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, err.Error())
 		return
 	}
+	if s.deviceApprove == "auto" {
+		if _, err := s.approveDeviceCode(s.defaultSub, uc); err != nil {
+			fail(w, 500, err.Error())
+			return
+		}
+	}
+	origin := s.dashboardFor(r)
 	writeJSON(w, 200, map[string]any{
 		"device_code": dc, "user_code": uc,
-		"verification_uri":          s.dashboard + "/device",
-		"verification_uri_complete": s.dashboard + "/device?user_code=" + uc,
+		"verification_uri":          origin + "/device",
+		"verification_uri_complete": origin + "/device?user_code=" + uc,
 		"expires_in":                900, "interval": 5,
 	})
 }
@@ -183,20 +190,43 @@ func (s *Server) deviceGrant(w http.ResponseWriter, r *http.Request, sub string)
 		UserCode string `json:"user_code"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&b)
-	var dc string
-	var mid sql.NullString
-	var ci sql.NullString
-	err := s.db.QueryRow(`SELECT device_code,machine_id,client_info FROM device_codes WHERE user_code=?`, b.UserCode).
-		Scan(&dc, &mid, &ci)
+	ci, err := s.approveDeviceCode(sub, b.UserCode)
 	if err != nil {
-		fail(w, 400, "Invalid user code")
+		fail(w, 400, err.Error())
 		return
 	}
+	writeJSON(w, 200, map[string]any{
+		"ok": true, "status": "approved", "membership": s.membership(sub),
+		"client_info": ci,
+	})
+}
 
-	// 签发设备 token + 设备记录（与 deviceIssue 等价）
+// approveDeviceCode 把一个 pending 的设备码批准给 sub，签发 device token 并建好设备行。
+//
+// 语义与参考实现一致：user_code 不存在 → 错误；已批准 -> 幂等返回（不重复签发）。
+// 抽出来是为了让三条批准路径（JWT 审批 / /device 页面 / 自动批准）走同一段逻辑，
+// 避免「只改了一处，另一处还是老代码」这类偏差。
+func (s *Server) approveDeviceCode(sub, userCode string) (clientInfo string, err error) {
+	if strings.TrimSpace(userCode) == "" {
+		return "", errors.New("user_code required")
+	}
+	var dc string
+	var mid, ci sql.NullString
+	var status string
+	err = s.db.QueryRow(`SELECT device_code,machine_id,client_info,status FROM device_codes WHERE user_code=?`,
+		strings.ToUpper(strings.TrimSpace(userCode))).Scan(&dc, &mid, &ci, &status)
+	if err != nil {
+		return "", errors.New("Invalid user code")
+	}
+	if status == "approved" || status == "used" {
+		// 幂等：重复批准不换 token（客户端可能重试，页面也可能刷新）。
+		return ci.String, nil
+	}
+	if status == "expired" {
+		return "", errors.New("user code expired")
+	}
 	if err := s.ensureAccount(sub); err != nil {
-		fail(w, 500, err.Error())
-		return
+		return "", err
 	}
 	tok := randomHex(32)
 	actualMid := mid.String
@@ -205,25 +235,20 @@ func (s *Server) deviceGrant(w http.ResponseWriter, r *http.Request, sub string)
 	}
 	did, err := s.deviceFor(sub, "Device Flow", "cli", actualMid, newID())
 	if err != nil {
-		fail(w, 500, err.Error())
-		return
+		return "", err
 	}
 	if err := s.machineFor(sub, "Device Flow", actualMid, "cli"); err != nil {
-		fail(w, 500, err.Error())
-		return
+		return "", err
 	}
-	_, err = s.db.Exec(`INSERT INTO device_tokens(id,user_id,device_id,token_hash,created_at) VALUES(?,?,?,?,?)`,
-		newID(), sub, did, tokenHash(tok), s.nowISO())
-	if err != nil {
-		fail(w, 500, err.Error())
-		return
+	if _, err = s.db.Exec(`INSERT INTO device_tokens(id,user_id,device_id,token_hash,created_at) VALUES(?,?,?,?,?)`,
+		newID(), sub, did, tokenHash(tok), s.nowISO()); err != nil {
+		return "", err
 	}
-	_, _ = s.db.Exec(`UPDATE device_codes SET status='approved', user_id=?, approved_at=?, device_token=?, device_id=? WHERE device_code=?`,
-		sub, s.nowISO(), tok, did, dc)
-	writeJSON(w, 200, map[string]any{
-		"ok": true, "status": "approved", "membership": s.membership(sub),
-		"client_info": ci.String,
-	})
+	if _, err = s.db.Exec(`UPDATE device_codes SET status='approved', user_id=?, approved_at=?, device_token=?, device_id=? WHERE device_code=?`,
+		sub, s.nowISO(), tok, did, dc); err != nil {
+		return "", err
+	}
+	return ci.String, nil
 }
 
 func (s *Server) deviceIssue(w http.ResponseWriter, r *http.Request, sub string) {
