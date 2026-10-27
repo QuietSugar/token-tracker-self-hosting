@@ -255,6 +255,70 @@ func trimBlankSQL(s string) string {
 	return s
 }
 
+// ---------- 增量迁移（additive migrations） ----------
+//
+// 为什么不直接改 schemaBody：schemaBody 的 checksum 是「已安装 schema 未被篡改」的
+// 证据（Install 里做 fail-closed 比对），改一行就会让所有已部署实例启动即失败。
+// 也不动 SchemaVersion：它同时出现在 /_test/manifest 与 /_test/install 的响应里，
+// 被契约 golden 逐字段比对（见 contract/scenarios/01-install.json）。
+//
+// 所以新增表走这里：每个 step 只做 CREATE ... IF NOT EXISTS 这类**可重放**的加法，
+// 单独记一行 schema_additions(version, name, checksum)。老实例升级时只跑新 step，
+// 新实例全量跑一遍，两者终态一致。
+//
+// 约定：step 一经发布**永不修改**（改动 = 新的 step），checksum 漂移视为篡改并拒绝启动。
+var additiveSteps = []struct {
+	Version int
+	Name    string
+	SQL     string
+}{
+	{1, "auth-sessions", `
+-- 自托管的"账户密码凭据"（InsForge 的 auth.users 等价物；密码只存 PBKDF2 哈希）
+CREATE TABLE IF NOT EXISTS auth_credentials (
+  user_id TEXT PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS auth_credentials_email ON auth_credentials(email);
+
+-- 刷新令牌（对应 InsForge 的 refresh session）：只存 SHA-256，支持轮换与撤销
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL,
+  csrf_hash TEXT NOT NULL,
+  client TEXT NOT NULL DEFAULT 'browser',
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS auth_sessions_token ON auth_sessions(token_hash);
+CREATE INDEX IF NOT EXISTS auth_sessions_user ON auth_sessions(user_id);
+`},
+}
+
+// SchemaLedgerVersion 是「core schema + 所有增量 step」的逻辑版本，仅用于日志与文档；
+// 不参与契约响应（那用的是 SchemaVersion）。
+func SchemaLedgerVersion() int {
+	v := SchemaVersion
+	for _, st := range additiveSteps {
+		if st.Version > v {
+			v = st.Version
+		}
+	}
+	return v
+}
+
+// AdditiveSteps 返回已发布的增量 step 版本号（测试与文档用）。
+func AdditiveSteps() []int {
+	out := make([]int, 0, len(additiveSteps))
+	for _, st := range additiveSteps {
+		out = append(out, st.Version)
+	}
+	return out
+}
+
 // Install 建表并写入迁移账本；可重复调用（幂等）。
 // PostgreSQLReferenceSteps 仅是审计映射（见 checksums.go），不进入本账本。
 func Install(ctx context.Context, db *DB) error {
@@ -294,5 +358,52 @@ func Install(ctx context.Context, db *DB) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return installAdditiveSteps(ctx, db)
+}
+
+// installAdditiveSteps 逐个应用 additiveSteps：已应用且 checksum 一致 → 跳过；
+// 已应用但 checksum 不同 → 拒绝启动（fail closed）；未应用 → 执行并记账。
+func installAdditiveSteps(ctx context.Context, db *DB) error {
+	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_additions (
+  version INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  checksum TEXT NOT NULL,
+  applied_at TEXT NOT NULL
+)`); err != nil {
+		return fmt.Errorf("schema additions ledger: %w", err)
+	}
+	for _, st := range additiveSteps {
+		checksum := additiveChecksum(st.Name, st.SQL)
+		var prior string
+		err := db.QueryRowContext(ctx, `SELECT checksum FROM schema_additions WHERE version=?`, st.Version).Scan(&prior)
+		switch {
+		case err == nil && prior != checksum:
+			return fmt.Errorf("%s additive migration %d (%s) checksum drift: installed=%s current=%s",
+				db.Dialect(), st.Version, st.Name, prior, checksum)
+		case err == nil:
+			continue // 已应用
+		case !errors.Is(err, sql.ErrNoRows):
+			return err
+		}
+		for _, stmt := range splitStatements(st.SQL) {
+			if _, err := db.ExecContext(ctx, stmt); err != nil {
+				return fmt.Errorf("schema addition %d (%s): %w", st.Version, st.Name, err)
+			}
+		}
+		if _, err := db.ExecContext(ctx,
+			`INSERT INTO schema_additions(version,name,checksum,applied_at) VALUES(?,?,?,?)`,
+			st.Version, st.Name, checksum, appliedAt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// additiveChecksum 只覆盖该 step 自己的名字与 SQL（不含引擎渲染差异，step 里不用占位符）。
+func additiveChecksum(name, sqlText string) string {
+	sum := sha256.Sum256([]byte(name + "\x00" + sqlText))
+	return hex.EncodeToString(sum[:])
 }

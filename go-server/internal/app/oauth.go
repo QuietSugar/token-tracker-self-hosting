@@ -1,0 +1,625 @@
+package app
+
+// oauth.go —— 与 InsForge **同流程**的自托管认证实现（oauth / session 两条路）。
+//
+// 为什么需要它：官方客户端的「跨设备 account 视图」是这样走的
+//
+//	菜单栏 popover
+//	  → 本地 CLI(127.0.0.1:7680)，把浏览器的登录 cookie 转存为 relay cookies
+//	  → POST {base}/api/auth/refresh?client_type=mobile  {refresh_token}
+//	  → GET  {base}/functions/tokentracker-account-*     Authorization: Bearer <accessToken>
+//
+// 之前只实现了 `/functions/*`，没有 `/api/auth/*`，这条链在第一步就断了，
+// 于是 account 视图永远退回"仅本机"。本文件补齐最小流程。
+//
+// 与 InsForge 对齐的**流程与形状**（不是它的实现）：
+//
+//	1. 注册/登录  → 一次性给 access token(短) + refresh token(长) + csrf token
+//	2. access token 是我们自己的 HS256 JWT（sub=用户 id，role=authenticated），
+//	   它同时就是 /functions/* 的 Authorization 凭据 —— 不需要第二套验签。
+//	3. 刷新 → POST /api/auth/refresh：轮换 refresh token（旧的立即失效），
+//	   browser 模式（cookie）必须带 X-CSRF-Token；mobile 模式（body refresh_token）不需要 CSRF。
+//	4. 撤销 → POST /api/auth/logout：把该 refresh token 标记 revoked。
+//	   再次使用已撤销的 token 视为泄露信号：撤销该用户全部会话。
+//
+// 存储：只存 refresh/csrf 的 SHA-256；密码只存 PBKDF2-HMAC-SHA256。
+// 表在 store 的 additive migration #1（auth_credentials / auth_sessions）。
+//
+// 明确不做（自托管定位）：OAuth 第三方登录、邮件验证/找回密码、多用户管理后台。
+
+import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"database/sql"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const (
+	refreshCookieName = "insforge_refresh_token"
+	csrfCookieName    = "insforge_csrf_token"
+	pbkdf2Iterations  = 120_000
+)
+
+// authConfig 是认证相关的运行时配置（全部有安全默认值）。
+type authConfig struct {
+	accessTTL  time.Duration
+	refreshTTL time.Duration
+	allowNew   bool     // 已有 owner 后是否还允许自助注册
+	origins    []string // 非空时只允许这些 Origin 带凭据跨域
+	cookieMode string   // auto | true | false
+	// revokeOnReuse：检测到已轮换的 refresh token 被重放时，撤销该用户全部会话。
+	// 默认 false —— 并发刷新比"泄露"常见得多（见 authRefresh 的注释）。
+	revokeOnReuse bool
+}
+
+func loadAuthConfig() authConfig {
+	return authConfig{
+		accessTTL:     time.Duration(envInt("TT_ACCESS_TOKEN_TTL", 3600)) * time.Second,
+		refreshTTL:    time.Duration(envInt("TT_REFRESH_TOKEN_TTL", 90*24*3600)) * time.Second,
+		allowNew:      os.Getenv("TT_AUTH_ALLOW_SIGNUP") == "true",
+		origins:       splitCSV(os.Getenv("TT_AUTH_ALLOWED_ORIGINS")),
+		cookieMode:    strings.ToLower(envOr("TT_AUTH_COOKIE_SECURE", "auto")),
+		revokeOnReuse: os.Getenv("TT_AUTH_REVOKE_ON_REUSE") == "true",
+	}
+}
+
+func envInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return def
+}
+
+func splitCSV(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, strings.TrimSuffix(p, "/"))
+		}
+	}
+	return out
+}
+
+// ---------- 路由 ----------
+
+// authAPI 是 /api/auth/ 的总入口。用绝对路径分发（与 InsForge SDK 的调用一一对应）。
+func (s *Server) authAPI(w http.ResponseWriter, r *http.Request) {
+	s.applyAuthCORS(w, r)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	path := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/auth/"), "/")
+	switch {
+	case path == "users" && r.Method == http.MethodPost:
+		s.authSignUp(w, r)
+	case path == "sessions" && r.Method == http.MethodPost:
+		s.authSignIn(w, r)
+	case path == "sessions/current" && r.Method == http.MethodGet:
+		s.authCurrentSession(w, r)
+	case path == "sessions" && r.Method == http.MethodGet:
+		s.authListSessions(w, r)
+	case path == "refresh" && r.Method == http.MethodPost:
+		s.authRefresh(w, r)
+	case path == "logout" && r.Method == http.MethodPost:
+		s.authLogout(w, r)
+	case path == "public-config" && r.Method == http.MethodGet:
+		s.authPublicConfig(w, r)
+	case path == "profiles/current" && r.Method == http.MethodGet:
+		s.authProfile(w, r)
+	default:
+		writeJSON(w, 404, map[string]any{"error": "Not found", "code": "NOT_FOUND"})
+	}
+}
+
+// applyAuthCORS：带 cookie 的跨域请求不能用 `*`，必须回显 Origin + 允许凭据。
+// 默认回显任何 Origin（局域网自用）；设 TT_AUTH_ALLOWED_ORIGINS 可收紧。
+func (s *Server) applyAuthCORS(w http.ResponseWriter, r *http.Request) {
+	origin := strings.TrimSuffix(r.Header.Get("Origin"), "/")
+	if origin == "" {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		return
+	}
+	allowed := len(s.authCfg.origins) == 0
+	for _, o := range s.authCfg.origins {
+		if o == origin {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return
+	}
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Set("Vary", "Origin")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey, X-CSRF-Token, X-Requested-With")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Max-Age", "600")
+}
+
+// ---------- 注册 / 登录 ----------
+
+func (s *Server) authSignUp(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		Name     string `json:"name"`
+	}
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&b) != nil {
+		authFail(w, 400, "INVALID_BODY", "Request body must be JSON with email and password")
+		return
+	}
+	email := normalizeEmail(b.Email)
+	if !validEmail(email) || len(b.Password) < 8 {
+		authFail(w, 400, "INVALID_CREDENTIALS_FORMAT", "A valid email and a password of at least 8 characters are required")
+		return
+	}
+	var owners int
+	if err := s.db.QueryRow(`SELECT count(*) FROM auth_credentials`).Scan(&owners); err != nil {
+		authFail(w, 500, "INTERNAL", err.Error())
+		return
+	}
+	if owners > 0 && !s.authCfg.allowNew {
+		authFail(w, 403, "SIGNUP_DISABLED",
+			"This instance already has an owner account; sign-up is closed. Set TT_AUTH_ALLOW_SIGNUP=true to allow more accounts.")
+		return
+	}
+	uid := newID()
+	if err := s.ensureAccount(uid); err != nil {
+		authFail(w, 500, "INTERNAL", err.Error())
+		return
+	}
+	if _, err := s.db.Exec(`UPDATE auth_users SET email=? WHERE id=?`, email, uid); err != nil {
+		authFail(w, 500, "INTERNAL", err.Error())
+		return
+	}
+	if _, err := s.db.Exec(`INSERT INTO auth_credentials(user_id,email,password_hash,created_at) VALUES(?,?,?,?)`,
+		uid, email, hashPassword(b.Password), s.nowISO()); err != nil {
+		authFail(w, 409, "EMAIL_TAKEN", "That email is already registered on this instance")
+		return
+	}
+	s.respondWithSession(w, r, uid, "browser")
+}
+
+func (s *Server) authSignIn(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&b) != nil {
+		authFail(w, 400, "INVALID_BODY", "Request body must be JSON with email and password")
+		return
+	}
+	email := normalizeEmail(b.Email)
+	var uid, stored string
+	err := s.db.QueryRow(`SELECT user_id,password_hash FROM auth_credentials WHERE email=?`, email).Scan(&uid, &stored)
+	if err != nil || !verifyPassword(stored, b.Password) {
+		// 不区分「邮箱不存在」与「密码错」，避免枚举账号。
+		authFail(w, 401, "INVALID_CREDENTIALS", "Invalid email or password")
+		return
+	}
+	s.respondWithSession(w, r, uid, "browser")
+}
+
+// respondWithSession 签发一对 token 并回写 cookie（browser 模式）。
+func (s *Server) respondWithSession(w http.ResponseWriter, r *http.Request, uid, client string) {
+	refresh, csrf, err := s.newSession(uid, client)
+	if err != nil {
+		authFail(w, 500, "INTERNAL", err.Error())
+		return
+	}
+	user, err := s.userPayload(uid)
+	if err != nil {
+		authFail(w, 500, "INTERNAL", err.Error())
+		return
+	}
+	if client == "browser" {
+		s.setAuthCookies(w, r, refresh, csrf)
+	}
+	writeJSON(w, 200, map[string]any{
+		"accessToken":  s.signJWT(uid, "authenticated", s.now.Add(s.authCfg.accessTTL).Unix()),
+		"refreshToken": refresh,
+		"csrfToken":    csrf,
+		"user":         user,
+	})
+}
+
+// ---------- 刷新 / 撤销 ----------
+
+func (s *Server) authRefresh(w http.ResponseWriter, r *http.Request) {
+	// mobile 模式：body 里带 refresh_token（官方客户端的 performMint 就这么调）。
+	// browser 模式：refresh token 在 httpOnly cookie 里，另需 X-CSRF-Token。
+	var b struct {
+		RefreshToken string `json:"refresh_token"`
+		RefreshCamel string `json:"refreshToken"`
+	}
+	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&b)
+	bodyToken := firstNonEmpty(b.RefreshToken, b.RefreshCamel)
+	mobile := r.URL.Query().Get("client_type") == "mobile" || bodyToken != ""
+
+	token := bodyToken
+	client := "mobile"
+	if !mobile {
+		client = "browser"
+		token = cookieValue(r, refreshCookieName)
+	}
+	if token == "" {
+		authFail(w, 401, "AUTH_UNAUTHORIZED", "Missing refresh token")
+		return
+	}
+
+	var id, uid, csrfHash, expiresAt string
+	var revoked sql.NullString
+	err := s.db.QueryRow(`SELECT id,user_id,csrf_hash,expires_at,revoked_at FROM auth_sessions WHERE token_hash=?`,
+		tokenHash(token)).Scan(&id, &uid, &csrfHash, &expiresAt, &revoked)
+	if err != nil {
+		authFail(w, 401, "AUTH_UNAUTHORIZED", "Invalid refresh token")
+		return
+	}
+	if revoked.Valid {
+		// 已撤销/已轮换的 token 又被使用。
+		//
+		// 默认只拒绝，**不**全量撤销：官方客户端有两条并发的取数路径
+		// （popover 的 account 视图 + dashboard 自己的刷新），它们各自持有一份
+		// relay 里读到的 refresh token；把一次并发当成"令牌泄露"会让用户莫名其妙被登出。
+		// 需要更严的策略时设 TT_AUTH_REVOKE_ON_REUSE=true（泄露处置场景）。
+		if s.authCfg.revokeOnReuse {
+			_, _ = s.db.Exec(`UPDATE auth_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL`,
+				s.nowISO(), uid)
+		}
+		authFail(w, 401, "REFRESH_TOKEN_REUSED", "Refresh token was already rotated or revoked")
+		return
+	}
+	if expiresAt < s.nowISO() {
+		authFail(w, 401, "AUTH_UNAUTHORIZED", "Refresh token expired")
+		return
+	}
+	if client == "browser" {
+		got := r.Header.Get("X-CSRF-Token")
+		if got == "" || subtle.ConstantTimeCompare([]byte(tokenHash(got)), []byte(csrfHash)) != 1 {
+			authFail(w, 403, "INVALID_CSRF_TOKEN", "Missing or invalid CSRF token")
+			return
+		}
+	}
+	// 轮换：旧的立即失效，新的接替（client 类型保持不变）。
+	if _, err := s.db.Exec(`UPDATE auth_sessions SET revoked_at=? WHERE id=? AND revoked_at IS NULL`, s.nowISO(), id); err != nil {
+		authFail(w, 500, "INTERNAL", err.Error())
+		return
+	}
+	s.respondWithSession(w, r, uid, client)
+}
+
+func (s *Server) authLogout(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		RefreshToken string `json:"refresh_token"`
+		RefreshCamel string `json:"refreshToken"`
+	}
+	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&b)
+	token := firstNonEmpty(b.RefreshToken, b.RefreshCamel, cookieValue(r, refreshCookieName))
+	if token != "" {
+		_, _ = s.db.Exec(`UPDATE auth_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL`,
+			s.nowISO(), tokenHash(token))
+	}
+	s.clearAuthCookies(w, r)
+	writeJSON(w, 200, map[string]any{"success": true})
+}
+
+// ---------- 读取当前用户 ----------
+
+func (s *Server) authCurrentSession(w http.ResponseWriter, r *http.Request) {
+	sub, _, _, ok := s.auth(r)
+	if !ok {
+		authFail(w, 401, "AUTH_UNAUTHORIZED", "Authentication required")
+		return
+	}
+	user, err := s.userPayload(sub)
+	if err != nil {
+		authFail(w, 401, "AUTH_UNAUTHORIZED", "Session user no longer exists")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"user": user})
+}
+
+func (s *Server) authProfile(w http.ResponseWriter, r *http.Request) {
+	sub, _, _, ok := s.auth(r)
+	if !ok {
+		authFail(w, 401, "AUTH_UNAUTHORIZED", "Authentication required")
+		return
+	}
+	user, err := s.userPayload(sub)
+	if err != nil {
+		authFail(w, 401, "AUTH_UNAUTHORIZED", "Session user no longer exists")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"profile": nil, "user": user})
+}
+
+// authListSessions：客户端"已登录设备"页会读它；自托管只需要能返回结构。
+func (s *Server) authListSessions(w http.ResponseWriter, r *http.Request) {
+	sub, _, _, ok := s.auth(r)
+	if !ok {
+		authFail(w, 401, "AUTH_UNAUTHORIZED", "Authentication required")
+		return
+	}
+	rows, err := s.db.Query(`SELECT id,client,created_at,expires_at,revoked_at FROM auth_sessions
+		WHERE user_id=? ORDER BY created_at DESC`, sub)
+	if err != nil {
+		authFail(w, 500, "INTERNAL", err.Error())
+		return
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var id, client, created, expires string
+		var revoked sql.NullString
+		if err := rows.Scan(&id, &client, &created, &expires, &revoked); err != nil {
+			authFail(w, 500, "INTERNAL", err.Error())
+			return
+		}
+		item := map[string]any{"id": id, "clientType": client, "createdAt": created, "expiresAt": expires}
+		if revoked.Valid {
+			item["revokedAt"] = revoked.String
+		}
+		items = append(items, item)
+	}
+	writeJSON(w, 200, map[string]any{"sessions": items})
+}
+
+func (s *Server) authPublicConfig(w http.ResponseWriter, r *http.Request) {
+	var owners int
+	_ = s.db.QueryRow(`SELECT count(*) FROM auth_credentials`).Scan(&owners)
+	writeJSON(w, 200, map[string]any{
+		"emailSignIn":       true,
+		"emailSignUp":       owners == 0 || s.authCfg.allowNew,
+		"passwordMinLength": 8,
+		"oauthProviders":    []string{},
+		"selfHosted":        true,
+	})
+}
+
+// ---------- 内部工具 ----------
+
+// newSession 落库一条 refresh 会话（轮换时调用方负责先撤销旧行）。
+func (s *Server) newSession(uid, client string) (refresh, csrf string, err error) {
+	refresh = randomHex(32)
+	csrf = randomHex(16)
+	_, err = s.db.Exec(`INSERT INTO auth_sessions(id,user_id,token_hash,csrf_hash,client,created_at,expires_at)
+		VALUES(?,?,?,?,?,?,?)`,
+		newID(), uid, tokenHash(refresh), tokenHash(csrf), client,
+		s.nowISO(), s.now.Add(s.authCfg.refreshTTL).UTC().Format(time.RFC3339))
+	return refresh, csrf, err
+}
+
+func (s *Server) userPayload(uid string) (map[string]any, error) {
+	var email string
+	if err := s.db.QueryRow(`SELECT email FROM auth_users WHERE id=?`, uid).Scan(&email); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"id":            uid,
+		"email":         email,
+		"name":          "",
+		"emailVerified": true,
+		"profile":       nil,
+		"createdAt":     s.nowISO(),
+	}, nil
+}
+
+func (s *Server) secureCookies(r *http.Request) bool {
+	switch s.authCfg.cookieMode {
+	case "true":
+		return true
+	case "false":
+		return false
+	}
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+func (s *Server) setAuthCookies(w http.ResponseWriter, r *http.Request, refresh, csrf string) {
+	secure := ""
+	if s.secureCookies(r) {
+		secure = "; Secure"
+	}
+	maxAge := int(s.authCfg.refreshTTL.Seconds())
+	// refresh：HttpOnly（JS 读不到，只能靠 SDK 的凭据转发）
+	http.SetCookie(w, &http.Cookie{
+		Name: refreshCookieName, Value: refresh, Path: "/", HttpOnly: true,
+		SameSite: http.SameSiteLaxMode, MaxAge: maxAge, Secure: secure != "",
+	})
+	// csrf：必须可被 JS 读取（SDK 的 getCsrfToken 从 document.cookie 取），所以不设 HttpOnly
+	http.SetCookie(w, &http.Cookie{
+		Name: csrfCookieName, Value: csrf, Path: "/",
+		SameSite: http.SameSiteLaxMode, MaxAge: maxAge, Secure: secure != "",
+	})
+}
+
+func (s *Server) clearAuthCookies(w http.ResponseWriter, r *http.Request) {
+	for _, name := range []string{refreshCookieName, csrfCookieName} {
+		http.SetCookie(w, &http.Cookie{
+			Name: name, Value: "", Path: "/", HttpOnly: name == refreshCookieName,
+			SameSite: http.SameSiteLaxMode, MaxAge: -1,
+		})
+	}
+}
+
+func cookieValue(r *http.Request, name string) string {
+	c, err := r.Cookie(name)
+	if err != nil {
+		return ""
+	}
+	if v, err := urlQueryUnescape(c.Value); err == nil {
+		return v
+	}
+	return c.Value
+}
+
+// urlQueryUnescape 处理 cookie 里被 encodeURIComponent 过的值（%2D 之类）。
+func urlQueryUnescape(s string) (string, error) {
+	if !strings.Contains(s, "%") {
+		return s, nil
+	}
+	return decodePercent(s)
+}
+
+// authFail 统一错误形状：InsForge SDK 读 `error` + `code`，据此决定是否触发刷新。
+func authFail(w http.ResponseWriter, status int, code, msg string) {
+	writeJSON(w, status, map[string]any{"error": msg, "code": code, "statusCode": status, "message": msg})
+}
+
+func normalizeEmail(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
+
+func validEmail(s string) bool {
+	at := strings.IndexByte(s, '@')
+	if at < 1 || at == len(s)-1 {
+		return false
+	}
+	if strings.ContainsAny(s, " \t\r\n<>") {
+		return false
+	}
+	return strings.Contains(s[at+1:], ".")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// ---------- 密码哈希（PBKDF2-HMAC-SHA256，标准库实现，避免额外依赖） ----------
+
+func hashPassword(password string) string {
+	salt := make([]byte, 16)
+	_, _ = rand.Read(salt)
+	dk := pbkdf2SHA256([]byte(password), salt, pbkdf2Iterations, 32)
+	return fmt.Sprintf("pbkdf2_sha256$%d$%s$%s", pbkdf2Iterations,
+		base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(dk))
+}
+
+func verifyPassword(stored, password string) bool {
+	parts := strings.Split(stored, "$")
+	if len(parts) != 4 || parts[0] != "pbkdf2_sha256" {
+		return false
+	}
+	iter, err := strconv.Atoi(parts[1])
+	if err != nil || iter <= 0 || iter > 5_000_000 {
+		return false
+	}
+	salt, err1 := base64.RawStdEncoding.DecodeString(parts[2])
+	want, err2 := base64.RawStdEncoding.DecodeString(parts[3])
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	got := pbkdf2SHA256([]byte(password), salt, iter, len(want))
+	return subtle.ConstantTimeCompare(got, want) == 1
+}
+
+// pbkdf2SHA256 是 RFC 8018 PBKDF2 的最小实现（够用即可，不引入 x/crypto）。
+func pbkdf2SHA256(password, salt []byte, iter, keyLen int) []byte {
+	hashLen := sha256.Size
+	blocks := (keyLen + hashLen - 1) / hashLen
+	out := make([]byte, 0, blocks*hashLen)
+	var idx [4]byte
+	for block := 1; block <= blocks; block++ {
+		binary.BigEndian.PutUint32(idx[:], uint32(block))
+		mac := hmac.New(sha256.New, password)
+		mac.Write(salt)
+		mac.Write(idx[:])
+		u := mac.Sum(nil)
+		t := make([]byte, len(u))
+		copy(t, u)
+		for i := 1; i < iter; i++ {
+			mac = hmac.New(sha256.New, password)
+			mac.Write(u)
+			u = mac.Sum(nil)
+			for j := range t {
+				t[j] ^= u[j]
+			}
+		}
+		out = append(out, t...)
+	}
+	return out[:keyLen]
+}
+
+// ---------- 首次启动的 owner 引导 ----------
+
+// EnsureAuthBootstrap 在启动时调用：如果配置了 TT_AUTH_EMAIL / TT_AUTH_PASSWORD
+// 且库里还没有任何凭据，就创建这个 owner 账户。
+//
+// 为什么需要：官方客户端/dashboard 的登录框需要一组已知的邮箱密码；
+// 自托管没有注册后台，用环境变量把"这台机器的所有者"钉下来最省事。
+// 不配置也完全能用：第一个访问 /api/auth/users（注册）的人成为 owner。
+//
+// 返回是否新建了账户；密码不打印、不落日志（只回报邮箱与 user id）。
+func (s *Server) EnsureAuthBootstrap() (created bool, email string, err error) {
+	emailRaw := os.Getenv("TT_AUTH_EMAIL")
+	pass := os.Getenv("TT_AUTH_PASSWORD")
+	if emailRaw == "" || pass == "" {
+		return false, "", nil
+	}
+	email = normalizeEmail(emailRaw)
+	if !validEmail(email) || len(pass) < 8 {
+		return false, "", errors.New("TT_AUTH_EMAIL must be a valid email and TT_AUTH_PASSWORD at least 8 characters")
+	}
+	var stored string
+	err = s.db.QueryRow(`SELECT password_hash FROM auth_credentials WHERE email=?`, email).Scan(&stored)
+	switch {
+	case err == nil:
+		return false, email, nil // 已存在：不覆盖密码（避免重启把用户改过的密码打回去）
+	case !errors.Is(err, sql.ErrNoRows):
+		return false, "", err
+	}
+	uid := newID()
+	if err := s.ensureAccount(uid); err != nil {
+		return false, "", err
+	}
+	if _, err := s.db.Exec(`UPDATE auth_users SET email=? WHERE id=?`, email, uid); err != nil {
+		return false, "", err
+	}
+	if _, err := s.db.Exec(`INSERT INTO auth_credentials(user_id,email,password_hash,created_at) VALUES(?,?,?,?)`,
+		uid, email, hashPassword(pass), s.nowISO()); err != nil {
+		return false, "", err
+	}
+	return true, email, nil
+}
+
+// decodePercent 解 %XX（只用于 cookie 值，等价于 URL 解码但不受 '+' 影响）。
+func decodePercent(s string) (string, error) {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] != '%' {
+			b.WriteByte(s[i])
+			continue
+		}
+		if i+2 >= len(s) {
+			return "", errors.New("truncated escape")
+		}
+		v, err := hex.DecodeString(s[i+1 : i+3])
+		if err != nil {
+			return "", err
+		}
+		b.WriteByte(v[0])
+		i += 2
+	}
+	return b.String(), nil
+}

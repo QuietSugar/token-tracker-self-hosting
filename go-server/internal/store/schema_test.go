@@ -284,3 +284,84 @@ func TestWithSearchPath(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// 增量迁移：新表只加不改，老实例升级后终态与新实例一致。
+func TestAdditiveMigrationsApplyAndAreIdempotent(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	for i := 0; i < 2; i++ {
+		if err := Install(ctx, db); err != nil {
+			t.Fatalf("install #%d: %v", i+1, err)
+		}
+	}
+	steps := AdditiveSteps()
+	if len(steps) == 0 {
+		t.Fatal("expected at least one additive step")
+	}
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM schema_additions`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != len(steps) {
+		t.Fatalf("schema_additions rows=%d want %d", count, len(steps))
+	}
+	for _, tbl := range []string{"auth_credentials", "auth_sessions"} {
+		var n int
+		if err := db.QueryRow(`SELECT count(*) FROM ` + tbl).Scan(&n); err != nil {
+			t.Fatalf("%s missing after install: %v", tbl, err)
+		}
+	}
+}
+
+// 模拟「上一个版本已经装过」的库：清掉增量账本与新增表后再 Install，
+// 必须把缺的 step 补上（老用户升级不失败）。
+func TestAdditiveMigrationsUpgradeExistingInstall(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	if err := Install(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range []string{
+		`DROP TABLE IF EXISTS auth_sessions`,
+		`DROP TABLE IF EXISTS auth_credentials`,
+		`DROP INDEX IF EXISTS auth_credentials_email`,
+		`DELETE FROM schema_additions`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("%s: %v", stmt, err)
+		}
+	}
+	var pre int
+	if err := db.QueryRow(`SELECT count(*) FROM auth_sessions`).Scan(&pre); err == nil {
+		t.Fatal("precondition failed: table should be gone")
+	}
+	if err := Install(ctx, db); err != nil {
+		t.Fatalf("upgrade install: %v", err)
+	}
+	var post int
+	if err := db.QueryRow(`SELECT count(*) FROM auth_sessions`).Scan(&post); err != nil {
+		t.Fatalf("upgrade did not create auth_sessions: %v", err)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM schema_additions`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != len(AdditiveSteps()) {
+		t.Fatalf("additions=%d want %d", n, len(AdditiveSteps()))
+	}
+}
+
+// 已发布的 step 被改动必须拒绝启动（和 core schema 的 drift 保护同等强度）。
+func TestAdditiveMigrationChecksumDriftRefused(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	if err := Install(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE schema_additions SET checksum='tampered' WHERE version=?`, AdditiveSteps()[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := Install(ctx, db); err == nil {
+		t.Fatal("expected additive checksum drift to be refused")
+	}
+}

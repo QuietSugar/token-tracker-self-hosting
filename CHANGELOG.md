@@ -2,6 +2,57 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — 认证层：/api/auth/*（同 InsForge 流程，自写实现）
+
+上一轮把「设备上报」跑通了，但官方客户端的**跨设备 account 视图**还挂在 `/api/auth/*` 上——
+那条链第一步就 404，客户端于是静默降级成"仅本机"。这一轮补齐。
+
+### 新增端点（流程与 InsForge 一致，代码是 Go 自己写的）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/auth/users` | 注册（仅在还没有任何账户时允许，之后需 `TT_AUTH_ALLOW_SIGNUP=true`） |
+| POST | `/api/auth/sessions` | 登录 → `accessToken`(1h) + `refreshToken`(90d) + `csrfToken` + Set-Cookie |
+| POST | `/api/auth/refresh` | browser 模式（cookie + `X-CSRF-Token`）或 mobile 模式（`?client_type=mobile` + body `{refresh_token}`），**轮换** |
+| POST | `/api/auth/logout` | 撤销 + 清 cookie |
+| GET | `/api/auth/sessions/current`、`/sessions`、`/profiles/current`、`/public-config` | 会话与配置读取 |
+
+- access token 复用本服务原有的 HS256 JWT（`sub` + `role=authenticated`），
+  `/functions/*` 不需要第二套验签 —— 客户端铸出来的 token 能直接读 `account-*`。
+- cookie 名与官方 SDK 对齐：`insforge_refresh_token`（HttpOnly）、`insforge_csrf_token`（JS 可读）。
+- 密码 PBKDF2-HMAC-SHA256（12 万轮、随机盐，标准库实现，不引入依赖）；
+  refresh/csrf 只存 SHA-256。
+- 安全取舍：轮换后旧 token 重放 → 401 `REFRESH_TOKEN_REUSED`，**默认不牵连其他会话**
+  （并发刷新比泄露常见得多）；要严格处置设 `TT_AUTH_REVOKE_ON_REUSE=true`。
+  登录失败统一文案（防账号枚举）、带凭据的 CORS 回显 Origin（可用 `TT_AUTH_ALLOWED_ORIGINS` 收紧）。
+- `TT_AUTH_EMAIL` / `TT_AUTH_PASSWORD` 可在启动时引导 owner 账户（幂等，不覆盖已存在密码）。
+
+### 存储：增量迁移机制
+
+新增表**不能**直接改 core schema（checksum drift 会让所有已部署实例启动失败），
+也不能动 `SchemaVersion`（它出现在契约响应里）。所以加了 `schema_additions` 账本：
+`{1: auth-sessions}` 建 `auth_credentials` / `auth_sessions`，老库只跑缺的 step，
+已发布 step 被改动即 fail closed。
+
+### 实测（官方 v1.4.12 的真实代码路径）
+
+```
+cloud-account.fetchAccountUsage → summary: total_tokens=7500；daily/hourly/monthly/heatmap/model-breakdown 均有数据
+轮换链 mint#1 → mint#2 OK
+走本地 CLI 全链路：127.0.0.1:7680/api/auth/sessions 登录 → relay 捕获 cookie →
+  GET /functions/tokentracker-usage-summary?account=1 → total_tokens=7500 cost=0.161000
+  → X-TokenTracker-Account-View: 1   （不再是"仅本机"）
+```
+
+### 测试与文档
+
+- 新增 6 个认证测试（注册/登录/轮换/重放/登出/CSRF/CORS/密码哈希/owner 引导）+ 3 个增量迁移测试。
+- `go test -race ./...`：SQLite ✅ / PostgreSQL 16 ✅；契约 33 PASS / 0 FAIL / 2 SKIP（两种引擎）。
+- 新增 `docs/oauth-selfhosted.md`（流程图、端点表、cookie 约定、安全语义、配置、自测、排错）
+  与 `scripts/check-oauth.sh`（一键自检）；`docs/official-client.md` §5 从"缺口"改为"已可用"。
+
+---
+
 ## 2026-10-27 — 官方客户端接入（native-client E2E）
 
 用户澄清：「真实数据」= **继续用官方客户端，只把后端换成本服务**（官方云要收费了）。

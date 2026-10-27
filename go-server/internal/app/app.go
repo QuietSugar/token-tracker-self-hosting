@@ -44,8 +44,10 @@ type Server struct {
 	deviceApprove string
 	// defaultSub 是没有登录体系时唯一的账户（与 scripts/issue-token.sh 的默认 sub 一致）。
 	defaultSub string
-	now        time.Time
-	testMode   bool
+	// authCfg 是 /api/auth/* 的运行时配置（见 oauth.go）。
+	authCfg  authConfig
+	now      time.Time
+	testMode bool
 	// mu 串行化写路径（设备签发、ingest 整行修正），使 SQLite 单写者与 PostgreSQL
 	// 多连接在同一个进程里表现一致。注意：它是**进程内**互斥；多实例部署时不同进程
 	// 之间没有 advisory lock 保护（见 STATUS.md「仍然缺什么」）。
@@ -67,6 +69,7 @@ func New(db *store.DB) *Server {
 		dashboard:     envOr("TT_DASHBOARD_URL", ""),
 		deviceApprove: envOr("TT_DEVICE_APPROVE", "jwt"),
 		defaultSub:    envOr("TT_DEFAULT_ACCOUNT", "11111111-1111-4111-8111-111111111111"),
+		authCfg:       loadAuthConfig(),
 		now:           now,
 		testMode:      os.Getenv("TT_ENABLE_TEST_ENDPOINTS") == "true",
 	}
@@ -217,6 +220,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.HandleFunc("/device", s.devicePage)
 	mux.HandleFunc("/device/approve", s.deviceApproveHTTP)
+	mux.HandleFunc("/api/auth/", s.authAPI)
 	mux.HandleFunc("/functions/", s.functions)
 	mux.HandleFunc("/api/database/rpc/", s.rpc)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 404, map[string]any{"error": "not found"}) })

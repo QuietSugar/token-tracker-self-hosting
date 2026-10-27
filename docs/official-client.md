@@ -17,7 +17,7 @@
 | `tracker sync` | `POST /functions/tokentracker-ingest` | ✅ | ✅ `inserted=2`，重传仍 7500 tokens |
 | `tracker doctor` | 探活 `base_url` | ✅ | ✅ 12 项 OK |
 | 菜单栏/托盘**本机**视图 | 本地 CLI 的 `localhost:7680` | 不涉及 | ✅ |
-| 跨设备汇总（account 视图） | `/api/auth/refresh` + `account-*` | ❌ 未实现 | 见 §5 |
+| 跨设备汇总（account 视图） | `/api/auth/sessions` → `/api/auth/refresh` → `account-*` | ✅ | ✅ `X-TokenTracker-Account-View: 1`，7500 tokens |
 | 匿名遥测 | `POST /functions/tokentracker-telemetry` | 404 | ⚪ 客户端忽略 |
 
 **能替代的部分**：设备接入 + 用量上传 + 数据留存（这就是"官方云收费"真正卡住的地方）。
@@ -143,35 +143,48 @@ open "https://tt.lan:8443/device"      # 输入 ABCD-EFGH 点批准
 
 ---
 
-## 5. 已知缺口：跨设备汇总视图
+## 5. 跨设备汇总视图（已经能用了）
 
-菜单栏 App 的 "account / 跨设备" 视图走的是另一条路：
+菜单栏 App 的 "account / 跨设备" 视图走的是另一条链：
 
 ```
-popover → 本地 CLI(127.0.0.1:7680) → 用浏览器登录留下的 refresh token
-                                    → POST {base_url}/api/auth/refresh?client_type=mobile
-                                    → GET  {base_url}/functions/tokentracker-account-*
+popover → 本地 CLI(127.0.0.1:7680) → 用登录留下的 refresh token
+                                  → POST {base_url}/api/auth/refresh?client_type=mobile
+                                  → GET  {base_url}/functions/tokentracker-account-*
 ```
 
-本服务端**没有** `/api/auth/refresh`（它属于官方 InsForge 的 OAuth 层），也不发放 refresh token，
-所以这条链在自托管下拿不到 access token，该视图会退回"仅本机"。
+**这一层现在已实现**（流程与 InsForge 一致，代码是 Go 自己写的，详见
+[`oauth-selfhosted.md`](oauth-selfhosted.md)）：
 
-不影响的部分：**上传、留存、本机所有视图都正常**。想在自己电脑上看跨设备汇总，三种办法：
+1. 在 dashboard（或本地 CLI 上的登录框）用邮箱密码登录：`POST /api/auth/sessions`；
+2. 本地 CLI 的 cookie relay 自动捕获 `insforge_refresh_token` / `insforge_csrf_token`；
+3. popover 读 `?account=1` → 本地 CLI 铸 access token（`/api/auth/refresh?client_type=mobile`）
+   → 打 `account-*` → 响应头 `X-TokenTracker-Account-View: 1`，数据来自你的服务器。
 
-```sh
-# ① 直接查服务端（任意设备、任意日期）
-curl -s -H "Authorization: Bearer $TOKEN" \
-  'http://127.0.0.1:8080/functions/tokentracker-account-summary?from=2026-10-01&to=2026-10-31'
+实测（官方 v1.4.12 的真实模块，两种方式都验过）：
 
-# ② 用 account-* 系列拼一个小页面/脚本（响应结构与客户端 usage-* 完全一致）
+```
+cloud-account.fetchAccountUsage 直接调用:
+  ✓ summary: total_tokens=7500
+  ✓ daily / hourly / monthly / heatmap / model-breakdown 全部返回数据
+  ✓ 轮换链 mint#1 → mint#2 OK
 
-# ③ 按机器看：account-devices 按 source 聚合，配合 ?from=&to=
+走本地 CLI 的完整链路:
+  POST 127.0.0.1:7680/api/auth/sessions         → 200，relay 捕获两个 cookie
+  POST /functions/tokentracker-cloud-sync-pref  → {"ok":true,"enabled":true}
+  GET  /functions/tokentracker-usage-summary?account=1&from=…&to=…
+       → total_tokens=7500 cost=0.161000
+       → X-TokenTracker-Account-View: 1
 ```
 
-**以后想补上**：在 `/api/auth/*` 下实现最小 OAuth 子集（`refresh` 接受本服务签发的长期 token，
-返回 access JWT），客户端无需改动。这是单向兼容工作，优先级看是否需要那个视图。
+前提条件（缺一就会静默降级回本机视图，响应头 `X-TokenTracker-Account-View: 0`）：
 
----
+- 服务端建好了 owner 账户：`TT_AUTH_EMAIL` + `TT_AUTH_PASSWORD` 启动一次，或首次
+  `POST /api/auth/users` 注册；
+- 你在 dashboard 里**打开云同步**（`cloud-sync-pref = true`），这是客户端自己的偏好；
+- 登录发生在**本地 CLI 的页面**（127.0.0.1:7680）上，否则 relay 拿不到 cookie。
+
+仍然没有的：第三方 OAuth 登录、邮件验证/找回密码、多账户后台（见 oauth-selfhosted.md §3）。
 
 ## 6. 端到端验收清单（可照抄）
 
@@ -220,5 +233,5 @@ account-summary → total_tokens= 7500
 | `A custom InsForge URL requires its own public anon key` | 没给 `--anon-key` | `--anon-key "$(./scripts/issue-token.sh --role anon --json)"` |
 | `tracker doctor` 里 `network.base_url` 显示 404 | 根路径没有路由，属正常 | 忽略；只会显示 `HTTP 404 (reachable)` |
 | `sync` 报 401 / `CLOUD_DEVICE_TOKEN_REJECTED` | 服务端换了 `TT_JWT_SECRET` 或换了实例 | 重新 `tracker device-login` |
-| 上传成功但 account 视图还是 0 | 看的是跨设备视图（§5），或 `from/to` 不含数据 | 用 §5 的 curl 核对 |
+| account 视图还是本机数据 | 响应头 `X-TokenTracker-Account-View: 0`，看 `X-TokenTracker-Account-Fallback` | `signed_out`→先登录（`TT_AUTH_EMAIL/PASSWORD` 或注册）；`cloud_sync_off`→dashboard 打开云同步；`transient-upstream`→看服务端日志 |
 | `device-login` 一直 pending | 模式是 `page`/`jwt`，还没人批准 | 批准一次，或改 `TT_DEVICE_APPROVE=auto` |
