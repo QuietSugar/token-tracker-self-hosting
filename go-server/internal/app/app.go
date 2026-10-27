@@ -227,7 +227,7 @@ func fail(w http.ResponseWriter, status int, msg string) {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]any{"ok": true}) })
+	mux.HandleFunc("/health", s.health)
 	mux.HandleFunc("/_test/health", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]any{"ok": true}) })
 	if s.testMode {
 		// Dangerously powerful fixture-only endpoints are absent from production by default.
@@ -242,7 +242,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/auth/", s.authAPI)
 	mux.HandleFunc("/functions/", s.functions)
 	mux.HandleFunc("/api/database/rpc/", s.rpc)
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 404, map[string]any{"error": "not found"}) })
+	// "/" 是内置只读看板（零依赖单文件）；其它未注册路径仍是 404 JSON。
+	mux.HandleFunc("/", s.root)
 	return mux
 }
 

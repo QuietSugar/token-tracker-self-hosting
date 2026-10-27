@@ -65,6 +65,7 @@ func run() error {
 	}
 
 	srv := app.New(db)
+	app.SetBuildInfo(version, vcsRef)
 	// 可选：用 TT_AUTH_EMAIL/TT_AUTH_PASSWORD 引导 owner 账户（官方 dashboard/客户端能直接登录）。
 	if created, email, err := srv.EnsureAuthBootstrap(); err != nil {
 		return err

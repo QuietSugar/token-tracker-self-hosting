@@ -2,6 +2,37 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — 内建只读看板 + `/health` 带上版本
+
+### 新增：`GET /` 是看板，不再是裸 404
+
+之前浏览器打开服务根路径只得到 `{"error":"not found"}`，用户必须另外把官方 dashboard
+跑起来（它依赖 `@insforge/sdk` 与外部分析脚本，内网没有公网出口时常常直接白屏）。
+现在服务端自带一个**单文件**看板：`go-server/internal/app/web/index.html`，用 `go:embed`
+打进二进制，零构建、零依赖、零外部请求。
+
+- 登录走已有的 `POST /api/auth/sessions`（owner 邮箱密码），或粘贴 `issue-token.sh` 签的 JWT；
+  token 只进 `sessionStorage`，关标签页即失效，不落盘、不写 cookie。
+- 只读：页面只发 GET，唯一的 POST 是登录；设备重命名/删除等写操作仍然只在 CLI 与官方客户端。
+- 内容：6 个统计卡、26 周热力图、按模型条形图、按设备列表、按日明细；
+  周期「今日 / 近 7 天 / 本月 / 全部（近 24 个月）」。
+- **刻意不学官方的 0 用量隐藏**：设备下拉与列表列出全部设备，0 用量标"无用量"。
+- 响应头带 `Content-Security-Policy: default-src 'none'` + `connect-src 'self'`，
+  外部资源在浏览器层面就引不进来；其它未注册路径仍然是原来的 404 JSON（脚本依赖该形状）。
+
+### 修复：`/functions/tokentracker-account-daily` 的 `total_cost_usd` 恒为 0
+
+`dayAgg.TotalCostUSD` 声明成 `int64` 且 `aggregateByDay` 从未给它赋值，于是按日费用一直是
+`0`，把每行的 `total_cost_usd` 丢掉了。现在按行累加、输出前收敛到 6 位（与 summary 的
+`%.6f` 口径一致）。契约 golden 里这些天本来就没有费用数据，所以仍是 `0`，33 个场景全部保持 PASS。
+
+### 新增：`/health` 暴露 `engine` / `version` / `ref`
+
+`main.version` 与 `main.vcsRef` 一直都在 `Dockerfile` 的 `-ldflags` 里注入，但没有任何代码
+读它们——排查"容器跑的是哪个镜像"时这俩就白注入了。现在 `GET /health` 返回
+`{"ok":true,"engine":"postgres","version":"experimental-<sha>","ref":"<full sha>"}`，
+`ok` 字段保持原样（镜像 smoke 与脚本都在断言它）。
+
 ## 2026-10-27 — 删除 SQLite 支持，只保留 PostgreSQL
 
 **先说归档点**：删除之前给当时的 `main` 打了 tag **`sqlite-final`**

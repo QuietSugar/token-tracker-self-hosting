@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -650,7 +651,7 @@ type dayAgg struct {
 	Day           string           `json:"day"`
 	TotalTokens   int64            `json:"total_tokens"`
 	Billable      int64            `json:"billable_total_tokens"`
-	TotalCostUSD  int64            `json:"total_cost_usd"`
+	TotalCostUSD  float64          `json:"total_cost_usd"`
 	InputTokens   int64            `json:"input_tokens"`
 	OutputTokens  int64            `json:"output_tokens"`
 	CachedInput   int64            `json:"cached_input_tokens"`
@@ -678,10 +679,16 @@ func aggregateByDay(rows []usageRow, z zone) []dayAgg {
 		a.CacheCreation += x.CacheCreation
 		a.Reasoning += x.Reasoning
 		a.Conversations += x.Conversations
+		var cost float64
+		_, _ = fmt.Sscanf(x.CostUSD, "%f", &cost)
+		a.TotalCostUSD += cost
 		a.Models[x.Model] += x.TotalTokens
 	}
 	out := make([]dayAgg, 0, len(m))
 	for _, a := range m {
+		// 逐行累加会带浮点尾巴（2.7594000000000003），对外统一收敛到 6 位，
+		// 与 summary 的 %.6f 口径一致；golden 里的 0 仍然是 0。
+		a.TotalCostUSD = math.Round(a.TotalCostUSD*1e6) / 1e6
 		out = append(out, *a)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Day < out[j].Day })

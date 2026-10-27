@@ -144,6 +144,26 @@ docker pull ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental-<short
 
 ---
 
+### 1.5 浏览器看板（内建，只读）
+
+服务端自己带一个页面，**不用装任何前端**：浏览器打开 `http://<你的地址>:8080/` 就是看板。
+
+- 登录：用 owner 的邮箱 + 密码（§3.7 那套 `/api/auth/sessions`），或者点"直接粘贴 JWT"，
+  把 `./scripts/issue-token.sh --json` 打印的 token 贴进去。token 只存在 `sessionStorage`，
+  关掉标签页就失效，不落盘、不写 cookie。
+- 内容：6 个统计卡（总量/输入/输出/缓存读+写/推理/费用）、最近 26 周热力图、按模型条形图、
+  按设备列表、按日明细；周期切换「今日 / 近 7 天 / 本月 / 全部」，「全部」= 近 24 个月。
+- **只读**：页面只发 GET，唯一的 POST 是登录本身；不提供改设备名、删设备、改用量之类的操作
+  （设备管理见 §3.6 的 CLI 与官方客户端）。
+- 零外部请求：样式、脚本全内联，不引 CDN/字体/统计脚本。所以内网没有公网出口也能正常显示，
+  响应头里 `Content-Security-Policy` 也把外联直接堵死。
+- 设备下拉**列出全部设备**，包括当前时间范围内 0 用量的（标注"无用量"）。官方 dashboard 会
+  把 0 用量的设备藏起来，看起来像"设备丢了"，这里刻意不藏。
+
+想换成官方 dashboard，按 §3.6 配 `TT_DASHBOARD_URL` 即可，两者不冲突。
+
+---
+
 ## 2. 配置参考
 
 | 环境变量 | 默认 | 说明 |
@@ -552,7 +572,10 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tokentracker
 
 ### 6.2 健康检查
 
-- `GET /health` → `{"ok":true}`（进程存活 + 路由就绪；**不查数据库**）。
+- `GET /health` → `{"ok":true,"engine":"postgres","version":"…","ref":"…"}`
+  （进程存活 + 路由就绪；**不查数据库**）。`version`/`ref` 来自构建时的 `-ldflags`，
+  官方镜像会填成发布版本与提交号，自己 `go build` 则是 `dev`/`unknown`——
+  排查"容器里到底是哪个镜像"时第一眼就看它。
 - 想知道数据库是否可用：看启动日志，或直接请求一个需要 DB 的只读接口（未认证返回 401 也说明进程在跑）。
 - Docker 里已内置 `HEALTHCHECK`（compose 用 `wget`），`docker ps` 会显示 `healthy`。
 
