@@ -122,6 +122,20 @@ func (s *Server) devicePoll(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"status": status})
 }
 
+// ensureAccount 保证 auth_users 里有 sub 对应的账户行。
+//
+// 自托管部署没有注册流程（signup 属于外部认证层），而 devices.user_id 有外键约束，
+// 所以首次使用某个 sub 时必须自动建账，否则 device-token-issue 会直接报
+// FOREIGN KEY constraint failed —— 局域网自用场景下这就是「装好却传不上去」。
+// 幂等：已存在则不做任何事；不改变任何认证语义（仍然只认签名有效的 JWT）。
+func (s *Server) ensureAccount(sub string) error {
+	if sub == "" {
+		return nil
+	}
+	_, err := s.db.Exec(s.db.InsertIgnore(`auth_users(id,email) VALUES(?,?)`), sub, "")
+	return err
+}
+
 func (s *Server) deviceGrant(w http.ResponseWriter, r *http.Request, sub string) {
 	var b struct {
 		UserCode string `json:"user_code"`
@@ -138,6 +152,10 @@ func (s *Server) deviceGrant(w http.ResponseWriter, r *http.Request, sub string)
 	}
 
 	// 签发设备 token + 设备记录（与 deviceIssue 等价）
+	if err := s.ensureAccount(sub); err != nil {
+		fail(w, 500, err.Error())
+		return
+	}
 	tok := randomHex(32)
 	did := newID()
 	actualMid := mid.String
@@ -187,6 +205,10 @@ func (s *Server) deviceIssue(w http.ResponseWriter, r *http.Request, sub string)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.ensureAccount(sub); err != nil {
+		fail(w, 500, err.Error())
+		return
+	}
 	_, err := s.db.Exec(`INSERT INTO devices(id,user_id,device_name,platform,machine_id,created_at) VALUES(?,?,?,?,?,?)`,
 		id, sub, b.DeviceName, platform, mid, s.nowISO())
 	if err != nil {

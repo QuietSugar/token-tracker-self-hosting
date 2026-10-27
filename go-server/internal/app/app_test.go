@@ -145,3 +145,64 @@ func TestOwnerIsolationAndUnknownAccount(t *testing.T) {
 		t.Fatalf("self-hosted paid order status=%d", w.Code)
 	}
 }
+
+// TestDeviceIssueCreatesAccountOnFirstUse 覆盖「自托管没有注册流程」的真实路径：
+// 一个全新的 sub（数据库里没有 auth_users 行）直接调 device-token-issue，
+// 必须自动建账并签发成功，随后的 ingest 与 summary 都要能看到数据。
+// 回归背景：device-token-issue 曾因 devices.user_id 外键失败，
+// 表现为「服务装好了却传不上去」；契约用例都先建了用户，所以没覆盖到。
+func TestDeviceIssueCreatesAccountOnFirstUse(t *testing.T) {
+	s, db := testServer(t)
+	h := s.Handler()
+	uid := "22222222-2222-4222-8222-222222222222" // 故意不预先 INSERT auth_users
+
+	w := requestJSON(t, h, "POST", "/functions/tokentracker-device-token-issue",
+		s.signJWT(uid, "authenticated", s.now.Unix()+3600),
+		map[string]any{"device_name": "desktop", "platform": "linux", "machine_id": "m1"})
+	if w.Code != 200 {
+		t.Fatalf("device-token-issue 首次使用状态=%d body=%s", w.Code, w.Body.String())
+	}
+	var issue map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &issue)
+	devTok, _ := issue["token"].(string)
+	if devTok == "" {
+		t.Fatal("缺少 device token")
+	}
+
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM auth_users WHERE id=?`, uid).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("auth_users 自动建账后应有 1 行，实际 %d", n)
+	}
+
+	row := map[string]any{
+		"hour_start": "2026-10-20T10:00:00Z", "source": "codex", "model": "gpt-6",
+		"input_tokens": 1234, "total_tokens": 1234, "billable_total_tokens": 1234, "conversation_count": 1,
+	}
+	if u := requestJSON(t, h, "POST", "/functions/tokentracker-ingest", devTok, map[string]any{"buckets": []any{row}}); u.Code != 200 {
+		t.Fatalf("ingest 状态=%d body=%s", u.Code, u.Body.String())
+	}
+	w = requestJSON(t, h, "GET",
+		"/functions/tokentracker-account-summary?from=2026-10-20&to=2026-10-20",
+		s.signJWT(uid, "authenticated", s.now.Unix()+3600), nil)
+	if w.Code != 200 {
+		t.Fatalf("summary 状态=%d body=%s", w.Code, w.Body.String())
+	}
+	var summary struct {
+		Totals struct {
+			TotalTokens int64 `json:"total_tokens"`
+		} `json:"totals"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &summary)
+	if summary.Totals.TotalTokens != 1234 {
+		t.Fatalf("summary total_tokens=%d, want 1234", summary.Totals.TotalTokens)
+	}
+
+	// 认证语义不变：无 token 仍然 401
+	if u := requestJSON(t, h, "GET",
+		"/functions/tokentracker-account-summary?from=2026-10-20&to=2026-10-20", "", nil); u.Code != 401 {
+		t.Fatalf("无 token 状态=%d, want 401", u.Code)
+	}
+}

@@ -1,6 +1,8 @@
 # Go 后端状态（SQLite + PostgreSQL，实验性垂直切片）
 
-> **状态：实验性、未达生产 GA。** 这不是完整重写，也不能替代当前官方 InsForge + PostgreSQL 部署。
+> **状态：实验性（experimental）。**
+> **定位：局域网自用、单用户、单实例；不做注册登录（见 [`README.md`](README.md) §0）。**
+> 这不是完整重写，也不能替代当前官方 InsForge + PostgreSQL 部署；它有自己明确的使用边界。
 > 当前完成的是可运行的 Go HTTP 服务 + 双引擎存储层（SQLite / PostgreSQL），针对 v1.4.12 行为契约实现了核心垂直切片。
 
 ---
@@ -40,7 +42,11 @@
 - 新增 `.github/workflows/go-server.yml`：SQLite 一份流水线 + PostgreSQL **15/16 矩阵**各一份，均跑 unit + 契约。
 - 新增 `.github/workflows/build-go-image.yml`：amd64 构建 → **镜像 smoke（SQLite 模式 + PostgreSQL 模式）** → 通过后才推送多平台镜像（含 SBOM/provenance）。
 - 已发布实验镜像 `ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental`（linux/amd64+arm64，含 SBOM/provenance，不发布 latest）；推送前强制 SQLite+PG 双模式 smoke。
-- 新增运维脚本：`scripts/full-test.sh`（L0–L5 全量测试）、`scripts/backup.sh`（SQLite/PG 备份/恢复/清理）。
+- 新增运维脚本：`scripts/full-test.sh`（L0–L5 全量测试）、`scripts/backup.sh`（SQLite/PG 备份/恢复/清理）、
+  `scripts/issue-token.sh`（自签 JWT，替换「注册登录」的替代品）。
+- **修复**：`device-token-issue` / 设备授权 grant 在账户行不存在时因 `devices.user_id` 外键失败
+  （契约用例都预先建了用户，所以没覆盖到）→ 新增 `ensureAccount()` 幂等建账，
+  局域网首次使用可直接接通。回归测试 `TestDeviceIssueCreatesAccountOnFirstUse`。
 - **面向使用者的部署运维手册：[`README.md`](README.md)**（快速开始、配置、反代、备份恢复、升级、监控、安全清单、排错、已知限制）。
 - 本地 linux/amd64 镜像 smoke 已通过（CI 里由 `build-go-image.yml` 对每次构建强制执行 SQLite + PG 两种模式）：`/health` 200、运行 UID 10001、SQLite DB/WAL/SHM 为 0600、生产模式 `/_test/sql` 返回 404。
 - 真实 PostgreSQL 标准环境的 L3 脚本与结果（见 `../contract/L3-RESULTS.md`）。
@@ -114,7 +120,7 @@ Go 版本则通过独立的 33 个 HTTP 行为用例（SQLite 与 PostgreSQL 各
 
 ---
 
-## 仍然缺什么（生产阻断项）
+## 仍然缺什么（自用也需要补的）
 
 ### 1. 数据模型不完整
 
@@ -157,12 +163,23 @@ Go 版本则通过独立的 33 个 HTTP 行为用例（SQLite 与 PostgreSQL 各
 - SQLite busy/locked 重试、事务中断、崩溃恢复；PG 死锁/序列化失败重试
 - 和真实 PG 15.18 的同输入“双运行 differential”自动化（现在 PG 的 L3 是并发/安装测试；行为 goldens 来自 PGlite fixture）
 
-### 5. API 兼容性 / 客户端验收
+### 5. 非目标（out of scope，不打算做）
 
-- **尚无账户 signup/signin/password reset/OAuth 服务**。目前 JWT 测试令牌用于 contract adapter；不能让新用户自行注册/登录。
+这些曾经被列为「阻断项」，但按**局域网自用**的定位它们不是缺口：
+
+- **账户 signup/signin/password reset/OAuth**：不做。token 由 `scripts/issue-token.sh` 用
+  `TT_JWT_SECRET` 自签（§1.0），首次使用自动建账户行。将来若要接正式认证，
+  接入点在 `Server.auth()` 与 ingest 的 device token 校验，属于明确的增量改动。
+- **InsForge SDK / PostgREST 兼容 API**：不做。现有 dashboard 若硬编码 InsForge endpoint，
+  需要改 base URL/路由，这是使用者的适配工作，不是本服务的目标。
+- **多副本 / 多实例并发**：不做。ingest 的整行修正靠进程内互斥，单实例足够；
+  真要跑多副本，需要先补 `pg_advisory_xact_lock`（记在这里，不排期）。
+- **公网暴露能力**（速率限制、WAF、TLS 终止）：不做。定位是内网；需要时由反代/网络层负责。
+
+### 6. 客户端 E2E 仍未验收
+
 - 原生客户端的真实 base URL/config 路由、设备授权浏览器页、回调还未对 Go server 做 E2E。
-- Go server 不是 InsForge SDK/PostgREST API 的完整替代；现有 dashboard 若硬编码 InsForge endpoint，仍需路由适配层/前端改造。
-- HTTPS、反向代理、账号删除恢复流程均未验收。
+- HTTPS、反向代理、账号删除恢复流程均未验收（按定位也不强求）。
 
 ---
 

@@ -2,6 +2,46 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — 定位澄清：局域网自用（不做注册登录）+ 首次使用可用性修复
+
+用户明确：本项目定位是**自己部署到局域网、自己使用，不涉及注册登录**；主体程序尽量少改；HTTPS 不用管。
+
+### 代码（2 处，均为非认证改动）
+
+- **修复**：`device-token-issue` 与设备授权 `grant` 在 `auth_users` 无对应行时，
+  因 `devices.user_id` 外键约束直接失败（`FOREIGN KEY constraint failed`），
+  表现为「服务装好了却传不上去」。契约用例都会先建用户，所以从未覆盖到这条真实路径。
+  新增幂等 `ensureAccount(sub)`，首次使用自动建账户行；**不改变任何认证语义**。
+  回归测试：`TestDeviceIssueCreatesAccountOnFirstUse`（无预置账户 → 签发 → 上传 → 读回 1234 tokens → 无 token 仍 401）。
+- 未新增 schema、未改契约/golden、未加任何认证开关；`TT_LOCAL_ACCOUNT` 等想法按用户要求**未实施**。
+
+### 新增脚本（独立工具，不进主体程序）
+
+- `go-server/scripts/issue-token.sh`：用 `TT_JWT_SECRET` 自签长期 JWT（默认 365 天、
+  固定 `sub`、`--json` 只输出 token、`--role project_admin` 供 RPC 使用），并打印 curl 示例。
+  这是「没有登录」场景的官方替代路径，将来接正式认证后可直接弃用。
+
+### 文档
+
+- `go-server/README.md`：§0 改为「定位：局域网自用」（无注册登录=设计选择、不多租户、
+  不假设公网入口、不做计费），并说明将来接认证的接入点；新增 §1.0「先拿到 token」+ 完整最小流程
+  （JWT → device token → ingest → summary，已实测跑通）。
+- `go-server/STATUS.md`：signup/signin、InsForge/PostgREST 兼容、多副本锁、公网暴露能力
+  从「生产阻断项」移入 **§5 非目标**；阻断项只留数据模型、聚合语义、安全/运维、行为矩阵、客户端 E2E。
+- `docs/go-postgres.md`、根 `README.md`：补充定位前提。
+- HTTPS：不写证书/反代教程，安全清单只保留一句「纯内网可信时可不启用，跨网络访问请自行加 TLS」。
+
+### 验收
+
+```
+go vet / gofmt / CGO=0 build            PASS
+go test -race（SQLite + PostgreSQL）    PASS（含新回归测试）
+契约 go-sqlite / go-postgres            33 PASS / 0 FAIL / 2 SKIP（不变）
+局域网最小流程手工验证                  JWT → device token → ingest → summary 看到数据
+```
+
+---
+
 ## 2026-10-27 — 首个 Go 实验镜像已发布（SQLite + PostgreSQL 双引擎）
 
 - 全量测试（本地 + CI）全绿：
