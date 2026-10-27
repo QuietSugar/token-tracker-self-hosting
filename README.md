@@ -8,12 +8,34 @@
 - 职责边界：InsForge 平台（VPS、Docker、HTTPS、OAuth、worker）由实例持有者负责；本仓库只维护**应用侧**——基线 SQL、14 个私有函数、客户端指向配置、升级评审与验收记录。
 - 状态：**技术预览**（依据上游 `docs/self-hosting-status.md`）。
 
+## 你是来看什么的？（先选一条，其余内容可以跳过）
+
+| 我只想… | 走这条 | 需要什么 |
+|---|---|---|
+| **把用量存在自己机器上，跑起来看看** | [`go-server/README.md`](go-server/README.md) §1「60 秒快速开始」：`docker pull` → `/health` → 用脚本签个 token → 传一条用量并读回来 | 一台 Linux + Docker。**5 分钟，不需要账号，也不需要本页下面的任何维护流程** |
+| **继续用官方客户端，只是把后端换成自己的** | [`docs/official-client.md`](docs/official-client.md)：三条出路（localhost 最省事 / 反代 + 私有 CA / 域名 HTTPS） | 同上 + 官方 v1.4.12 客户端 |
+| **让 dashboard / 菜单栏显示跨设备汇总** | [`docs/oauth-selfhosted.md`](docs/oauth-selfhosted.md)：`/api/auth/*` 与 owner 账户 | 同上，再加一个本地邮箱密码 |
+| **参与维护 / 升级上游 / 看设计取舍** | 本页下半部分 + [`MAINTENANCE.md`](MAINTENANCE.md) + [`docs/go-postgres.md`](docs/go-postgres.md) | 读得懂本文即可 |
+
+> ✅ **纯使用不需要**：GitHub App 初始化（那只用于本仓库推送 / 开 issue）、`MAINTENANCE.md`
+> 的会话启动协议、上游 checkout、`tracking/REF`、`bootstrap.sh` / `session-start.sh`。
+> 下面「维护者」相关的章节都是**可选的**，与「把服务跑起来」无关。
+>
+> 📦 **当前可用的部署形态**（详见各文档）：
+> - **Go 后端（推荐上手）**：单二进制 + 单镜像，SQLite 或 PostgreSQL 二选一，实验性但客户端已实测。
+> - **InsForge + PostgreSQL 工件镜像**：正式交付物，携带已审计 SQL 与 14 个私有函数。
+
+---
+
+## 维护者须知
+
 > ⚠️ **本仓库是公有的**：任何 `git push` 后内容立即对全网可见，且无法真正撤回。安全约定见下方「公有仓库安全约定」与 [`SECURITY.md`](SECURITY.md)。
 >
 > 🤖 **本仓库由 Agent 长期维护**。首次跨环境接手先读 [`docs/HANDOFF.md`](docs/HANDOFF.md)，再按 [`MAINTENANCE.md`](MAINTENANCE.md) 的会话启动协议恢复详细状态。
 >
-> 🐳 **当前正式交付物**是 Docker 工件镜像（linux/amd64）：携带已审计 SQL 与 14 个私有函数，面向 InsForge + PostgreSQL。另有**实验性 Go 后端镜像（SQLite + PostgreSQL 双引擎）**，两种引擎各自通过 33 个行为契约 + 2 个 PG 专属 SKIP；尚未达到生产 GA。
-定位是**局域网自用（不做注册登录）**，使用与运维看 [`go-server/README.md`](go-server/README.md)，设计与取舍看 [`docs/go-postgres.md`](docs/go-postgres.md)，缺口看 [`go-server/STATUS.md`](go-server/STATUS.md)。
+> 🐳 **正式交付物**是 Docker 工件镜像（linux/amd64）：携带已审计 SQL 与 14 个私有函数，面向 InsForge + PostgreSQL。另有**实验性 Go 后端镜像（SQLite + PostgreSQL 双引擎）**，两种引擎各自通过 33 个行为契约 + 2 个 PG 专属 SKIP；尚未达到生产 GA。
+>
+> 定位是**局域网自用**（单账户 owner、账号体系默认关闭、不做第三方登录）。使用与运维看 [`go-server/README.md`](go-server/README.md)，设计与取舍看 [`docs/go-postgres.md`](docs/go-postgres.md)，缺口看 [`go-server/STATUS.md`](go-server/STATUS.md)。
 
 ---
 
@@ -229,7 +251,9 @@ tokentracker-selfhost/
 - 构建依赖锁定：`npm:@insforge/sdk@1.4.5`、`alipay-sdk@4.14.0`、`urllib@4.9.1`、`@waffo/pancake-ts@0.25.0`。
 - 当前工作区的上游 checkout 有 10 个文件显示 `M`，但 `git diff --numstat` 全为 0——只是沙箱/挂载导致的可执行位丢失（100755→100644），内容零改动，不影响 `node` 脚本。`upstream.sh status` 会区分内容与权限位变更。
 
-## 首次使用提示
+## 首次维护提示（与「使用」无关）
+
+> 这一节讲的是**在本仓库提交/推送**的准备工作。只想跑服务的话看 `go-server/README.md`。
 
 - 初始提交使用了占位 git 身份（`TokenTracker Selfhost Maintainer <selfhost@localhost>`）。因为远程是 **public**，这个 author 邮箱会公开显示在提交历史里。想改成自己的 GitHub 身份（尚未推送时可安全 amend）：
   ```sh

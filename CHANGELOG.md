@@ -2,6 +2,63 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — 文档修正：3 个 issue（定位矛盾 / 4 项打磨 / 使用者入口）
+
+三个 issue 的每条声明都逐条核实过，全部属实；顺带修了两处 issue 没列出的同类问题。
+
+### 1. 定位表述与实现对齐（issue #11，6 处 + 额外 2 处）
+
+`/api/auth/*` 合入后"不做注册登录"这批文字没跟着改，导致同一文档内自相矛盾：
+
+| 位置 | 改法 |
+|---|---|
+| `go-server/README.md` §0 | 改为「一个账户（owner），不开放自助注册」+「不做第三方登录」；删掉"固定 sub"的旧说法 |
+| `go-server/README.md` §0 引子 | "将来若要接正式认证…"整段重写为"账号体系可选，不是必需" |
+| `go-server/README.md` §3.6 表格 | `account-*` 跨设备视图 ❌ → ✅，链到 §3.7 / `official-client.md` §5 |
+| `go-server/README.md` §9 第 1 条 | 改为"账号体系默认关闭（首个身份成为 owner），不做第三方 OAuth/邮件/找回密码" |
+| `go-server/README.md` §1.0 | "没有登录，用脚本签" → "不建账户，用脚本签"（脚本签 token 仍是合法用法，只是不再等同于"没有账号体系"） |
+| `docs/official-client.md` §1 | "不能替代：跨设备聚合视图" → 归入「能替代」；不能替代的是第三方 OAuth / 排行榜 / 付费 |
+| `docs/official-client.md` §4 | "接入默认账户" → "接入这台机器的 owner 账户"，并给出收紧到 `jwt` 模式的具体做法 |
+| `go-server/STATUS.md` 头部 | 定位改为「单账户（owner）；账号体系默认关闭，不做第三方登录」 |
+| `go-server/STATUS.md` §5 | "signup/signin 不做" 与 §6 矛盾 → 改为"不做 OAuth provider / 发信 / 密码重置 / 后台" |
+| `go-server/STATUS.md` §6 标题 | "跨设备视图未接" → "均已验收" |
+| `docs/go-postgres.md` 头部 | 定位短语同步 |
+| **（额外）`go-server/STATUS.md` 交付清单** | "仍缺 `/api/auth/refresh`，跨设备视图不可用" —— issue 未列，但同样过时，已改 |
+
+### 2. 四项打磨（issue #12）
+
+1. `SECURITY.md` 第二个 `6.` → `7.`（编号重复）；
+2. `go-server/README.md` §7：非 root **不是** compose 配的，而是镜像 `Dockerfile` 的
+   `USER 10001:10001`；两个 compose 示例都**没有** `user:`。原文"compose 示例已配"会误导
+   自己写 compose 的人，已改并加提醒；
+3. `docs/go-postgres.md` §3："本机（沙箱）实测，Go 1.27 工具链" → "Go ≥1.24（以 `go.mod` 为准，
+   验收时沙箱为 1.27）"，避免被当成版本要求；
+4. **`TT_DASHBOARD_URL` 的坑，比 issue 描述的更深**：不只是 §1.1 的示例，两个 compose 示例里
+   默认值就是 `${TT_DASHBOARD_URL:-https://your-dashboard.example}` —— 用户照抄、不设这个变量，
+   设备授权就会返回一个占位域名的 `verification_uri`，客户端直接报
+   `Device authorization returned a different dashboard`。已把 compose 默认改为**空字符串**
+   （服务端按请求 `Host` + `X-Forwarded-Proto` 推导，这是既有行为且有单测
+   `TestDeviceAuthorizeAnchorsVerificationURIToRequestHost` 覆盖），文档示例同步改为"留空"。
+
+### 3. 使用者入口（issue #13）
+
+根 `README.md` 原本整篇是维护者动线（`bootstrap.sh`、维护契约、上游追踪、GitHub App 推送），
+访客找不到"我只是想跑起来"的路。现在：
+
+- 顶部新增 **「你是来看什么的？」** 四行分流表：跑起来看 / 接官方客户端 / 要跨设备汇总 / 参与维护；
+- 明确写出 **纯使用不需要** GitHub App、`MAINTENANCE.md` 会话协议、上游 checkout、`tracking/REF`；
+- 原来混在开头的"定位/交付物"提示块收进新的 **「维护者须知」** 小节；
+- 原「首次使用提示」（讲 git 提交身份 amend）改名为 **「首次维护提示（与「使用」无关）」**，
+  避免被当成使用引导。
+
+### 校验
+
+- `scripts/check-encoding.sh`（UTF-8 无 BOM）、`scripts/check-secrets.sh` 全过；
+- 两个 compose 文件用 YAML 解析器校验通过，`TT_DASHBOARD_URL` 默认值为空串；
+- 全文 grep 确认已无"不做注册登录 / 没有登录 / 固定 sub / 接入默认账户"等过时表述。
+
+---
+
 ## 2026-10-27 — 与官方模块逐个对拍：时区归日、heatmap compact、设备管理卡
 
 上一轮把设备维度做出来了，这一轮把**官方客户端真实请求的每个参数**都对了一遍。

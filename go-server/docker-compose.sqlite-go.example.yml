@@ -22,7 +22,10 @@ services:
       TT_DATABASE_PATH: /data/tokentracker.db
       TT_LISTEN_ADDR: 0.0.0.0:8080
       TT_JWT_SECRET: ${TT_JWT_SECRET:?set a strong random secret}
-      TT_DASHBOARD_URL: ${TT_DASHBOARD_URL:-https://your-dashboard.example}
+      # 留空（默认）= 服务端按请求的 Host + X-Forwarded-Proto 推导设备授权页地址。
+      # 官方客户端要求 verification_uri 与 base_url 同源；写死一个占位域名会让
+      # device-login 报 "Device authorization returned a different dashboard"。
+      TT_DASHBOARD_URL: "${TT_DASHBOARD_URL:-}"
       TT_NOW: ${TT_NOW:-}
     ports:
       - "127.0.0.1:${TT_PORT:-8080}:8080"
