@@ -1,23 +1,22 @@
-# 实验用 Go + SQLite 自托管后端。
-# SQLite 文件保存在 named volume；备份可在停服务后直接复制数据库文件。
+# 实验用 Go + SQLite 自托管后端（零依赖单文件）。
 #
 # 用法:
-#   cp .env.sqlite-go.example .env
-#   # 编辑 TT_JWT_SECRET，至少 32 随机字节
+#   export TT_JWT_SECRET="$(openssl rand -hex 32)"   # 至少 32 字节，必须保密
 #   docker compose -f docker-compose.sqlite-go.example.yml up -d
 #   curl http://127.0.0.1:8080/health
+#
+# 备份：停服务后直接复制 /data 下的 tokentracker.db（+ -wal/-shm），
+#       或使用 go-server/scripts/backup.sh sqlite。
+# 升级：docker compose pull && docker compose up -d（schema 安装是幂等的）
 #
 # ⚠️ 当前只覆盖 STATUS.md 中明确列出的行为；不是 InsForge 替代品/生产 GA。
 services:
   tokentracker-go:
-    image: ghcr.io/quietsugar/token-tracker-self-hosting-sqlite-go:experimental
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        VERSION: experimental
-        VCS_REF: ${GIT_SHA:-local}
-        TARGETARCH: amd64
+    image: ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental
+    # 想本地构建镜像时取消下面 4 行注释（可去掉 image 行）
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
     restart: unless-stopped
     environment:
       TT_DATABASE_PATH: /data/tokentracker.db
@@ -40,6 +39,7 @@ services:
       interval: 15s
       timeout: 3s
       retries: 3
+      start_period: 10s
 
 volumes:
   tokentracker-data:

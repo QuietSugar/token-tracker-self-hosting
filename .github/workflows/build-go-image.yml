@@ -1,0 +1,315 @@
+name: build-go-image
+
+# 构建 TokenTracker Go 自托管后端实验镜像（同一镜像支持 SQLite 与 PostgreSQL）并推送 GHCR。
+#
+# 触发：
+#   - push 到 main 且 go-server/** 变化（推送 experimental 标签）
+#   - pull_request（只构建 + smoke，不推送）
+#   - workflow_dispatch（可显式指定是否推送、平台）
+#
+# 流程：build amd64 → 本机 smoke（SQLite 模式 + PostgreSQL 模式）→ 多平台 build+push。
+# smoke 必须在推送之前通过；smoke 失败不会产生任何镜像 tag。
+#
+# 标签策略（实验通道，绝不覆盖正式 InsForge 工件镜像）：
+#   ghcr.io/<owner>/<repo>-go:experimental
+#   ghcr.io/<owner>/<repo>-go:experimental-<short_sha>
+#   ghcr.io/<owner>/<repo>-go:sha-<short_sha>
+#   ghcr.io/<owner>/<repo>-sqlite-go:experimental   ← 兼容旧 compose 里的镜像名
+# 不发布 latest：实验镜像不允许成为隐式默认。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'go-server/**'
+      - '.github/workflows/build-go-image.yml'
+  pull_request:
+    paths:
+      - 'go-server/**'
+      - '.github/workflows/build-go-image.yml'
+  workflow_dispatch:
+    inputs:
+      push:
+        description: '是否推送到 GHCR'
+        required: false
+        default: true
+        type: boolean
+      platforms:
+        description: '目标平台（逗号分隔）'
+        required: false
+        default: 'linux/amd64,linux/arm64'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-go-image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  SMOKE_IMAGE: tokentracker-go-smoke:local
+
+jobs:
+  build:
+    name: Build, smoke test, push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write        # GITHUB_TOKEN 推送 GHCR
+      id-token: write        # provenance attestation
+      attestations: write
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: tokentracker
+          POSTGRES_PASSWORD: smoke-only-password
+          POSTGRES_DB: tokentracker
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U tokentracker -d tokentracker"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image names and tags
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          OWNER_REPO="${GITHUB_REPOSITORY,,}"
+          IMAGE="${REGISTRY}/${OWNER_REPO}-go"
+          LEGACY="${REGISTRY}/${OWNER_REPO}-sqlite-go"
+          SHORT="${GITHUB_SHA::7}"
+
+          SHOULD_PUSH='false'
+          if [ "${{ github.event_name }}" = 'push' ] && [ "${{ github.ref }}" = 'refs/heads/main' ]; then SHOULD_PUSH='true'; fi
+          if [ "${{ github.event_name }}" = 'workflow_dispatch' ] && [ '${{ inputs.push }}' = 'true' ]; then SHOULD_PUSH='true'; fi
+
+          PLATFORMS='${{ inputs.platforms }}'
+          [ -n "$PLATFORMS" ] || PLATFORMS='linux/amd64'
+          # 推送时用输入（默认 amd64+arm64）；PR/push 的 smoke 构建始终是 amd64。
+          PUSH_PLATFORMS="$PLATFORMS"
+          if [ "${{ github.event_name }}" = 'push' ]; then PUSH_PLATFORMS='linux/amd64,linux/arm64'; fi
+
+          {
+            echo "image=$IMAGE"
+            echo "legacy=$LEGACY"
+            echo "short=$SHORT"
+            echo "should_push=$SHOULD_PUSH"
+            echo "platforms=$PUSH_PLATFORMS"
+            echo "tags<<EOF"
+            echo "$IMAGE:experimental"
+            echo "$IMAGE:experimental-$SHORT"
+            echo "$IMAGE:sha-$SHORT"
+            echo "$LEGACY:experimental"
+            echo "EOF"
+            echo "labels<<EOF"
+            echo "org.opencontainers.image.revision=$GITHUB_SHA"
+            echo "org.opencontainers.image.version=experimental-$SHORT"
+            echo "org.opencontainers.image.title=TokenTracker Go experimental backend (SQLite/PostgreSQL)"
+            echo "dev.tokentracker.status=experimental-vertical-slice"
+            echo "dev.tokentracker.engines=sqlite,postgres"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify no credentials in build context
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/check-secrets.sh
+          if find go-server -path go-server/bin -prune -o -type f \( -name '*.db' -o -name '*.pem' -o -name '.env' \) -print | grep -q .; then
+            echo "::error::go-server 构建上下文里发现数据库/凭据文件"; exit 1
+          fi
+          if [ -f go-server/bin/tokentracker-server ]; then
+            echo "::warning::go-server/bin 存在本地构建产物（已被 .dockerignore 排除，不会进镜像）"
+          fi
+          echo "✓ build context 无凭据/数据库文件"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: steps.meta.outputs.should_push == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ---- 1) 先构建 amd64 到本地，跑 smoke，再推送 ----
+      - name: Build amd64 image for smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: ./go-server
+          file: ./go-server/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ env.SMOKE_IMAGE }}
+          build-args: |
+            VERSION=experimental-${{ steps.meta.outputs.short }}
+            VCS_REF=${{ github.sha }}
+            TARGETARCH=amd64
+          cache-from: type=gha,scope=tokentracker-go
+          cache-to: type=gha,mode=max,scope=tokentracker-go
+
+      - name: Smoke test — SQLite mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATA="$(mktemp -d)"
+          chmod 777 "$DATA"   # 容器以 uid 10001 运行
+          CID="$(docker run -d --name tt-sqlite \
+            -e TT_JWT_SECRET=smoke-secret-at-least-32-bytes-long!! \
+            -e TT_DATABASE_PATH=/data/tokentracker.db \
+            -e TT_LISTEN_ADDR=0.0.0.0:8080 \
+            -e TT_DASHBOARD_URL=https://smoke.example.test \
+            -v "$DATA:/data" \
+            -p 18080:8080 \
+            "$SMOKE_IMAGE")"
+          trap 'docker rm -f tt-sqlite >/dev/null 2>&1 || true' EXIT
+
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18080/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/health
+          echo
+          echo "--- 生产模式必须不暴露危险 fixture 端点 ---"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/_test/sql)" = "404"
+          echo "✓ /_test/sql → 404"
+
+          echo "--- 非 root 运行 ---"
+          test "$(docker exec tt-sqlite id -u)" = "10001"
+          echo "✓ uid 10001"
+
+          echo "--- DB 文件权限（0600）---"
+          ls -l "$DATA"
+          test "$(stat -c '%a' "$DATA/tokentracker.db")" = "600"
+          test "$(stat -c '%a' "$DATA/tokentracker.db-wal")" = "600"
+          echo "✓ DB/WAL 0600"
+
+          echo "--- 启动日志声明引擎 ---"
+          docker logs tt-sqlite 2>&1 | grep -q 'engine=sqlite'
+          echo "✓ engine=sqlite"
+
+          echo "--- 重启后数据仍在（schema_migrations 表存在）---"
+          docker restart tt-sqlite >/dev/null
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18080/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/health
+          grep -qa 'schema_migrations' "$DATA/tokentracker.db"
+          echo "✓ 重启后 DB 文件仍含 schema_migrations"
+
+          echo "--- 无 JWT secret 时必须拒绝启动 ---"
+          if docker run --rm -e TT_JWT_SECRET=short "$SMOKE_IMAGE" >/dev/null 2>&1; then
+            echo "::error::缺失/过短的 TT_JWT_SECRET 竟然启动成功"; exit 1
+          fi
+          echo "✓ 弱 secret 启动被拒绝"
+
+      - name: Smoke test — PostgreSQL mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 用 host 网络，让容器内的 127.0.0.1:5432 指向 runner 上已发布的 postgres service 端口。
+          docker run -d --name tt-pg-run --network host \
+            -e TT_JWT_SECRET=smoke-secret-at-least-32-bytes-long!! \
+            -e TT_DATABASE_URL='postgres://tokentracker:smoke-only-password@127.0.0.1:5432/tokentracker?sslmode=disable' \
+            -e TT_POSTGRES_SCHEMA=smoke \
+            -e TT_LISTEN_ADDR=0.0.0.0:18081 \
+            "$SMOKE_IMAGE" >/dev/null
+          trap 'docker rm -f tt-pg-run >/dev/null 2>&1 || true' EXIT
+
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:18081/health >/dev/null 2>&1; then break; fi
+            if [ "$(docker inspect -f '{{.State.Running}}' tt-pg-run)" != "true" ]; then
+              echo "::error::容器提前退出"; docker logs tt-pg-run; exit 1
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18081/health
+          echo
+          docker logs tt-pg-run 2>&1 | grep -q 'engine=postgres'
+          echo "✓ engine=postgres（health 200 说明 schema 已在真实 PG 上安装成功）"
+          docker logs tt-pg-run 2>&1 | grep -q 'dsn=postgres://tokentracker:\*\*\*@'
+          echo "✓ 启动日志已脱敏密码"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18081/_test/sql)" = "404"
+          echo "✓ /_test/sql → 404"
+
+      - name: Docker metadata summary
+        shell: bash
+        run: |
+          {
+            echo "## Go 镜像构建"
+            echo "- image: \`${{ steps.meta.outputs.image }}\`"
+            echo "- legacy tag: \`${{ steps.meta.outputs.legacy }}:experimental\`"
+            echo "- short sha: \`${{ steps.meta.outputs.short }}\`"
+            echo "- push: \`${{ steps.meta.outputs.should_push }}\`"
+            echo "- platforms: \`${{ steps.meta.outputs.platforms }}\`"
+            echo "- smoke: SQLite + PostgreSQL 均通过"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ---- 2) smoke 通过后才推送 ----
+      - name: Build and push multi-arch image
+        id: build
+        if: steps.meta.outputs.should_push == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./go-server
+          file: ./go-server/Dockerfile
+          platforms: ${{ steps.meta.outputs.platforms }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=experimental-${{ steps.meta.outputs.short }}
+            VCS_REF=${{ github.sha }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha,scope=tokentracker-go
+          cache-to: type=gha,mode=max,scope=tokentracker-go
+
+      - name: Verify pushed image is runnable
+        if: steps.meta.outputs.should_push == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE='${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}'
+          echo "Running: $IMAGE"
+          docker pull "$IMAGE" >/dev/null
+          docker run -d --name tt-pushed -e TT_JWT_SECRET=smoke-secret-at-least-32-bytes-long!! \
+            -e TT_DATABASE_PATH=/tmp/tt.db -p 18082:8080 "$IMAGE" >/dev/null
+          trap 'docker rm -f tt-pushed >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18082/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18082/health
+          echo
+          echo "✓ 已推送镜像可正常启动"
+
+      - name: Attest build provenance
+        if: steps.meta.outputs.should_push == 'true' && steps.build.outputs.digest != ''
+        continue-on-error: true
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ steps.meta.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Write digest to summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "- digest: \`${{ steps.build.outputs.digest }}\`"
+            echo
+            echo "本地拉取："
+            echo '```sh'
+            echo "docker pull ${{ steps.meta.outputs.image }}:experimental-${{ steps.meta.outputs.short }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

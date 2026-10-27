@@ -3,27 +3,59 @@ package app
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/QuietSugar/tokentracker-selfhost-go/internal/store"
+	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 )
 
-func testServer(t *testing.T) (*Server, *sql.DB) {
+// testDB 返回一个隔离的存储层实例：
+//   - 默认用临时目录里的 SQLite 文件（每个测试独立）；
+//   - 设置了 TT_TEST_DATABASE_URL（postgres://...）时，跑在真实 PostgreSQL 上，
+//     每个测试用独立 schema（tt_test_<hex>）并在结束时 DROP SCHEMA CASCADE。
+//
+// 同一批测试因此在两种引擎上都执行，assertEquals 的语义必须一致。
+func testDB(t *testing.T) *store.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "test.db"))
+	ctx := context.Background()
+	if dsn := os.Getenv("TT_TEST_DATABASE_URL"); dsn != "" {
+		db, err := store.Open(ctx, store.Config{
+			Dialect:           store.Postgres,
+			DSN:               dsn,
+			Schema:            "tt_test_" + strings.ToLower(randomHex(6)),
+			DropSchemaOnClose: true,
+		})
+		if err != nil {
+			t.Fatalf("open postgres: %v", err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if err := store.Install(ctx, db); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("test using PostgreSQL schema %s", db.Dialect())
+		return db
+	}
+	db, err := store.Open(ctx, store.Config{DSN: filepath.Join(t.TempDir(), "test.db")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.SetMaxOpenConns(1)
-	if err := store.Install(context.Background(), db); err != nil {
+	t.Cleanup(func() { _ = db.Close() })
+	if err := store.Install(ctx, db); err != nil {
 		t.Fatal(err)
 	}
+	return db
+}
+
+func testServer(t *testing.T) (*Server, *store.DB) {
+	t.Helper()
+	db := testDB(t)
 	return New(db), db
 }
 func requestJSON(t *testing.T, h http.Handler, method, path, token string, body any) *httptest.ResponseRecorder {
@@ -47,8 +79,7 @@ func requestJSON(t *testing.T, h http.Handler, method, path, token string, body 
 }
 
 func TestJWTRejectsForgeryAndExpiry(t *testing.T) {
-	s, db := testServer(t)
-	defer db.Close()
+	s, _ := testServer(t)
 	tok := s.signJWT("user-1", "authenticated", s.now.Unix()+60)
 	if _, _, ok := s.verifyJWT(tok); !ok {
 		t.Fatal("valid token rejected")
@@ -64,7 +95,6 @@ func TestJWTRejectsForgeryAndExpiry(t *testing.T) {
 
 func TestDeviceFlowAndIngestWholeRowCorrection(t *testing.T) {
 	s, db := testServer(t)
-	defer db.Close()
 	h := s.Handler()
 	uid := "11111111-1111-4111-8111-111111111111"
 	if _, err := db.Exec(`INSERT INTO auth_users(id,email) VALUES(?,?)`, uid, "a@local.test"); err != nil {
@@ -103,8 +133,7 @@ func TestDeviceFlowAndIngestWholeRowCorrection(t *testing.T) {
 }
 
 func TestOwnerIsolationAndUnknownAccount(t *testing.T) {
-	s, db := testServer(t)
-	defer db.Close()
+	s, _ := testServer(t)
 	h := s.Handler()
 	w := requestJSON(t, h, "GET", "/functions/tokentracker-account-summary?from=2026-10-01&to=2026-10-01", "", nil)
 	if w.Code != 401 {
@@ -115,5 +144,4 @@ func TestOwnerIsolationAndUnknownAccount(t *testing.T) {
 	if w.Code != 500 {
 		t.Fatalf("self-hosted paid order status=%d", w.Code)
 	}
-	_ = db
 }

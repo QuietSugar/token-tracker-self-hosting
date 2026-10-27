@@ -1,6 +1,6 @@
 # 契约规范（Contract Specification）
 
-本文件是**实现者契约**：任何想替代当前后端的实现（Go+SQLite 或其他）都必须满足它。
+本文件是**实现者契约**：任何想替代当前后端的实现（Go + SQLite/PostgreSQL 或其他）都必须满足它。
 测试体系按此规范判定"一致"。
 
 ---
@@ -162,7 +162,7 @@ UUID、machine_id、token。这样参考实现与 Go 实现能拿到**完全相�
 
 ## 6. 实现者检查清单
 
-Go+SQLite 实现者需要交付：
+Go 实现者需要交付：
 
 - [ ] `adapters/go-sqlite.cjs`（或等价 HTTP 服务 + 一个薄 adapter）
 - [ ] `capabilities.json`：声明支持/不支持的用例

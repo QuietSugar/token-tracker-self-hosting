@@ -47,7 +47,7 @@
 | `timestamptz` 出现 | 199 |
 | `pg_advisory_xact_lock` | 33 |
 
-完整数据在 `golden/1.4.12/static.json`。**这是 Go+SQLite 改造的施工图**。
+完整数据在 `golden/1.4.12/static.json`。**这是 Go 后端改造的施工图**。
 
 ## 参考实现自测
 
@@ -59,6 +59,22 @@
 - 两次独立录制 `SHA256SUMS` **逐字节一致**（可复现性已验证）。
 - 负向测试：篡改 golden 的一个字段后，对比器正确报 `FAIL` 并定位到具体 JSON path。
 - 所有录制响应都是真实 handler + PGlite SQL 的 loopback HTTP，不是 mock。
+
+## Go + PostgreSQL 实验实现（2026-10-26）
+
+真实 adapter：`contract/adapters/go-postgres.cjs`（同一份 Go 代码，每个用例独立 schema）。
+
+```
+Go 1.27 工具链 + github.com/lib/pq 1.10.9 + PostgreSQL 16.2（真实服务，非 PGlite）
+[L1] 静态参考契约: ✓ 一致（引用上游版本/step checksums；不是声称 Go 里有 PG 对象）
+[L2] 行为契约: 33 PASS / 0 FAIL / 2 SKIP / 0 waived
+```
+
+- 与 SQLite adapter 共用同一批 golden、同一份 Go 代码，只有引擎不同：
+  **同一实现、两种引擎行为一致**的交叉验证。
+- 2 个 SKIP 与 SQLite 版相同（PG 15-step 安装账本 / step checksum 不属于本实现的账本）。
+- CI 在 PostgreSQL **15 与 16** 上各跑一遍（`.github/workflows/go-server.yml`）。
+- 设计与取舍（含"是否保留 SQLite"的成本分析）见 `../docs/go-postgres.md`。
 
 ## Go + SQLite 实验实现（2026-10-26）
 

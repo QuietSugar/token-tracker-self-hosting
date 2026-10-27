@@ -1,7 +1,14 @@
+# 构建上下文排除项（context = go-server/）
+# 请不要把本地构建产物、数据库文件或凭据带进镜像。
+
 bin/
 *.db
 *.db-wal
 *.db-shm
+*.sqlite
 .env
-*.log
-.git/
+.env.*
+!.env.*.example
+Dockerfile
+*.md
+scripts/

@@ -18,7 +18,7 @@
 - 排序、分页、空数组 vs null、字段名大小写。
 
 这些靠"看代码"发现不了。所以做法是：**把参考实现当成黑盒，录制它的实际响应；
-候选实现（Go+SQLite）实现同样的 HTTP 接口后，跑同一批用例逐字段对比。**
+候选实现（Go，SQLite 或 PostgreSQL）实现同样的 HTTP 接口后，跑同一批用例逐字段对比。**
 
 参考实现运行器直接复用上游的 `test/helpers/self-host-fixture.cjs`：
 它在 PGlite（PostgreSQL WASM 版）上安装 15 步基线，加载真实打包后的 14 个
@@ -63,8 +63,9 @@ contract/
 │   └── schema.cjs             快照结构校验
 ├── adapters/
 │   ├── reference.cjs          PG+TS 参考实现适配器（已实现）
-│   ├── go-sqlite.cjs          Go+SQLite 实验实现 adapter（已连接）
-│   └── go-sqlite.example.cjs  Go+SQLite adapter 说明性模板
+│   ├── go-sqlite.cjs          Go 实验实现 × SQLite adapter（已连接）
+│   ├── go-postgres.cjs        Go 实验实现 × PostgreSQL adapter（已连接，每 case 独立 schema）
+│   └── go-sqlite.example.cjs  Go adapter 说明性模板
 ├── scripts/
 │   ├── record.sh              录制 golden
 │   ├── verify.sh              对候选实现跑并对比
@@ -89,7 +90,7 @@ cd /path/to/token-tracker-self-hosting
 # 2) 自测：用参考实现对比自己，应当 100% 通过
 ./contract/scripts/self-test.sh
 
-# 3) 对 Go+SQLite 实现跑同一批用例并对比
+# 3) 对 Go 实现跑同一批用例并对比（sqlite / postgres 两个 adapter）
 CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs \
   ./contract/scripts/verify.sh
 
@@ -127,7 +128,7 @@ CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs \
 
 - 每次 push / PR：重建 golden（临时目录）→ 与仓库里的 `golden/` 逐字节对比 → 自测 → 静态契约校验。
 - 每周定时：跑完整套件 + 性能基准，把报告作为 artifact。
-- `contract.yml` 已启用 Go+SQLite candidate job；独立 `build-go-image.yml` 负责候选镜像构建/实验发布。两个 workflow 均不会替代正式 InsForge/PostgreSQL 制品路径。
+- `go-server.yml` 在 SQLite 与 PostgreSQL 15/16 上跑同一批 unit + 契约；独立 `build-go-image.yml` 负责候选镜像构建/实验发布。两个 workflow 均不会替代正式 InsForge/PostgreSQL 制品路径。
 
 ---
 
@@ -135,6 +136,6 @@ CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs \
 
 - 上游参考实现：v1.4.12 / `8d32a956181bf52fae449c89b8f6520253566283`
 - 录制时间：见 `golden/1.4.12/_meta.json`
-- 用例数：35（见 `scenarios/index.json`）；Go+SQLite 当前 33 PASS / 2 PG-specific SKIP。
-- L3：真实 PostgreSQL 15.18 多连接锁/并发测试已通过 5 项，见 `L3-RESULTS.md`；这不代表 Go/SQLite 并发压力验收。
+- 用例数：35（见 `scenarios/index.json`）；Go 实现在 SQLite 与 PostgreSQL 上都是 33 PASS / 2 PG-specific SKIP。
+- L3：真实 PostgreSQL 15.18 多连接锁/并发测试已通过 5 项，见 `L3-RESULTS.md`；这不代表 Go 实现的并发压力验收。
 - Go adapter 和服务为实验垂直切片，生产阻断项见 `../go-server/STATUS.md`。

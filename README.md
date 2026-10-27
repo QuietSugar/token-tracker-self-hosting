@@ -12,13 +12,14 @@
 >
 > 🤖 **本仓库由 Agent 长期维护**。首次跨环境接手先读 [`docs/HANDOFF.md`](docs/HANDOFF.md)，再按 [`MAINTENANCE.md`](MAINTENANCE.md) 的会话启动协议恢复详细状态。
 >
-> 🐳 **当前正式交付物**是 Docker 工件镜像（linux/amd64）：携带已审计 SQL 与 14 个私有函数，面向 InsForge + PostgreSQL。另有**实验性 Go+SQLite 后端镜像**，已通过 33 个行为契约 + 2 个 PG 专属 SKIP；尚未达到生产 GA。见 [`docs/docker-image.md`](docs/docker-image.md) 与 [`go-server/STATUS.md`](go-server/STATUS.md)。
+> 🐳 **当前正式交付物**是 Docker 工件镜像（linux/amd64）：携带已审计 SQL 与 14 个私有函数，面向 InsForge + PostgreSQL。另有**实验性 Go 后端镜像（SQLite + PostgreSQL 双引擎）**，两种引擎各自通过 33 个行为契约 + 2 个 PG 专属 SKIP；尚未达到生产 GA。
+使用与运维看 [`go-server/README.md`](go-server/README.md)，设计与取舍看 [`docs/go-postgres.md`](docs/go-postgres.md)，缺口看 [`go-server/STATUS.md`](go-server/STATUS.md)。
 
 ---
 
 ## 当前状态
 
-**v1.4.12 正式 InsForge 工件已生成；本地真实标准环境已验收。公共 VPS 部署尚未开始。另有 Go+SQLite 实验性垂直切片（非 GA）。**
+**v1.4.12 正式 InsForge 工件已生成；本地真实标准环境已验收。公共 VPS 部署尚未开始。另有 Go 实验性垂直切片（SQLite / PostgreSQL 双引擎，非 GA）。**
 
 - [x] 归档维护提示词、可复用提示词、总体规划
 - [x] 锁定首个上游构建点：v1.4.12 / `8d32a956181bf52fae449c89b8f6520253566283`
@@ -30,8 +31,10 @@
 - [x] **本地标准栈验收**：官方 InsForge v2.3.3 + PG 15.18，15 步 SQL / 幂等重装 / L3 并发测试 5 PASS
 - [ ] **首次公共 VPS 部署**：配置自己的域名、密钥，上传 14 个函数（未连接/操作任何用户实例）
 - [ ] **VPS 验收**：按 [`docs/runbook.md`](docs/runbook.md) 逐项打勾
-- [x] 建立 Go+SQLite 实验后端：33 行为 PASS / 2 PG 专属 SKIP；尚不作生产替代
-- [ ] 完成 Go+SQLite 剩余数据模型、安全、运维、native-client E2E 后再评估 GA
+- [x] 建立 Go 实验后端（SQLite）：33 行为 PASS / 2 PG 专属 SKIP；尚不作生产替代
+- [x] Go 后端支持 PostgreSQL：同一份代码/镜像，PG 上同样 33 PASS（CI 覆盖 PG 15/16）
+- [ ] 完成 Go 后端剩余数据模型、安全、运维、native-client E2E 后再评估 GA
+- [ ] 决定是否保留 SQLite（成本分析见 [`docs/go-postgres.md`](docs/go-postgres.md) §5）
 
 ---
 
@@ -100,19 +103,22 @@ tokentracker-selfhost/
 │   ├── runbook.md               # 首次实施 / 升级 / 回滚操作手册
 │   ├── github-app-setup.md      # GitHub App 认证配置
 │   ├── docker-image.md          # Docker 镜像交付设计与使用
-│   └── database-choice.md       # 为什么 PostgreSQL 是硬依赖 + 可选部署形态
-├── contract/                    # 契约测试体系（为 Go+SQLite 改造做一致性基准）
+│   ├── database-choice.md       # 为什么正式 InsForge 路径硬依赖 PostgreSQL
+│   └── go-postgres.md           # Go 后端 PG/SQLite 双引擎设计、验收与成本分析
+├── contract/                    # 契约测试体系（为 Go 改造做一致性基准）
 │   ├── README.md / SPEC.md      # 体系说明 / 实现者契约规范
 │   ├── scenarios/               # 35 个语言无关用例（8 组）
 │   ├── golden/1.4.12/           # 录制的行为快照 + L1 静态契约 + 校验和
 │   ├── lib/                     # 归一化 / 执行器 / 对比器 / 录制器 / 进程池
-│   ├── adapters/                # 参考实现适配器 + 已连接的 Go+SQLite 实验 adapter
+│   ├── adapters/                # 参考实现 + Go 实验 adapter（sqlite / postgres）
 │   ├── scripts/                 # record / verify / self-test / benchmark
 │   └── RESULTS.md               # 当前结果摘要与改造者下一步
-├── go-server/                   # 实验性 Go + SQLite 后端垂直切片（非生产 GA）
+├── go-server/                   # 实验性 Go 后端垂直切片（SQLite / PostgreSQL，非生产 GA）
+│   ├── README.md                # 使用者手册：部署 / 配置 / 备份恢复 / 升级 / 排错
 │   ├── STATUS.md                # 支持范围 / 缺口 / 验收门槛（先读）
+│   ├── scripts/                 # full-test.sh（全量测试）/ backup.sh（备份恢复）
 │   ├── Dockerfile               # linux/amd64 实验镜像
-│   └── internal/{app,store}/    # Go HTTP / SQLite 实现
+│   └── internal/{app,store}/    # Go HTTP / 存储层（方言适配，双引擎）
 ├── tracking/
 │   ├── REF                      # 当前锁定的上游 commit（单一构建点）
 │   └── upstream.md              # 版本追踪表（每次拉取后更新，单一事实来源）
@@ -133,8 +139,9 @@ tokentracker-selfhost/
 ├── .github/workflows/
 │   ├── verify.yml               # 密钥/编码/产物/contract L1 gate
 │   ├── build-image.yml          # 正式工件镜像 GHCR build
-│   ├── contract.yml             # Golden 可复现 + PG/TS self-test + Go/SQLite candidate
-│   └── build-go-image.yml       # Go+SQLite 实验镜像 build
+│   ├── contract.yml             # Golden 可复现 + PG/TS self-test + Go candidate
+│   ├── go-server.yml            # Go 双引擎 unit + 契约（SQLite / PG 15/16）
+│   └── build-go-image.yml       # Go 实验镜像 build（含 SQLite+PG 双模式 smoke，通过才推送）
 └── releases/
     ├── _template/               # review.md / acceptance.md 模板
     └── 1.4.12/                  # 已生成 SQL + 14 函数 + 校验和 + 记录
@@ -204,7 +211,7 @@ tokentracker-selfhost/
 | `./scripts/reproduce.sh` | 从上游 commit 重建产物并逐字节校验 | 写 /tmp 临时目录 |
 | `./contract/scripts/record.sh` | 录制契约黄金快照（PG+TS 参考实现） | 写 `contract/golden/` |
 | `./contract/scripts/self-test.sh` | 契约体系自测（必须 100% PASS） | 写报告 |
-| `CONTRACT_ADAPTER=... ./contract/scripts/verify.sh` | 对 Go+SQLite 实现跑一致性验证 | 写报告 |
+| `CONTRACT_ADAPTER=... ./contract/scripts/verify.sh` | 对 Go 实现跑一致性验证（sqlite / postgres adapter） | 写报告 |
 | `./contract/scripts/benchmark.sh` | 性能基准 | 写报告 |
 | `docker run --rm <image> commands` | 输出 VPS 上要执行的完整部署命令 | 否 |
 

@@ -2,7 +2,10 @@ module github.com/QuietSugar/tokentracker-selfhost-go
 
 go 1.24
 
-require modernc.org/sqlite v1.34.5
+require (
+	github.com/lib/pq v1.10.9
+	modernc.org/sqlite v1.34.5
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
