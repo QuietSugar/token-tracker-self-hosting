@@ -8,7 +8,7 @@
 |---|---|
 | **要用它的人**（部署、接客户端、看用量） | [`users/quickstart.md`](users/quickstart.md) |
 | **要交给 AI 部署的人** | [`../AGENTS.md`](../AGENTS.md) → [`agents/deploy.md`](agents/deploy.md) |
-| **要改代码 / 跟上游的人** | [`status.md`](status.md) → `design/`、`maintainers/`（见下方清单） |
+| **要改代码 / 跟上游的人** | [`status.md`](status.md) → [`design/`](#design--为什么这么做)、[`maintainers/`](#maintainers--怎么维护) |
 | **只想确认它能做什么** | [`status.md`](status.md) |
 
 ## users/ — 怎么用
@@ -27,12 +27,27 @@
 
 | 文档 | 用途 |
 |---|---|
-| [deploy.md](agents/deploy.md) | 一个 AI 从零把服务部到你机器上的完整流程（含前置问答、验证门、停手条件） |
+| [deploy.md](agents/deploy.md) | AI 从零把服务部到一台机器上（前置问答 → 判定树 → 验证门 → 停手条件） |
+| [develop.md](agents/develop.md) | AI 改代码 / 改文档（仓库地图 → 硬不变量 → 改动流程 → 验证门） |
+
+## design/ — 为什么这么做
+
+| 文档 | 回答的问题 |
+|---|---|
+| [postgres.md](design/postgres.md) | 为什么只有 PostgreSQL；SQLite 为什么删；迁移与并发怎么取舍 |
+| [auth.md](design/auth.md) | 身份模型：三种凭据、单 owner、`/api/auth/*`、设备授权三模式的安全边界 |
+| [parity.md](design/parity.md) | 「和官方等价」到底指什么；哪三层验证；哪些地方有意不等价 |
+
+## maintainers/ — 怎么维护
+
+| 文档 | 回答的问题 |
+|---|---|
+| [README.md](maintainers/README.md) | 仓库里各目录是什么关系 |
+| [upstream.md](maintainers/upstream.md) | 上游发新版后怎么判断「要不要动」、怎么锁定和重生成产物 |
+| [contract.md](maintainers/contract.md) | 契约怎么跑、门槛是多少、什么时候能重录 golden |
+| [release.md](maintainers/release.md) | 两种镜像分别怎么发 |
+| [conventions.md](maintainers/conventions.md) | 编码、密钥、提交、文档、已退役的自动化 |
 
 ## status.md
 
 能力清单（已验证 / 未验证）、已知缺口、非目标。**别在别处重复这些结论**。
-
-## 正在补齐的部分
-
-`design/`（为什么只有 PostgreSQL、认证怎么设计、与上游的等价范围）与 `maintainers/`（上游跟踪与工件产线、契约测试、发布、仓库约定）还在迁移中；迁移期间旧文档仍在 `docs/` 顶层，完成后会删除。
