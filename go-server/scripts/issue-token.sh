@@ -14,24 +14,27 @@
 #   ./issue-token.sh --base https://tt.lan --json         # 指定查询 owner 的服务地址
 #
 # sub 怎么来的：设备与数据的归属账户叫「owner」（见服务端 internal/app/owner.go）。
-# 它不再是一个写死的常量，所以本脚本会问服务端：GET <base>/api/auth/owner（仅回环可读）。
-# 服务不可达时才退回历史 UUID，并往 stderr 打一行警告（老部署仍能继续用）。
+# 它不是一个常量，所以本脚本会问服务端：GET <base>/api/auth/owner（仅回环可读）。
+#   - 已有 owner  → 用它的 user id（服务端会拒绝第二个账户，别的 sub 拿不到数据）；
+#   - 还没有 owner → 生成一个随机 id，服务端在首次使用时把它认作 owner；
+#   - 连不上服务端 → 报错退出（猜一个 id 只会把数据写到看不见的地方）。
 #
 # 依赖：python3（几乎所有发行版自带）。没有 python3 时回退到 openssl。
 set -euo pipefail
 
-usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 
 SUB=""; ROLE="authenticated"; DAYS="365"; JSON_ONLY="0"; SECRET="${TT_JWT_SECRET:-}"
 BASE="${TT_BASE_URL:-http://127.0.0.1:8080}"
-# 历史 UUID：只在**问不到 owner** 时兜底，绝不主动创建（新装机器上它不存在）
-LEGACY_SUB="11111111-1111-4111-8111-111111111111"
+
+new_random_sub() {
+  if [ -r /proc/sys/kernel/random/uuid ]; then cat /proc/sys/kernel/random/uuid; return 0; fi
+  if command -v python3 >/dev/null 2>&1; then python3 -c 'import uuid;print(uuid.uuid4())'; return 0; fi
+  return 1
+}
 
 resolve_owner() {
-  # 1) 显式配置优先（服务端也认这个变量，语义是"钉住 owner id"）
-  if [ -n "${TT_OWNER_ACCOUNT:-}" ]; then printf '%s' "$TT_OWNER_ACCOUNT"; return 0; fi
-  if [ -n "${TT_DEFAULT_ACCOUNT:-}" ]; then printf '%s' "$TT_DEFAULT_ACCOUNT"; return 0; fi
-  # 2) 问本机服务端（不可达会被 curl 判失败；可达但 owner 为空则返回 "none"）
+  # 问服务端（不可达会被 curl 判失败；可达但还没有 owner 则返回空）
   local out
   if ! out="$(curl -fsS --max-time 3 "${BASE%/}/api/auth/owner" 2>/dev/null)"; then
     return 2
@@ -65,13 +68,13 @@ if [ -z "$SUB" ]; then
   RC=0; SUB="$(resolve_owner)" || RC=$?
   case "$RC" in
     0) : ;;
-    1) # 服务可达，但还没有 owner：用历史 UUID 作为"第一个身份"，服务端会认领它
-       SUB="$LEGACY_SUB"
+    1) # 服务可达，但还没有 owner：给一个随机 id 当"第一个身份"，服务端会认领它
+       SUB="$(new_random_sub)" || { echo "错误: 无法生成随机 id（缺 /proc 与 python3），请用 --sub 指定" >&2; exit 1; }
        echo "提示: 这台机器还没有 owner 账户。本次用 $SUB 作为初始身份，" >&2
        echo "      服务端会在首次使用时认领它；之后注册/登录（TT_AUTH_EMAIL）会挂到同一账户。" >&2 ;;
-    *) SUB="$LEGACY_SUB"
-       echo "警告: 连不上 $BASE，无法确认 owner 账户，暂用 $SUB。" >&2
-       echo "      远程部署请加 --base https://你的地址，或用 --sub 显式指定。" >&2 ;;
+    *) echo "错误: 连不上 $BASE，无法确认 owner 账户。" >&2
+       echo "      请先启动服务、或用 --base 指定地址；确需离线签发时用 --sub 显式给出 user id。" >&2
+       exit 1 ;;
   esac
 fi
 [ -n "$SECRET" ] || { echo "错误: 未设置 TT_JWT_SECRET（或用 --secret 传入）" >&2; exit 1; }

@@ -2,6 +2,95 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — 多设备维度对齐官方 + 彻底删掉「默认账户」的兼容包袱
+
+两件事一起做，因为现在按「还没有任何真实部署」来设计：不留迁移路径，只保留最少的规则。
+
+### 1. 设备维度（`device_id`）按官方实现
+
+以前 `tokentracker-account-devices` 返回的是「按 source 聚合」，dashboard 的设备下拉框
+因此没有意义（选谁都一样）。现在与官方 `dashboard/edge-patches/tokentracker-account-devices.ts`
+同形状：
+
+```json
+{"from":"2026-10-01","to":"2026-10-31",
+ "devices":[{"id":"…","device_name":"MacBook","platform":"darwin",
+             "created_at":"…","total_tokens":1200}],
+ "account_sources":[]}
+```
+
+- 只列未撤销设备，按区间用量降序；各设备之和 == `account-summary` 总量；
+- `account-summary/-daily/-hourly/-monthly/-heatmap/-model-breakdown` 都支持
+  `?device_id=<uuid>`（含 summary 的 rolling 7/30 天窗口）；
+- 形状不是 UUID → 当没传；不是自己的设备 → 空结果（过滤条件带 `user_id`）；
+- RPC `account_usage_grouped` 支持 `p_device_id` / `p_device_ids`（官方 dashboard 取数路径）；
+- `tokentracker-device-rename` 改收官方的 `{device_id, device_name}`（同时兼容旧的 `name`），
+  只改未撤销设备，同平台重名 → **409**（原来会 500）
+- `account-devices` 缺 `from/to` → **400**（对齐官方，不再编造默认日期）
+
+### 2. 删除 `TT_DEFAULT_ACCOUNT` 留下的全部兼容代码
+
+上一轮把「默认账户」的语义去掉了，但还留着认领旧数据/钉住 id 的路径。既然没有真实部署，
+这些全部删除：
+
+| 删除 | 原用途 |
+|---|---|
+| `legacyDefaultSub` + `legacySubWithData()` | 认领历史 UUID 名下的数据（老库升级） |
+| `TT_OWNER_ACCOUNT` / `TT_DEFAULT_ACCOUNT` | 钉住 owner id（配置常量进代码的入口） |
+| `POST /api/auth/merge-account` + `mergeAccount()` | 收拾"两个账户"的存量分裂 |
+| `issue-token.sh` 的 UUID 兜底 | 问不到 owner 时退回历史 UUID |
+
+现在的 owner 规则只剩三条：`auth_owner` 已有 → 用；库里只有一个带密码账户 → 用；
+都没有 → **第一个出现的身份**成为 owner。空库启动不创建任何账户（有测试盯）。
+
+`scripts/issue-token.sh` 行为也跟着变：已有 owner 就用它；还没有 owner 就生成**随机** id
+交给服务端认领；连不上服务端则**直接报错**（猜一个 id 只会把数据写到看不见的地方）。
+
+### 测试
+
+- 新增 `devices_test.go`（7 个用例）：设备列表形状/排序/求和一致、六个端点的 `device_id`
+  过滤、非法与越权 id、撤销设备不列表但用量仍计入、缺参数 400、
+  官方字段名重命名 + 重名 409、RPC `p_device_id`。
+- 删除 `owner_test.go` 里的 legacy 认领与 merge-account 用例，新增「空库不建账户」。
+- `go test -race ./...`：SQLite ✅ / PostgreSQL 16 ✅
+- 契约：`go-sqlite`、`go-postgres` 均 **33 PASS / 0 FAIL / 2 SKIP**
+
+### 实测（官方 v1.4.12 客户端 + 真实服务）
+
+官方 CLI `device-login`（auto 批准，anon key 用 `issue-token.sh --role anon` 签）→
+`/api/auth/owner` = `{"source":"device"}` → 用 CLI 存的 device token 真实 `ingest` →
+之后注册 `owner@lan.test`，signup 返回的 user id 与 owner **完全相同**：
+
+```
+account-devices → devices:[{id: e98a566b…, device_name:"Device Flow", platform:"cli",
+                            total_tokens:1050}]  account_sources:[]
+account-summary                       → total_tokens=1050
+account-summary&device_id=e98a566b…   → total_tokens=1050
+account-daily&device_id=e98a566b…     → 1 天
+device-rename {device_id, device_name:"书房的 Mac"} → 200 ok
+auth_users=1  auth_owner=1(source=device)  devices=1  hourly=2 行 / 1050
+```
+
+同一台机器上多设备的情况另用一个脚本验（两台设备、两个 device token）：
+
+```
+device-token-issue ×2（laptop / nas）→ ingest 1000 / 50
+account-devices → 2 行：laptop(darwin) 1000、nas(linux) 50，account_sources=[]
+account-summary             all=1050
+account-summary&device_id=laptop   devA=1000
+device-rename {device_id, device_name:"书房 MacBook"} → ok
+issue-token.sh（已有 owner）→ sub 与 /api/auth/owner 相同
+```
+
+### 文档
+
+`docs/oauth-selfhosted.md` 新增 **§4.6 设备维度**、重写 **§4.5**（只剩三条规则，
+明确写"没有 `TT_DEFAULT_ACCOUNT` / `TT_OWNER_ACCOUNT`，也没有迁移路径"）；
+`docs/official-client.md` §5 补设备下拉框链路的实测形状；`go-server/README.md`
+（环境变量表删一行、补设备维度说明）、`STATUS.md`、根 `README.md` 同步。
+
+---
+
 ## 2026-10-27 — 账户归属收敛：device-login 与登录是同一个账户，`TT_DEFAULT_ACCOUNT` 退场
 
 问题：上一轮引入 `/api/auth/*` 后，同一台机器有**两条账户**——

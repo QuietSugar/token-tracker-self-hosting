@@ -42,9 +42,6 @@ type Server struct {
 	//   page        GET /device 页面点按钮（无认证，局域网自用）
 	//   auto        申请即批准到 owner 账户（官方客户端 tracker device-login 零交互）
 	deviceApprove string
-	// ownerAccount 是**可选**的"钉住所有者 id"配置（TT_OWNER_ACCOUNT，兼容旧名 TT_DEFAULT_ACCOUNT）。
-	// 留空时 owner 由库里的 auth_owner / 已有的唯一凭据账户 / 历史数据自动解析（见 owner.go）。
-	ownerAccount string
 	// ownerKnown 缓存「owner 已解析」，避免每个请求都查 auth_owner（见 owner.go）。
 	ownerKnown bool
 	// authCfg 是 /api/auth/* 的运行时配置（见 oauth.go）。
@@ -64,9 +61,6 @@ func New(db *store.DB) *Server {
 			now = t.UTC()
 		}
 	}
-	if os.Getenv("TT_DEFAULT_ACCOUNT") != "" && os.Getenv("TT_OWNER_ACCOUNT") == "" {
-		log.Printf("config: TT_DEFAULT_ACCOUNT 已改名为 TT_OWNER_ACCOUNT（旧名仍接受，含义变了：只用于钉住 id，不再是默认账户）")
-	}
 	return &Server{
 		db:     db,
 		secret: []byte(envOr("TT_JWT_SECRET", "contract-test-secret")),
@@ -74,7 +68,6 @@ func New(db *store.DB) *Server {
 		// base_url 无论填 localhost 还是局域网 https 域名都对得上。
 		dashboard:     envOr("TT_DASHBOARD_URL", ""),
 		deviceApprove: envOr("TT_DEVICE_APPROVE", "jwt"),
-		ownerAccount:  envOr("TT_OWNER_ACCOUNT", os.Getenv("TT_DEFAULT_ACCOUNT")),
 		authCfg:       loadAuthConfig(),
 		now:           now,
 		testMode:      os.Getenv("TT_ENABLE_TEST_ENDPOINTS") == "true",
@@ -91,6 +84,26 @@ func envOr(k, def string) string {
 // ---------- 工具 ----------
 
 func (s *Server) nowISO() string { return s.now.UTC().Format(time.RFC3339) }
+
+// strArg / deviceIDsArg 读 RPC 参数里的设备过滤（字符串 / 字符串数组）。
+func strArg(args map[string]any, k string) string {
+	v, _ := args[k].(string)
+	return strings.TrimSpace(v)
+}
+
+func deviceIDsArg(args map[string]any) []string {
+	raw, ok := args["p_device_ids"].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if id, ok := v.(string); ok && strings.TrimSpace(id) != "" {
+			out = append(out, strings.TrimSpace(id))
+		}
+	}
+	return out
+}
 
 func newID() string {
 	b := make([]byte, 16)
@@ -566,17 +579,25 @@ func (s *Server) listMachines(userID string) []map[string]any {
 // ---------- 账户聚合 ----------
 
 type usageRow struct {
+	DeviceID                                                         string
 	HourStart, Source, Model                                         string
 	InputTokens, OutputTokens, CachedInput, CacheCreation, Reasoning int64
 	TotalTokens, Billable, Conversations                             int64
 	CostUSD                                                          string
 }
 
-func (s *Server) fetchHourly(userID, from, to string) []usageRow {
-	rows, err := s.db.Query(`SELECT hour_start,source,model,input_tokens,output_tokens,cached_input_tokens,
+// fetchHourly 取某个账户在 [from,to] 内的小时行；deviceID 非空时只取该设备
+// （对应官方 account-* 端点的 device_id 过滤）。
+func (s *Server) fetchHourly(userID, deviceID, from, to string) []usageRow {
+	q := `SELECT device_id,hour_start,source,model,input_tokens,output_tokens,cached_input_tokens,
 		cache_creation_input_tokens,reasoning_output_tokens,total_tokens,COALESCE(billable_total_tokens,0),
-		conversations,total_cost_usd FROM hourly WHERE user_id=? AND hour_start>=? AND hour_start<=?
-		ORDER BY hour_start,source,model`, userID, from, to)
+		conversations,total_cost_usd FROM hourly WHERE user_id=? AND hour_start>=? AND hour_start<=?`
+	args := []any{userID, from, to}
+	if deviceID != "" {
+		q += ` AND device_id=?`
+		args = append(args, deviceID)
+	}
+	rows, err := s.db.Query(q+` ORDER BY hour_start,source,model`, args...)
 	if err != nil {
 		return nil
 	}
@@ -584,7 +605,7 @@ func (s *Server) fetchHourly(userID, from, to string) []usageRow {
 	out := []usageRow{}
 	for rows.Next() {
 		var x usageRow
-		_ = rows.Scan(&x.HourStart, &x.Source, &x.Model, &x.InputTokens, &x.OutputTokens,
+		_ = rows.Scan(&x.DeviceID, &x.HourStart, &x.Source, &x.Model, &x.InputTokens, &x.OutputTokens,
 			&x.CachedInput, &x.CacheCreation, &x.Reasoning, &x.TotalTokens, &x.Billable,
 			&x.Conversations, &x.CostUSD)
 		out = append(out, x)
@@ -626,7 +647,22 @@ func (s *Server) usageGrouped(args map[string]any) []map[string]any {
 	from, _ := args["p_from"].(string)
 	to, _ := args["p_to"].(string)
 	tz, _ := args["p_tz"].(string)
-	rows := s.fetchHourly(uid, from, to)
+	// 官方 RPC 有 p_device_id（单设备）与 p_device_ids（多设备/空=仅账户级源）两种入参；
+	// 自托管没有账户级源，所以空 p_device_ids = 全部设备。
+	rows := s.fetchHourly(uid, strArg(args, "p_device_id"), from, to)
+	if ids := deviceIDsArg(args); len(ids) > 0 {
+		keep := map[string]bool{}
+		for _, id := range ids {
+			keep[id] = true
+		}
+		filtered := rows[:0]
+		for _, x := range rows {
+			if keep[x.DeviceID] {
+				filtered = append(filtered, x)
+			}
+		}
+		rows = filtered
+	}
 	type key struct{ bucket, source, model string }
 	groups := map[key]*usageRow{}
 	for _, x := range rows {

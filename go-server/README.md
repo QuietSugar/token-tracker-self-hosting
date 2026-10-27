@@ -44,8 +44,10 @@ cd go-server
 ./scripts/issue-token.sh --role project_admin     # 需要调 /api/database/rpc/* 时
 ```
 
-- 默认 `sub` 是固定的 `11111111-1111-4111-8111-111111111111`，**首次使用会自动建账户行**，
-  所以不需要任何注册步骤；也可以 `--sub <你自己编的 UUID>` 换一个。
+- 默认 `sub` 自动取这台机器的 **owner 账户**（脚本问 `GET /api/auth/owner`，仅回环可读）。
+  还没有 owner 时脚本会生成一个随机 UUID 交给服务端认领，所以不需要任何注册步骤；
+  已有 owner 时请不要再传别的 `--sub`（那会是一个拿不到数据的陌生账户）。
+  连不上服务端时脚本直接报错 —— 离线签发请显式给 `--sub`。
 - token 等于该账户的全部读写权限：别提交到 git、别贴到聊天里。
 - 轮换：换掉 `TT_JWT_SECRET` 并重启服务，旧 token 立即全部失效。
 - 这个脚本不参与服务端逻辑，将来接入正式认证后可以直接弃用。
@@ -160,8 +162,7 @@ PostgreSQL 模式（连真实 PG 建 schema、health 200、日志脱敏、`/_tes
 | `TT_LISTEN_ADDR` | `127.0.0.1:8080` | 监听地址。容器里用 `0.0.0.0:8080`。 |
 | `TT_DASHBOARD_URL` | 空 = 按请求推导 | 设备授权返回的 `verification_uri` / `verification_uri_complete` 前缀。**留空时**用 `X-Forwarded-Proto` + `Host` 推导（推荐，官方客户端要求它与客户端 `base_url` 同源）。 |
 | `TT_DEVICE_APPROVE` | `jwt` | 设备授权怎么被批准：`jwt`（POST `device-flow-grant` 带 JWT）/ `page`（访问 `/device` 点按钮，无认证）/ `auto`（申请即批准，官方客户端 `device-login` 零交互）。详见 [`../docs/official-client.md`](../docs/official-client.md)。 |
-| `TT_OWNER_ACCOUNT` | 空（自动解析） | 可选：把**所有者账户** id 钉死。设备批准、注册、`issue-token.sh` 都指向它。旧名 `TT_DEFAULT_ACCOUNT` 仍被接受，但"默认账户"的语义已删除（见 `docs/oauth-selfhosted.md` §4.5）。 |
-| `TT_AUTH_EMAIL` / `TT_AUTH_PASSWORD` | – | 启动时若库里还没有账户，用它创建 owner（幂等，不覆盖已有密码）。官方客户端/dashboard 的登录框就用这一组。 |
+| `TT_AUTH_EMAIL` / `TT_AUTH_PASSWORD` | – | 给 owner 账户设邮箱密码（幂等，不覆盖已有密码；owner 已因 device-login 存在时挂到它身上）。官方客户端/dashboard 的登录框就用这一组。**没有任何"默认账户 UUID"配置**：owner 由库里的 `auth_owner` 决定（`docs/oauth-selfhosted.md` §4.5）。 |
 | `TT_ACCESS_TOKEN_TTL` | `3600` | access token（HS256 JWT）有效期，秒。 |
 | `TT_REFRESH_TOKEN_TTL` | `7776000` | refresh token 有效期（90 天），也是 cookie Max-Age。 |
 | `TT_AUTH_ALLOW_SIGNUP` | `false` | 已有 owner 后是否还允许 `POST /api/auth/users` 自助注册。 |
@@ -228,6 +229,12 @@ server {
 
 **不要**把 `/_test/*` 暴露到公网：生产环境 `TT_ENABLE_TEST_ENDPOINTS` 必须未设置/false，
 即使误开，也建议在反代层直接 `location ~ ^/_test { return 404; }`。
+
+**设备维度**：`tokentracker-account-devices` 返回每台设备一行
+（`{id, device_name, platform, created_at, total_tokens}`，只含未撤销设备、按用量降序）；
+`account-summary` / `-daily` / `-hourly` / `-monthly` / `-heatmap` / `-model-breakdown`
+都接受 `?device_id=<uuid>` 只统计该设备，形状不对时忽略。详见
+[`../docs/oauth-selfhosted.md`](../docs/oauth-selfhosted.md) §4.6。
 
 **CORS**：服务对所有 `/functions/*` 返回 `Access-Control-Allow-Origin: *`（与参考实现一致）。
 如果你要限制来源，请在反代层改写该响应头。

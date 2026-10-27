@@ -188,6 +188,23 @@ cloud-account.fetchAccountUsage 直接调用:
 - 你在 dashboard 里**打开云同步**（`cloud-sync-pref = true`），这是客户端自己的偏好；
 - 登录发生在**本地 CLI 的页面**（127.0.0.1:7680）上，否则 relay 拿不到 cookie。
 
+### 多台设备的区分（device 维度）
+
+一个账户下挂了几台机器时，dashboard 的设备下拉框/设备卡片走的是
+`GET /functions/tokentracker-account-devices`，并给其它 `account-*` 请求带上
+`&device_id=<id>`。这两个行为都已按官方形状实现（见 [`oauth-selfhosted.md`](oauth-selfhosted.md) §4.6）：
+
+```
+GET /functions/tokentracker-account-devices?from=…&to=…
+→ {"devices":[{"id":"b7a5…","device_name":"MacBook","platform":"darwin",
+               "created_at":"…","total_tokens":1200}, …],"account_sources":[]}
+
+GET /functions/tokentracker-account-summary?from=…&to=…&device_id=b7a5…
+→ 只统计这台设备（summary/daily/hourly/monthly/heatmap/model-breakdown 都支持）
+```
+
+"重命名设备"用官方的 `{device_id, device_name}`，重名返回 409。
+
 仍然没有的：第三方 OAuth 登录、邮件验证/找回密码、多账户后台（见 oauth-selfhosted.md §3）。
 
 ## 6. 端到端验收清单（可照抄）

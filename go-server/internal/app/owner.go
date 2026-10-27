@@ -2,36 +2,22 @@ package app
 
 // owner.go —— 「这台机器的所有者账户」的唯一真相。
 //
-// 背景（为什么以前有 TT_DEFAULT_ACCOUNT）：
-// 最初没有账号体系，`scripts/issue-token.sh` 里写死了一个 sub
-// （11111111-1111-4111-8111-111111111111），服务端的 auto/page 设备批准也照抄这个常量，
-// 于是"设备上报归属的账户"= 一个配置字符串。后来 /api/auth/* 引入了真正的账号
-// （注册/登录产生随机 user id），两者就对不上了：device-login 的用量落在 1111…，
-// 登录后拿到的 access token 属于另一个 id，跨设备汇总自然互相看不见。
+// 设计上刻意**没有任何"默认账户"常量**：不存在写死的 UUID，也不存在"钉住 id"的环境变量。
+// 归属只有一个来源 —— 库里的 auth_owner 单例行，由下面的规则解析出来：
 //
-// 现在的规则（本节就是唯一真相）：
-//   - 归属不再来自配置常量，而是来自库里的 auth_owner 单例行；
-//   - owner 按下面的顺序**自动解析**并落库（解析一次就固定下来）：
-//       1. auth_owner 已存在 → 就是它；
-//       2. 只有一个带密码凭据的账户 → 认它（source=credentials）；
-//       3. 只有配置钉住的 id（TT_OWNER_ACCOUNT，兼容旧名 TT_DEFAULT_ACCOUNT）→ 认它（source=config）；
-//       4. 库里有历史遗留的固定 sub（旧版本用过）→ 认它（source=legacy），老数据不丢；
-//       5. 都没有 → 还没有 owner。此时**第一个出现的身份**成为 owner：
-//          设备批准 / 注册 / 首次用 JWT 访问（见 maybeClaimOwner）。
+//	1. auth_owner 已存在 → 就是它；
+//	2. 库里只有一个带密码凭据的账户 → 认它（source=credentials）；
+//	3. 都没有 → 还没有 owner；此时**第一个出现的身份**成为 owner
+//	   （source=device / signup / bootstrap / first-use，见 claimOwner）。
 //
-// 这样「先 device-login 还是先登录」两种顺序都能收敛到同一个账户，
-// 新装机器则完全没有那个魔法 UUID 参与。
+// 这样「先 device-login 还是先登录」两种顺序都收敛到同一个账户，也不会凭空造出
+// 任何第二个账户。历史上曾有过一个写死的 UUID（1111…），那套"默认账户 + 认领旧数据"
+// 的兼容逻辑已随概念一起删除 —— 服务假定每次部署都是从空库开始。
 
 import (
 	"database/sql"
 	"errors"
-	"fmt"
-	"log"
 )
-
-// 旧版本（无账号体系时）写死过一次的账户 id。
-// 只用于**认领历史数据**，不作为默认值：新装机器上它不存在，也就不会被创建。
-const legacyDefaultSub = "11111111-1111-4111-8111-111111111111"
 
 // maybeClaimOwner：还没有 owner 时，把本次请求的 JWT sub 认作 owner。
 //
@@ -91,44 +77,7 @@ func (s *Server) resolveOwnerCandidate() (uid, source string, err error) {
 		}
 		return uid, "credentials", nil
 	}
-	// 3) 配置钉住的 id（存在才认，不会凭空创建）
-	if s.ownerAccount != "" {
-		var exists int
-		if err := s.db.QueryRow(`SELECT count(*) FROM auth_users WHERE id=?`, s.ownerAccount).Scan(&exists); err != nil {
-			return "", "", err
-		}
-		if exists == 1 {
-			return s.ownerAccount, "config", nil
-		}
-	}
-	// 4) 历史遗留的固定 sub（有设备/用量才算，避免空账户被认领）
-	if uid, err = s.legacySubWithData(); err != nil {
-		return "", "", err
-	}
-	if uid != "" {
-		return uid, "legacy", nil
-	}
 	return "", "", nil
-}
-
-func (s *Server) legacySubWithData() (string, error) {
-	var n int
-	if err := s.db.QueryRow(`SELECT count(*) FROM auth_users WHERE id=?`, legacyDefaultSub).Scan(&n); err != nil {
-		return "", err
-	}
-	if n == 0 {
-		return "", nil
-	}
-	var rows int
-	if err := s.db.QueryRow(`SELECT
-		(SELECT count(*) FROM devices WHERE user_id=?) +
-		(SELECT count(*) FROM hourly WHERE user_id=?)`, legacyDefaultSub, legacyDefaultSub).Scan(&rows); err != nil {
-		return "", err
-	}
-	if rows == 0 {
-		return "", nil
-	}
-	return legacyDefaultSub, nil
 }
 
 // claimOwner 把 uid 钉成 owner（幂等；已存在则不动）。
@@ -152,10 +101,7 @@ func (s *Server) ensureOwner(source string) (string, error) {
 	} else if uid != "" {
 		return uid, nil
 	}
-	uid := s.ownerAccount
-	if uid == "" {
-		uid = newID()
-	}
+	uid := newID()
 	if err := s.claimOwner(uid, source); err != nil {
 		return "", err
 	}
@@ -203,71 +149,4 @@ func (s *Server) adoptableOwner() (string, error) {
 		return "", nil
 	}
 	return uid, nil
-}
-
-// mergeAccount 把 fromSub 名下的所有数据搬到 owner 名下。
-//
-// 用途：已经踩到"两条账户"的实例（旧版本 device-login 落在固定 sub，
-// 之后又用 TT_AUTH_EMAIL 注册了新账户）可以一次性收拾干净。
-// 只搬行、不动 token（device_tokens 里的 hash 原样保留，设备无需重新登录）。
-func (s *Server) mergeAccount(fromSub, toSub string) (map[string]int, error) {
-	if fromSub == "" || toSub == "" || fromSub == toSub {
-		return nil, errors.New("mergeAccount: from and to must differ and be non-empty")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var exists int
-	if err := s.db.QueryRow(`SELECT count(*) FROM auth_users WHERE id=?`, fromSub).Scan(&exists); err != nil {
-		return nil, err
-	}
-	if exists == 0 {
-		return nil, fmt.Errorf("unknown account %s", fromSub)
-	}
-	// 同一台设备在两边各有一行时，(user_id,machine_id) 唯一索引会冲突：
-	// 先把源侧重复的设备软删掉（撤销），再搬剩下的。
-	if _, err := s.db.Exec(`UPDATE devices SET revoked_at=?, machine_id=NULL
-		WHERE user_id=? AND revoked_at IS NULL AND machine_id IS NOT NULL
-		  AND machine_id IN (SELECT machine_id FROM devices WHERE user_id=? AND revoked_at IS NULL)`,
-		s.nowISO(), fromSub, toSub); err != nil {
-		return nil, err
-	}
-	moved := map[string]int{}
-	steps := []struct {
-		table string
-		sql   string
-	}{
-		{"devices", `UPDATE devices SET user_id=? WHERE user_id=?`},
-		{"device_tokens", `UPDATE device_tokens SET user_id=? WHERE user_id=?`},
-		{"cloud_machines", `UPDATE cloud_machines SET user_id=? WHERE user_id=?`},
-		{"cloud_machine_aliases", `UPDATE cloud_machine_aliases SET user_id=? WHERE user_id=?`},
-		{"hourly", `UPDATE hourly SET user_id=? WHERE user_id=?`},
-		{"device_tokens_dedup", ``},
-	}
-	for _, st := range steps {
-		if st.sql == "" {
-			continue
-		}
-		res, err := s.db.Exec(st.sql, toSub, fromSub)
-		if err != nil {
-			// hourly 可能因为 (user,device,hour,source,model) 冲突失败：
-			// 这种情况下让用户先处理，报错比悄悄丢数据好。
-			return moved, fmt.Errorf("%s: %w", st.table, err)
-		}
-		if n, err := res.RowsAffected(); err == nil {
-			moved[st.table] = int(n)
-		}
-	}
-	// 源账户已空：删掉它（避免列表里挂着幽灵账户）
-	if _, err := s.db.Exec(`DELETE FROM auth_credentials WHERE user_id=?`, fromSub); err != nil {
-		return moved, err
-	}
-	if _, err := s.db.Exec(`DELETE FROM auth_sessions WHERE user_id=?`, fromSub); err != nil {
-		return moved, err
-	}
-	if _, err := s.db.Exec(`DELETE FROM auth_users WHERE id=?`, fromSub); err != nil {
-		return moved, err
-	}
-	log.Printf("auth: merged account %s into owner %s: %v", fromSub, toSub, moved)
-	return moved, nil
 }
