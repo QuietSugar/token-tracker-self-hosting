@@ -2,6 +2,33 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — 新机接入与官方流程对齐：默认 `TT_DEVICE_APPROVE=page`
+
+### 之前的问题：多了一步官方没有的"手批"
+
+`device-login` 本来就是官方 OAuth device flow（authorize → 浏览器批准 → poll 拿 token），
+服务端也早就实现了三条批准路径。但**默认**是 `TT_DEVICE_APPROVE=jwt`：终端拿到 code 以后
+没人能批，文档只能教你跑 `scripts/approve-device.sh`。于是新机接入看起来像"本项目自造的流程"，
+而不是"官方客户端点一下就好"。
+
+### 现在：默认就是官方那套
+
+- 默认改为 `page`：`tracker device-login` 打印 `http(s)://<host>/device?user_code=…`，
+  浏览器打开确认后点「批准」，终端自己完成。**不需要任何本项目自己的脚本。**
+- `/device` 页面重做：显示申请方的 `client_info`、`machine_id`、有效期和当前状态
+  （已批准 / 已过期 / 代码不存在分别给不同提示），批准前能确认是不是自己的机器；
+  批准失败会回页面说明原因，而不是一个裸 400。
+- `auto`（无头机器零交互）与 `jwt`（保留审批边界）照旧可用，只是不再是默认。
+- 明确写下安全边界：`page`/`auto` 都等于"能访问本服务且拿到 user_code 的人可以把设备接进
+  owner 账户"。user_code 只出现在发起申请那台机器的终端里，是这套流程唯一的凭据——官方
+  device flow 也是同一模型，区别只是官方那页还要求先登录 dashboard。
+
+### 文档
+
+`go-server/README.md` §3.6 的"三步"删掉了 `TT_DEVICE_APPROVE=auto`（不再需要），
+改成官方一致的两条命令 + 一张三模式对照表；§2 配置表默认值同步；
+`docs/official-client.md` §4 与排错表同步。
+
 ## 2026-10-27 — 内建只读看板 + `/health` 带上版本 + 时钟修复
 
 ### 修复：服务端时钟被写死在 2026-10-26

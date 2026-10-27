@@ -71,7 +71,10 @@ func New(db *store.DB) *Server {
 		// 留空 = 用请求自己的 Host 推导（见 dashboardFor），这样官方客户端的
 		// base_url 无论填 localhost 还是局域网 https 域名都对得上。
 		dashboard:     envOr("TT_DASHBOARD_URL", ""),
-		deviceApprove: envOr("TT_DEVICE_APPROVE", "jwt"),
+		// 默认 page = 与官方一致：客户端 device-login 打印一个 URL，你在浏览器点「批准」。
+		// 原来默认 jwt 意味着还得手跑 scripts/approve-device.sh —— 那是自造的步骤，
+		// 官方没有，也正是"新机接入看起来和官方不一样"的根源。
+		deviceApprove: envOr("TT_DEVICE_APPROVE", "page"),
 		authCfg:       loadAuthConfig(),
 		now:           now,
 		testMode:      os.Getenv("TT_ENABLE_TEST_ENDPOINTS") == "true",

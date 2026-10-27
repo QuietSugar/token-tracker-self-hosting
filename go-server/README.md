@@ -182,7 +182,7 @@ docker pull ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental-<short
 | `TT_POSTGRES_SCHEMA_EPHEMERAL` | `false` | 仅 PG：进程退出时 `DROP SCHEMA … CASCADE`。**只用于测试，别在生产开。** |
 | `TT_LISTEN_ADDR` | `127.0.0.1:8080` | 监听地址。容器里用 `0.0.0.0:8080`。 |
 | `TT_DASHBOARD_URL` | 空 = 按请求推导 | 设备授权返回的 `verification_uri` / `verification_uri_complete` 前缀。**留空时**用 `X-Forwarded-Proto` + `Host` 推导（推荐，官方客户端要求它与客户端 `base_url` 同源）。 |
-| `TT_DEVICE_APPROVE` | `jwt` | 设备授权怎么被批准：`jwt`（POST `device-flow-grant` 带 JWT）/ `page`（访问 `/device` 点按钮，无认证）/ `auto`（申请即批准，官方客户端 `device-login` 零交互）。详见 [`../docs/official-client.md`](../docs/official-client.md)。 |
+| `TT_DEVICE_APPROVE` | `page` | 设备授权怎么被批准：`page`（**默认，与官方一致**：客户端打印 URL，浏览器打开点「批准」）/ `jwt`（`POST device-flow-grant` 带 JWT，或 `scripts/approve-device.sh`，想保留审批边界时用）/ `auto`（申请即批准，零交互，适合无浏览器的机器）。详见 [`../docs/official-client.md`](../docs/official-client.md) §4。 |
 | `TT_AUTH_EMAIL` / `TT_AUTH_PASSWORD` | – | 给 owner 账户设邮箱密码（幂等，不覆盖已有密码；owner 已因 device-login 存在时挂到它身上）。官方客户端/dashboard 的登录框就用这一组。**没有任何"默认账户 UUID"配置**：owner 由库里的 `auth_owner` 决定（`docs/oauth-selfhosted.md` §4.5）。 |
 | `TT_ACCESS_TOKEN_TTL` | `3600` | access token（HS256 JWT）有效期，秒。 |
 | `TT_REFRESH_TOKEN_TTL` | `7776000` | refresh token 有效期（90 天），也是 cookie Max-Age。 |
@@ -382,20 +382,33 @@ timestamp,provider,model,prompt_tokens,completion_tokens,cached_tokens,reasoning
 这是本项目**最主要的使用方式**：官方 TokenTracker 客户端（CLI / 菜单栏 App）照常安装使用，
 只把它的 `base_url` 指向你自托管的这个服务。官方云要收费之后，这条路让你继续有云端同步。
 
-**三步**（完整说明与排错见 [`docs/official-client.md`](../docs/official-client.md)）：
+**整个接入过程和官方一模一样**（客户端打印 URL → 你在浏览器点「批准」→ 终端自己完成，
+不需要跑任何本项目自己的脚本）：
 
 ```sh
-# ① 服务端：打开"零交互设备批准"，让客户端 device-login 直接过
-TT_DEVICE_APPROVE=auto ./bin/tokentracker-server
-
-# ② 客户端：一个 anon key（公开、无权限，只用来通过客户端的前置校验）
+# ① 客户端：一个 anon key（公开、无权限，只用来通过客户端的前置校验）
 ANON=$(./scripts/issue-token.sh --role anon --json)
 tracker init --base-url http://localhost:8080 --anon-key "$ANON"
+
+# ② 新机器接入：客户端会打印一个 http://<host>:8080/device?user_code=ABCD-EFGH
+#    用这台机器（或手机、随便什么浏览器）打开它，点「批准」
 tracker device-login --base-url http://localhost:8080 --anon-key "$ANON"
 
 # ③ 之后照常用：tracker sync / 菜单栏 App 都指向你自己的服务
 tracker sync
 ```
+
+服务端默认就是 `TT_DEVICE_APPROVE=page`，也就是上面那页。三种模式怎么选：
+
+| 模式 | 接入动作 | 什么时候用 |
+|---|---|---|
+| `page`（默认） | 浏览器打开 `/device?user_code=…`，点「批准」 | 和官方一致；有浏览器的场景 |
+| `auto` | 无 —— `device-login` 直接完成 | NAS/无头机器，不想点按钮 |
+| `jwt` | `scripts/approve-device.sh <code>` 或带 JWT 调 `device-flow-grant` | 想保留审批边界（批准请求必须带凭据） |
+
+`/device` 页面会显示申请方的 `client_info` 与 `machine_id`，批准前能看出是不是自己的机器。
+`page`/`auto` 都等于「能访问本服务（且拿到 user_code）的人可以把设备接进 owner 账户」，
+这是局域网自用定位下的有意取舍；**不要**把这两种模式暴露到公网。
 
 ⚠️ **客户端硬性要求**：`base_url` 只能是 `https://…` 或 `http://localhost`（`127.0.0.1`/`::1`）。
 局域网 IP 走明文 HTTP 会被客户端自己拒掉 —— 见 `docs/official-client.md` §2 的三条出路

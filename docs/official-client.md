@@ -116,30 +116,39 @@ ANON=$(./go-server/scripts/issue-token.sh --role anon --json)
 
 ## 4. 设备授权怎么被批准（三选一）
 
-官方流程是"客户端申请 → 你在 dashboard 点批准"。自托管没有 dashboard，所以服务端提供三种模式，
-用 `TT_DEVICE_APPROVE` 选：
+官方流程是"客户端申请 → 你在网页点批准"。自托管没有官方 dashboard，但**这个网页由服务端自己提供**，
+所以默认路径和官方没有区别：`device-login` 打印 `http(s)://<host>/device?user_code=…`，
+浏览器打开、确认是这台机器、点「批准」，终端在一轮轮询内拿到 device token。
+全程不需要本项目自己的脚本。
+
+三种模式，用 `TT_DEVICE_APPROVE` 选：
 
 | 模式 | 行为 | 适合 |
 |---|---|---|
-| `auto`（**推荐**） | `authorize` 立刻批准到 **owner 账户**（没有就先建一个空的并钉住），客户端第一轮 poll 就拿到 token | 家里/局域网自用，没人想点按钮 |
-| `page` | 客户端打印 `http(s)://<host>/device?user_code=…`，打开点"批准" | 想让"批准"仍然是个动作 |
-| `jwt`（默认） | `POST /functions/tokentracker-device-flow-grant` 带 JWT，或用 `scripts/approve-device.sh` | 想保留审批边界 |
+| `page`（**默认**） | 客户端打印 `/device?user_code=…`，浏览器打开点「批准」 | 与官方一致；有任何浏览器可用 |
+| `auto` | `authorize` 立刻批准到 **owner 账户**（没有就先建一个空的并钉住），第一轮 poll 就拿到 token | NAS/无头机器，没人想点按钮 |
+| `jwt` | `POST /functions/tokentracker-device-flow-grant` 带 JWT，或用 `scripts/approve-device.sh` | 想保留审批边界 |
 
 ```sh
+# page（默认，不用设任何环境变量）：打开客户端打印的链接，或
+open "https://tt.lan:8443/device"      # 输入 ABCD-EFGH 点批准
+
 # auto
 TT_DEVICE_APPROVE=auto ./bin/tokentracker-server
 
-# page：浏览器打开客户端打印的 URL，或
-open "https://tt.lan:8443/device"      # 输入 ABCD-EFGH 点批准
-
 # jwt：
+TT_DEVICE_APPROVE=jwt ./bin/tokentracker-server
 ./scripts/approve-device.sh ABCD-EFGH --base https://tt.lan:8443
 ```
 
-> ⚠️ `auto` 与 `page` **都等于"任何能访问本服务的人都能接入这台机器的 owner 账户"**。
-> 这是"局域网自用、不开放自助注册"定位下的有意取舍；**不要**把带这两个模式的实例暴露到公网。
-> 需要收紧时改用默认的 `TT_DEVICE_APPROVE=jwt`：批准请求必须带有效 JWT（owner 登录拿到的
-> access token，或你用 `scripts/issue-token.sh` 自签的 token），没有凭据的人拿不到 device token。
+`/device` 页面会列出申请方的 `client_info` 与 `machine_id`、有效期，批准前能确认是不是自己的机器。
+
+> ⚠️ `page` 与 `auto` **都等于"任何能访问本服务、并且拿到 user_code 的人都能把设备接进
+> owner 账户"**。`user_code` 只出现在发起申请那台机器的终端里，是这套流程唯一的凭据——
+> 官方的 device flow 也是同一个模型，区别只是官方那页还要求你先登录 dashboard。
+> 这是"局域网自用、不开放自助注册"定位下的有意取舍；**不要**把这些实例暴露到公网。
+> 需要真正的审批边界就用 `TT_DEVICE_APPROVE=jwt`：批准请求必须带有效 JWT
+> （owner 登录拿到的 access token，或 `scripts/issue-token.sh` 自签的 token）。
 
 服务端会把 device token 绑到 `machine_id`（客户端用它自己的机器指纹上报），
 同一台机器重复 `device-login` 会**复用同一台设备行、发新 token**，不会积累重复设备。
@@ -258,4 +267,4 @@ account-summary → total_tokens= 7500
 | `tracker doctor` 里 `network.base_url` 显示 404 | 根路径没有路由，属正常 | 忽略；只会显示 `HTTP 404 (reachable)` |
 | `sync` 报 401 / `CLOUD_DEVICE_TOKEN_REJECTED` | 服务端换了 `TT_JWT_SECRET` 或换了实例 | 重新 `tracker device-login` |
 | account 视图还是本机数据 | 响应头 `X-TokenTracker-Account-View: 0`，看 `X-TokenTracker-Account-Fallback` | `signed_out`→先登录（`TT_AUTH_EMAIL/PASSWORD` 或注册）；`cloud_sync_off`→dashboard 打开云同步；`transient-upstream`→看服务端日志 |
-| `device-login` 一直 pending | 模式是 `page`/`jwt`，还没人批准 | 批准一次，或改 `TT_DEVICE_APPROVE=auto` |
+| `device-login` 一直 pending | 还没人批准（默认 `page` 模式等你去浏览器点，或 `jwt` 模式等 approve-device.sh） | 打开客户端打印的 `/device?user_code=…` 点「批准」；无头机器改 `TT_DEVICE_APPROVE=auto` |
