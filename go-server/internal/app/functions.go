@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -305,14 +306,35 @@ func (s *Server) deviceIssue(w http.ResponseWriter, r *http.Request, sub string)
 	})
 }
 
+// deviceRename 对齐官方 tokentracker-device-rename：
+//
+//	POST { device_id, device_name }  →  { ok, device_id, device_name }
+//
+// （官方 dashboard 发的是 device_name；早期自托管脚本用的是 name，两种都收。）
+// 只能改自己名下**未撤销**的设备；名字与另一台在用的设备撞车时唯一索引报错 → 409。
 func (s *Server) deviceRename(w http.ResponseWriter, r *http.Request, sub string) {
 	var b struct {
-		DeviceID string `json:"device_id"`
-		Name     string `json:"name"`
+		DeviceID   string `json:"device_id"`
+		DeviceName string `json:"device_name"`
+		Name       string `json:"name"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&b)
-	res, err := s.db.Exec(`UPDATE devices SET device_name=? WHERE id=? AND user_id=?`, b.Name, b.DeviceID, sub)
+	name := strings.TrimSpace(b.DeviceName)
+	if name == "" {
+		name = strings.TrimSpace(b.Name)
+	}
+	if b.DeviceID == "" || name == "" {
+		fail(w, 400, "device_id and device_name are required")
+		return
+	}
+	res, err := s.db.Exec(`UPDATE devices SET device_name=? WHERE id=? AND user_id=? AND revoked_at IS NULL`,
+		name, b.DeviceID, sub)
 	if err != nil {
+		// (user_id, platform, device_name) 部分唯一索引冲突：同一平台下同名设备已存在。
+		if isUniqueViolation(err) {
+			fail(w, 409, "another active device already uses that name")
+			return
+		}
 		fail(w, 500, err.Error())
 		return
 	}
@@ -321,7 +343,16 @@ func (s *Server) deviceRename(w http.ResponseWriter, r *http.Request, sub string
 		fail(w, 404, "Device not found")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"ok": true, "device_id": b.DeviceID, "name": b.Name})
+	writeJSON(w, 200, map[string]any{"ok": true, "device_id": b.DeviceID, "device_name": name})
+}
+
+// isUniqueViolation 判断是否唯一约束冲突（SQLite / PostgreSQL 两种报错文案）。
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique constraint") || strings.Contains(msg, "duplicate key value")
 }
 
 // ---------- 用量上传 ----------
@@ -442,6 +473,18 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 
 // ---------- 账户读取 ----------
 
+// deviceShape 只接受 UUID 形状的 device_id（与官方实现一致：形状不对就当没传，
+// 而不是报错）。归属校验靠 SQL 里的 user_id 条件：别人的 device_id 查出来就是空。
+var deviceShape = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+func deviceFilterParam(r *http.Request) string {
+	id := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("device_id")))
+	if !deviceShape.MatchString(id) {
+		return ""
+	}
+	return id
+}
+
 func (s *Server) accountParams(r *http.Request) (from, to, tz string, ok bool) {
 	q := r.URL.Query()
 	from, to, tz = q.Get("from"), q.Get("to"), q.Get("tz")
@@ -473,7 +516,8 @@ func (s *Server) accountSummary(w http.ResponseWriter, r *http.Request, sub stri
 		writeJSON(w, 500, map[string]any{"code": "SELF_HOST_SQL", "message": "Invalid time value"})
 		return
 	}
-	rows := s.fetchHourly(sub, from+"T00:00:00Z", to+"T23:59:59Z")
+	dev := deviceFilterParam(r)
+	rows := s.fetchHourly(sub, dev, from+"T00:00:00Z", to+"T23:59:59Z")
 	totals := sumRows(rows)
 	days := totals["days"]
 	delete(totals, "days")
@@ -482,8 +526,8 @@ func (s *Server) accountSummary(w http.ResponseWriter, r *http.Request, sub stri
 	today := s.now.UTC().Format("2006-01-02")
 	d7 := s.now.UTC().AddDate(0, 0, -6).Format("2006-01-02")
 	d30 := s.now.UTC().AddDate(0, 0, -29).Format("2006-01-02")
-	r7 := s.fetchHourly(sub, d7+"T00:00:00Z", today+"T23:59:59Z")
-	r30 := s.fetchHourly(sub, d30+"T00:00:00Z", today+"T23:59:59Z")
+	r7 := s.fetchHourly(sub, dev, d7+"T00:00:00Z", today+"T23:59:59Z")
+	r30 := s.fetchHourly(sub, dev, d30+"T00:00:00Z", today+"T23:59:59Z")
 	activeDays30 := map[string]bool{}
 	for _, x := range r30 {
 		activeDays30[x.HourStart[:10]] = true
@@ -583,14 +627,14 @@ func (s *Server) accountDaily(w http.ResponseWriter, r *http.Request, sub string
 		fail(w, 400, "Missing from/to")
 		return
 	}
-	rows := s.fetchHourly(sub, from+"T00:00:00Z", to+"T23:59:59Z")
+	rows := s.fetchHourly(sub, deviceFilterParam(r), from+"T00:00:00Z", to+"T23:59:59Z")
 	writeJSON(w, 200, map[string]any{"from": from, "to": to, "data": s.aggregateByDay(rows, tz)})
 }
 
 func (s *Server) accountHourly(w http.ResponseWriter, r *http.Request, sub string) {
 	// 参考实现对 hourly endpoint 默认使用“今天”（忽略 from/to）；契约快照锁定此行为。
 	day := s.now.UTC().Format("2006-01-02")
-	rows := s.fetchHourly(sub, day+"T00:00:00Z", day+"T23:59:59Z")
+	rows := s.fetchHourly(sub, deviceFilterParam(r), day+"T00:00:00Z", day+"T23:59:59Z")
 	data := []map[string]any{}
 	for _, x := range rows {
 		data = append(data, map[string]any{
@@ -608,7 +652,7 @@ func (s *Server) accountMonthly(w http.ResponseWriter, r *http.Request, sub stri
 		fail(w, 400, "Missing from/to")
 		return
 	}
-	rows := s.fetchHourly(sub, from+"T00:00:00Z", to+"T23:59:59Z")
+	rows := s.fetchHourly(sub, deviceFilterParam(r), from+"T00:00:00Z", to+"T23:59:59Z")
 	byMonth := map[string]int64{}
 	for _, x := range rows {
 		byMonth[x.HourStart[:7]] += x.TotalTokens
@@ -654,7 +698,7 @@ func (s *Server) accountHeatmap(w http.ResponseWriter, r *http.Request, sub stri
 	if strings.ToLower(weekStarts) != "mon" {
 		weekStarts = "sun"
 	}
-	rows := s.fetchHourly(sub, from+"T00:00:00Z", to+"T23:59:59Z")
+	rows := s.fetchHourly(sub, deviceFilterParam(r), from+"T00:00:00Z", to+"T23:59:59Z")
 	type daily struct {
 		total, bill int64
 		models      map[string]int64
@@ -723,7 +767,7 @@ func (s *Server) accountModelBreakdown(w http.ResponseWriter, r *http.Request, s
 		fail(w, 400, "Missing from/to")
 		return
 	}
-	rows := s.fetchHourly(sub, from+"T00:00:00Z", to+"T23:59:59Z")
+	rows := s.fetchHourly(sub, deviceFilterParam(r), from+"T00:00:00Z", to+"T23:59:59Z")
 	type agg struct {
 		total, bill, input, output, cached, creation, reasoning int64
 		cost                                                    float64
@@ -798,21 +842,54 @@ func (s *Server) accountModelBreakdown(w http.ResponseWriter, r *http.Request, s
 	})
 }
 
+// accountDevices 对齐官方 tokentracker-account-devices：
+//
+//	{ from, to, devices: [{id, device_name, platform, created_at, total_tokens}], account_sources: [] }
+//
+// 只列**未撤销**的设备（与官方一致），按区间内用量降序。account_sources 是官方的
+// "账户级来源"（cursor / trae-cn 这类只能按账户取总数、没有设备归属的源）；
+// 自托管所有用量都来自带 device_id 的上传，所以它永远是空数组。
 func (s *Server) accountDevices(w http.ResponseWriter, r *http.Request, sub string) {
 	from, to, _, ok := s.accountParams(r)
 	if !ok {
-		from, to = "2026-10-01", "2026-10-01"
+		fail(w, 400, "Missing from/to")
+		return
 	}
-	rows := s.fetchHourly(sub, from+"T00:00:00Z", to+"T23:59:59Z")
 	byDevice := map[string]int64{}
-	for _, x := range rows {
-		byDevice[x.Source] += x.TotalTokens
+	for _, x := range s.fetchHourly(sub, "", from+"T00:00:00Z", to+"T23:59:59Z") {
+		byDevice[x.DeviceID] += x.TotalTokens
 	}
+	rows, err := s.db.Query(`SELECT id,device_name,COALESCE(platform,''),created_at FROM devices
+		WHERE user_id=? AND revoked_at IS NULL`, sub)
+	if err != nil {
+		fail(w, 500, err.Error())
+		return
+	}
+	defer rows.Close()
 	devices := []map[string]any{}
-	for k, v := range byDevice {
-		devices = append(devices, map[string]any{"source": k, "total_tokens": v})
+	for rows.Next() {
+		var id, name, platform, created string
+		if rows.Scan(&id, &name, &platform, &created) != nil {
+			continue
+		}
+		var plat any
+		if platform != "" {
+			plat = platform
+		}
+		devices = append(devices, map[string]any{
+			"id": id, "device_name": name, "platform": plat,
+			"created_at": created, "total_tokens": byDevice[id],
+		})
 	}
-	sort.Slice(devices, func(i, j int) bool { return fmt.Sprint(devices[i]["source"]) < fmt.Sprint(devices[j]["source"]) })
+	// 用量降序；同量时按 id 稳定排序（官方同款 tie-break 思路）。
+	sort.SliceStable(devices, func(i, j int) bool {
+		a, _ := devices[i]["total_tokens"].(int64)
+		b, _ := devices[j]["total_tokens"].(int64)
+		if a != b {
+			return a > b
+		}
+		return fmt.Sprint(devices[i]["id"]) < fmt.Sprint(devices[j]["id"])
+	})
 	writeJSON(w, 200, map[string]any{
 		"from": from, "to": to, "devices": devices, "account_sources": []any{},
 	})

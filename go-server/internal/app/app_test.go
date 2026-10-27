@@ -96,7 +96,7 @@ func TestJWTRejectsForgeryAndExpiry(t *testing.T) {
 func TestDeviceFlowAndIngestWholeRowCorrection(t *testing.T) {
 	s, db := testServer(t)
 	h := s.Handler()
-	uid := "11111111-1111-4111-8111-111111111111"
+	uid := "11111111-1111-4111-8111-111111111111" // 普通随机账户（无特殊含义）
 	if _, err := db.Exec(`INSERT INTO auth_users(id,email) VALUES(?,?)`, uid, "a@local.test"); err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestDeviceIssueIsRepeatableForSameDevice(t *testing.T) {
 	}); w.Code != 200 {
 		t.Fatalf("用最新 token 上传状态=%d body=%s", w.Code, w.Body.String())
 	}
-	// account-devices 这里返回的是「按 source 聚合」，同一份数据只应出现一个 source
+	// account-devices 返回「按设备」的官方形状：一台设备一行，带 id
 	w := requestJSON(t, h, "GET",
 		"/functions/tokentracker-account-devices?from=2026-10-20&to=2026-10-20", jwt, nil)
 	if w.Code != 200 {
@@ -282,13 +282,17 @@ func TestDeviceIssueIsRepeatableForSameDevice(t *testing.T) {
 	}
 	var dev struct {
 		Devices []struct {
-			Source     string `json:"source"`
+			ID         string `json:"id"`
+			DeviceName string `json:"device_name"`
 			TotalToken int64  `json:"total_tokens"`
 		} `json:"devices"`
 	}
 	_ = json.Unmarshal(w.Body.Bytes(), &dev)
 	if len(dev.Devices) != 1 || dev.Devices[0].TotalToken != 7 {
 		t.Fatalf("account-devices 聚合异常：%s", w.Body.String())
+	}
+	if dev.Devices[0].ID == "" || dev.Devices[0].DeviceName == "" {
+		t.Fatalf("account-devices 应返回设备身份：%s", w.Body.String())
 	}
 }
 

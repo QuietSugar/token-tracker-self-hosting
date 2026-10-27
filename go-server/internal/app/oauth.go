@@ -123,8 +123,6 @@ func (s *Server) authAPI(w http.ResponseWriter, r *http.Request) {
 		s.authProfile(w, r)
 	case path == "owner" && r.Method == http.MethodGet:
 		s.authOwnerInfo(w, r)
-	case path == "merge-account" && r.Method == http.MethodPost:
-		s.authMergeAccount(w, r)
 	default:
 		writeJSON(w, 404, map[string]any{"error": "Not found", "code": "NOT_FOUND"})
 	}
@@ -684,49 +682,6 @@ func (s *Server) authOwnerInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, info)
-}
-
-// authMergeAccount 把另一个账户的数据并入 owner（收拾"两条账户"的存量实例）。
-// 需要 owner 自己的 access token；from 侧必须是**没有密码凭据**的账户，
-// 避免误删真实登录账户。
-func (s *Server) authMergeAccount(w http.ResponseWriter, r *http.Request) {
-	sub, _, _, ok := s.auth(r)
-	if !ok {
-		authFail(w, 401, "AUTH_UNAUTHORIZED", "Authentication required")
-		return
-	}
-	owner, err := s.ownerSub()
-	if err != nil {
-		authFail(w, 500, "INTERNAL", err.Error())
-		return
-	}
-	if owner == "" || sub != owner {
-		authFail(w, 403, "OWNER_ONLY", "only the owner account may merge accounts")
-		return
-	}
-	var b struct {
-		FromUserID string `json:"from_user_id"`
-	}
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&b) != nil || b.FromUserID == "" {
-		authFail(w, 400, "INVALID_BODY", `expected {"from_user_id": "..."}`)
-		return
-	}
-	var creds int
-	if err := s.db.QueryRow(`SELECT count(*) FROM auth_credentials WHERE user_id=?`, b.FromUserID).Scan(&creds); err != nil {
-		authFail(w, 500, "INTERNAL", err.Error())
-		return
-	}
-	if creds > 0 {
-		authFail(w, 409, "HAS_CREDENTIALS",
-			"refusing to merge an account that has a password; sign in as that account and merge the other way instead")
-		return
-	}
-	moved, err := s.mergeAccount(b.FromUserID, owner)
-	if err != nil {
-		authFail(w, 500, "MERGE_FAILED", err.Error())
-		return
-	}
-	writeJSON(w, 200, map[string]any{"ok": true, "owner": owner, "from": b.FromUserID, "moved": moved})
 }
 
 // isLoopbackRequest 判断请求是否来自本机（直连回环，或反代自回环且未带 X-Forwarded-For）。
