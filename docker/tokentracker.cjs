@@ -167,7 +167,7 @@ function cmdCommands() {
   console.log("  --anon-key <anon_key> --dashboard-url https://dashboard.your-domain.example");
   console.log("tokentracker status --json");
   console.log();
-  console.log("# 7) 按 docs/runbook.md 与 releases/<ver>/acceptance.md 验收");
+  console.log("# 7) 按仓库 docs/maintainers/release.md 的检查单验收");
 }
 
 function usage() {

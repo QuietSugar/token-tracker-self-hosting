@@ -5,7 +5,7 @@
 # （SQLite 支持已移除，归档 tag `sqlite-final`。）
 #
 # 注意：这是 Go 迁移实验镜像，不替代现有 InsForge/PostgreSQL 镜像。
-# 只承诺 contract/golden 用例明示覆盖的行为；见 STATUS.md。
+# 只承诺 contract/golden 用例明示覆盖的行为；见 docs/status.md。
 
 FROM golang@sha256:68932fa6d4d4059845c8f40ad7e654e626f3ebd3706eef7846f319293ab5cb7a AS build
 WORKDIR /src

@@ -47,7 +47,7 @@ GHCR 包默认私有，要给别人用需要在包设置里改可见性。
 
 1. `cd go-server && go vet ./... && go test -race ./...` 全绿；
 2. 契约 **33 PASS / 0 FAIL / 2 SKIP**（[`contract.md`](contract.md)）；
-3. 文档同步：改了端点行为 → `docs/users/*` + `contract/SPEC.md`；
+3. 文档同步：改了端点行为 → `docs/users/*` + 契约用例；
 4. `CHANGELOG.md` 加 3–5 条用户能感知的变化（不要写内部重构）；
 5. push 到 main（`go-server/**` 变化会触发镜像构建），确认冒烟通过、tag 是 `experimental-<short_sha>`；
 6. 需要固定版本的地方（compose 示例、给别人的部署命令）用 **`experimental-<short_sha>`**，不要用浮动的 `experimental`。
@@ -57,8 +57,8 @@ GHCR 包默认私有，要给别人用需要在包设置里改可见性。
 1. `./scripts/upstream.sh status` 确认锁定点；
 2. `./scripts/build.sh`（覆盖旧产物要 `FORCE=1`，会改变审计基准，别随手用）；
 3. `./scripts/verify.sh releases/<ver>`：SHA256、UTF-8 无 BOM、函数数量 = 14；
-4. `tracking/upstream.md` 更新追踪表与两个结论；
-5. 提交 `releases/<ver>` + `tracking/REF` + `tracking/upstream.md`；
+4. [`upstream.md`](upstream.md) 更新追踪表与两个结论；
+5. 提交 `releases/<ver>` + `tracking/REF` + `docs/maintainers/upstream.md`；
 6. 镜像由 CI 构建，本地不需要也不应该手工推。
 
 ## 5. 不该做的事

@@ -96,12 +96,12 @@ GO_POSTGRES_URL="$TT_TEST_DATABASE_URL" \
 
 | 你改了什么 | 改这里 |
 |---|---|
-| 端点、参数、返回形状、错误形状 | `docs/users/*` 对应页 + `contract/SPEC.md` |
+| 端点、参数、返回形状、错误形状 | `docs/users/*` 对应页 + 契约新用例（[`../maintainers/contract.md`](../maintainers/contract.md)） |
 | 环境变量、部署方式、镜像标签 | `docs/users/deploy.md`、`docs/maintainers/release.md` |
 | 设备流程、认证语义 | `docs/users/devices.md`、`docs/design/auth.md` |
 | 存储层、迁移、并发取舍 | `docs/design/postgres.md` |
 | 与官方的差异（新增/删除偏差） | `docs/design/parity.md` +（真实偏差）`contract/waivers.json` |
-| 上游跟进 | `docs/maintainers/upstream.md` + `tracking/upstream.md` |
+| 上游跟进 | `docs/maintainers/upstream.md` |
 | 用户能感知的变化 | `CHANGELOG.md`（3–5 条） |
 
 **一个事实只写一处**，别处只链接。别把操作步骤写进 `design/`，别把维护者内容写进 `users/`。

@@ -8,7 +8,7 @@
 //   - 列类型刻意保持"文本化"：时间存 RFC3339 UTC 文本，金额存十进制文本，
 //     识别列存 TEXT。排序（ISO 文本即时间序）、LIKE/比较语义因此在
 //     Go 侧完全可预测。代价是 PG 侧没有 timestamptz/numeric 的原生类型校验；
-//     理由见 docs/go-postgres.md。
+//     理由见 docs/design/postgres.md。
 //   - 2026-10 起不再支持 SQLite（归档点 tag `sqlite-final`）。
 package store
 
