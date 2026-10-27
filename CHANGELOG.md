@@ -2,6 +2,32 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — 首个 Go 实验镜像已发布（SQLite + PostgreSQL 双引擎）
+
+- 全量测试（本地 + CI）全绿：
+
+  | 项 | 结果 |
+  |---|---|
+  | `gofmt` / `go vet` / `CGO_ENABLED=0` build | PASS |
+  | `go test -race`（SQLite） | PASS |
+  | `go test -race`（PostgreSQL 16.2） | PASS |
+  | 契约 `go-sqlite` | 33 PASS / 0 FAIL / 2 SKIP |
+  | 契约 `go-postgres` | 33 PASS / 0 FAIL / 2 SKIP |
+  | CI `go-server`（SQLite + PostgreSQL 15/16 矩阵） | PASS（[run](https://github.com/QuietSugar/token-tracker-self-hosting/actions/runs/40425780611)） |
+  | 镜像 smoke（SQLite + PostgreSQL 双模式） | PASS（[run](https://github.com/QuietSugar/token-tracker-self-hosting/actions/runs/40426622276)） |
+  | Docker 镜像构建 + 多平台推送 + provenance | PASS（[run](https://github.com/QuietSugar/token-tracker-self-hosting/actions/runs/40426828540)） |
+  | 备份/恢复演练 | SQLite 快照可启动；PG `pg_dump -Fc` → drop → `pg_restore` 后 14 表 + checksum 一致 |
+
+- 已发布镜像（实验通道）：`ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental`、
+  `:experimental-<short_sha>`、`:sha-<short_sha>`，以及兼容名
+  `ghcr.io/quietsugar/token-tracker-self-hosting-sqlite-go:experimental`；平台 `linux/amd64` + `linux/arm64`；
+  不发布 `latest`。digest 见构建 run 的 job summary；可用 `gh attestation verify` 校验来源。
+- 镜像 smoke 曾经失败并修复（记录了踩坑，避免回归）：宿主机 runner 用户读不到容器内 uid 10001 的 0600 文件、
+  WAL 模式下表名只在 `-wal` 里、`alpine` 的 busybox `grep` 行为差异 → 改为
+  「优雅停服 → 主库大小 > 8KB → 重启 → health 200 → 无 checksum drift」。
+
+---
+
 ## 2026-10-27 — Go 镜像流水线 + 面向使用者的运维文档 + 全量测试脚本
 
 ### 新增

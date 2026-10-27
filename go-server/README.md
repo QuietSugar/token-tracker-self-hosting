@@ -69,16 +69,31 @@ TT_LISTEN_ADDR=127.0.0.1:8080 \
 
 二进制是 `CGO=0` 静态链接，任何 Linux/amd64、linux/arm64 主机可直接运行，无需 SQLite 库。
 
-### 1.4 用已发布的镜像
+### 1.4 用已发布的镜像（推荐）
 
 ```sh
 docker pull ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental
-# 固定到某个 commit 更安全：
+# 固定到某个提交更安全（tag 见构建 run 的 job summary）：
 docker pull ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental-<short_sha>
 ```
 
-同一个镜像也可用旧名字拉取（兼容早期 compose 文件）：
-`ghcr.io/quietsugar/token-tracker-self-hosting-sqlite-go:experimental`。
+- 同一镜像也以旧名发布，兼容早期 compose：
+  `ghcr.io/quietsugar/token-tracker-self-hosting-sqlite-go:experimental`。
+- 平台：`linux/amd64` + `linux/arm64`（arm64 仅由 CI 构建，未在真机验收）。
+- 不发布 `latest`：实验镜像不应成为隐式默认，请显式 pin `experimental-<sha>`。
+- **首次使用**：GHCR 包默认 private，需要在 GitHub「Packages → token-tracker-self-hosting-go →
+  Package settings → Change visibility → Public」改为公开，否则 `docker pull` 会 401。私有也可以，
+  但要先 `docker login ghcr.io -u <你的账号> -p <PAT with read:packages>`。
+- 验证来源（SLSA provenance，CI 推送时生成）：
+
+  ```sh
+  gh attestation verify oci://ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental \
+    --repo QuietSugar/token-tracker-self-hosting
+  ```
+
+每次镜像构建都会在推送**之前**跑容器 smoke：SQLite 模式（health、`/_test/sql` 404、uid 10001、
+DB/WAL/SHM 0600、优雅停服后数据落盘、重启后无 checksum drift、弱 secret 拒绝启动）与
+PostgreSQL 模式（连真实 PG 建 schema、health 200、日志脱敏、`/_test/sql` 404）。smoke 不通过不会产生 tag。
 
 ---
 
