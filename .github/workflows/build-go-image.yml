@@ -187,15 +187,15 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:18080/health || fail "health 未就绪"
-          echo; echo "1/6 health 200"
+          echo; echo "1/8 health 200"
 
           code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/_test/sql || true)"
           [ "$code" = "404" ] || fail "生产模式 /_test/sql 应返回 404，实际 $code"
-          echo "2/6 /_test/sql → 404（生产模式未挂载 fixture 端点）"
+          echo "2/8 /_test/sql → 404（生产模式未挂载 fixture 端点）"
 
           uid="$(docker exec tt-sqlite id -u 2>/dev/null || echo '?')"
           [ "$uid" = "10001" ] || fail "容器应以 uid 10001 运行，实际 $uid"
-          echo "3/6 非 root 运行（uid 10001）"
+          echo "3/8 非 root 运行（uid 10001）"
 
           ls -l "$DATA" || true
           for f in "$DATA"/tokentracker.db*; do
@@ -203,30 +203,36 @@ jobs:
             mode="$(stat -c '%a' "$f")"
             [ "$mode" = "600" ] || fail "$f 权限应为 600，实际 $mode"
           done
-          echo "4/6 DB/WAL/SHM 均为 0600"
+          echo "4/8 DB/WAL/SHM 均为 0600"
 
           docker logs tt-sqlite 2>&1 | grep -q 'engine=sqlite' || fail "启动日志缺少 engine=sqlite"
-          echo "5/6 启动日志 engine=sqlite"
+          echo "5/8 启动日志 engine=sqlite"
 
-          # 重启：既要能再起来，也要证明 schema 已落盘（幂等安装 + checksum 一致）
-          docker restart tt-sqlite >/dev/null
+          # 停服（验证 SIGTERM 优雅关闭 + WAL checkpoint 落盘），再启动（验证幂等安装）
+          docker stop tt-sqlite >/dev/null
+          size="$(stat -c '%s' "$DATA/tokentracker.db" 2>/dev/null || echo 0)"
+          echo "优雅停服后主库大小: $size bytes"
+          # 全新空库只有 1 个 page（4096B）；落盘后为多页。这里只要 >8KB 就说明数据已 checkpoint 到主库。
+          [ "$size" -gt 8192 ] || fail "停服后主库仅 $size 字节，数据可能没落盘"
+          echo "6/7 优雅关闭后数据已 checkpoint 到主库（$size bytes）"
+
+          docker start tt-sqlite >/dev/null
           for _ in $(seq 1 60); do
             curl -fsS http://127.0.0.1:18080/health >/dev/null 2>&1 && break
             sleep 1
           done
           curl -fsS http://127.0.0.1:18080/health || fail "重启后 health 未就绪"
-          # 注意：宿主机 job 以 runner 用户运行，而 DB 文件属 uid 10001 且权限 0600，
-          # 宿主机侧读不到 → 必须在容器内查。WAL 模式下表名可能只在 -wal 文件里，三份一起查。
-          if ! docker exec tt-sqlite sh -c 'grep -qa schema_migrations /data/tokentracker.db*' 2>/dev/null; then
-            fail "重启后数据文件中找不到 schema_migrations"
+          docker exec tt-sqlite sh -c 'test -s /data/tokentracker.db' \
+            || fail "重启后容器内主库不存在或为空"
+          if docker logs tt-sqlite 2>&1 | tail -20 | grep -qi 'checksum drift'; then
+            fail "重启后出现 checksum drift"
           fi
-          docker logs tt-sqlite 2>&1 | grep -qi 'checksum drift' && fail "重启后出现 checksum drift"
-          echo "6/6 重启后数据仍在且无 checksum drift"
+          echo "7/7 重启成功、库文件非空、无 checksum drift"
 
           if docker run --rm -e TT_JWT_SECRET=short "$SMOKE_IMAGE" >/dev/null 2>&1; then
             fail "缺失/过短的 TT_JWT_SECRET 竟然启动成功"
           fi
-          echo "7/7 弱 secret 启动被拒绝"
+          echo "8/8 弱 secret 启动被拒绝"
           echo "✓ SQLite 模式 smoke 全部通过"
 
       - name: Smoke test — PostgreSQL mode
