@@ -72,6 +72,14 @@ func run() error {
 	}
 
 	srv := app.New(db)
+	// 可选：用 TT_AUTH_EMAIL/TT_AUTH_PASSWORD 引导 owner 账户（官方 dashboard/客户端能直接登录）。
+	if created, email, err := srv.EnsureAuthBootstrap(); err != nil {
+		return err
+	} else if created {
+		log.Printf("auth: created owner account %s", email)
+	} else if email != "" {
+		log.Printf("auth: owner account %s already exists (password left untouched)", email)
+	}
 	httpSrv := &http.Server{
 		Addr:              addr,
 		Handler:           srv.Handler(),

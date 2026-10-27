@@ -51,6 +51,9 @@
   `base_url` 同源）、`scripts/approve-device.sh`。文档 `docs/official-client.md`。
   **仍缺**：`/api/auth/refresh` 与 OAuth 会话，所以客户端「跨设备 account 视图」在自托管下不可用
   （上传与本机视图不受影响）。
+- `scripts/check-oauth.sh`：一键自检认证链路（登录 → 轮换 → 旧 token 拒绝 → 撤销 → account 读取）。
+- 增量迁移机制：新增表走 `schema_additions` 账本（已发布的 step 改动即 fail closed），
+  不动 core schema 的 checksum，老库升级不会 drift。新增 `auth_credentials` / `auth_sessions`。
 - `scripts/import-usage.py`：把本地已有用量（CSV/JSONL/JSON）导入服务，含时间归一化（任意时区→UTC 整点）、
   列名别名、按主键去重、自动分批（≤500/批、≤512KB）、退避重试、device token 缓存；
   与服务端的「整行替换」语义配合，可反复重跑不重复计数。用于**接入真实数据**（见 README §3.5）。
@@ -194,8 +197,10 @@ Go 版本则通过独立的 33 个 HTTP 行为用例（SQLite 与 PostgreSQL 各
 - ✅ 已用上游 **v1.4.12 官方 CLI** 实测：`init` / `device-login` / `sync` / `doctor`，
   两条链路（`http://localhost` 明文、`https://` + 私有 CA + `NODE_EXTRA_CA_CERTS`）都通。
   设备批准三种模式（`jwt`/`page`/`auto`）与 `/device` 批准页见 `../docs/official-client.md`。
-- ❌ **未实现 `/api/auth/refresh`**（官方 InsForge OAuth 层）：客户端「跨设备 account 视图」
-  在自托管下退回本机视图。补齐它不需要改客户端，是纯服务端工作。
+- ✅ **`/api/auth/*` 已实现**（同 InsForge 流程、自写代码）：`users` / `sessions` / `refresh`
+  （轮换 + CSRF）/ `logout` / `sessions/current` / `public-config`。客户端「跨设备 account 视图」
+  实测 `X-TokenTracker-Account-View: 1`（7500 tokens）。细节见 `../docs/oauth-selfhosted.md`。
+- 未做（自托管非目标）：第三方 OAuth 登录、邮件验证、找回密码、多账户管理后台。
 - 未验收：账号删除/恢复流程、菜单栏 App 的原生（非 CLI）路径。
 
 ---

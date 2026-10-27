@@ -161,6 +161,13 @@ PostgreSQL 模式（连真实 PG 建 schema、health 200、日志脱敏、`/_tes
 | `TT_DASHBOARD_URL` | 空 = 按请求推导 | 设备授权返回的 `verification_uri` / `verification_uri_complete` 前缀。**留空时**用 `X-Forwarded-Proto` + `Host` 推导（推荐，官方客户端要求它与客户端 `base_url` 同源）。 |
 | `TT_DEVICE_APPROVE` | `jwt` | 设备授权怎么被批准：`jwt`（POST `device-flow-grant` 带 JWT）/ `page`（访问 `/device` 点按钮，无认证）/ `auto`（申请即批准，官方客户端 `device-login` 零交互）。详见 [`../docs/official-client.md`](../docs/official-client.md)。 |
 | `TT_DEFAULT_ACCOUNT` | `11111111-1111-4111-8111-111111111111` | `page` / `auto` 批准时归属的账户 sub（与 `scripts/issue-token.sh` 默认值一致）。 |
+| `TT_AUTH_EMAIL` / `TT_AUTH_PASSWORD` | – | 启动时若库里还没有账户，用它创建 owner（幂等，不覆盖已有密码）。官方客户端/dashboard 的登录框就用这一组。 |
+| `TT_ACCESS_TOKEN_TTL` | `3600` | access token（HS256 JWT）有效期，秒。 |
+| `TT_REFRESH_TOKEN_TTL` | `7776000` | refresh token 有效期（90 天），也是 cookie Max-Age。 |
+| `TT_AUTH_ALLOW_SIGNUP` | `false` | 已有 owner 后是否还允许 `POST /api/auth/users` 自助注册。 |
+| `TT_AUTH_ALLOWED_ORIGINS` | 空 = 回显任意 Origin | `/api/auth/*` 允许的跨域来源（逗号分隔）。带 cookie 的跨域不能用 `*`。 |
+| `TT_AUTH_COOKIE_SECURE` | `auto` | cookie 的 `Secure`：`auto`（直连看 TLS、反代看 `X-Forwarded-Proto`）/ `true` / `false`。 |
+| `TT_AUTH_REVOKE_ON_REUSE` | `false` | 旧 refresh token 被重放时是否撤销该用户全部会话（默认只拒绝，避免并发刷新误伤）。 |
 | `TT_NOW` | 真实时间 | 冻结时钟（RFC3339）。**仅测试**用。 |
 | `TT_ENABLE_TEST_ENDPOINTS` | `false` | 打开 `/_test/*`（含**可执行任意 SQL** 的 `/_test/sql`）。**生产必须保持 false。** |
 
@@ -364,6 +371,36 @@ tracker sync
 | 菜单栏/仪表盘的**本机**用量视图 | ✅ 客户端自己算，与服务端无关 |
 | `account-*` **跨设备汇总**视图 | ❌ 需要 InsForge OAuth refresh token（官方 dashboard 登录才有）；本服务只用 JWT + device token，跨设备汇总请直接查 §2 的 `account-summary` 或见 `docs/official-client.md` §5 |
 | `tokentracker-telemetry` | ⚪ 本服务返回 404，客户端忽略，无影响 |
+
+---
+
+## 3.7 登录与「跨设备」视图（`/api/auth/*`）
+
+官方客户端的跨设备汇总不是走 `/functions/*`，而是先要一个 access token：
+
+```
+dashboard 登录  →  POST /api/auth/sessions        {email,password}
+                     ↓ accessToken(1h) / refreshToken(90d) / csrfToken + 两个 cookie
+本地 CLI relay  →  POST /api/auth/refresh?client_type=mobile  {refresh_token}   （轮换）
+                     ↓ accessToken
+popover        →  GET  /functions/tokentracker-account-*    Authorization: Bearer …
+```
+
+这些端点已实现（流程同 InsForge，代码自写），细节与安全语义见
+[`../docs/oauth-selfhosted.md`](../docs/oauth-selfhosted.md)。
+
+```sh
+# 第一次部署：把 owner 账户钉下来，客户端就能登录了
+TT_AUTH_EMAIL=me@lan.test TT_AUTH_PASSWORD='至少8位' \
+TT_DEVICE_APPROVE=auto ./bin/tokentracker-server
+
+# 自检：登录 → 轮换 → 撤销 → 读 account-summary
+./scripts/check-oauth.sh me@lan.test '至少8位' https://tt.lan
+```
+
+**没有**第三方 OAuth、邮件验证、找回密码、多账户后台——自托管定位下这些是负担。
+账号体系只有在"想让官方 dashboard / 菜单栏的跨设备视图工作"时才需要；
+只想上传用量的话，`device-login` + `device token` 就够了（见 §3.6）。
 
 ---
 
