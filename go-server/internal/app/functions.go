@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -463,6 +464,10 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = s.db.Exec(`DELETE FROM usage_cache WHERE cache_key LIKE ?`, "%"+userID+"%")
+	// 设备卡片要显示"最后活跃时间"：官方在 ingest 时更新 cloud_machines.last_seen_at，
+	// 这里按「这个 device token 属于哪台机器」同步一次（自托管没有上传窗口那套状态机）。
+	_, _ = s.db.Exec(`UPDATE cloud_machines SET last_seen_at=? WHERE user_id=? AND machine_id=
+		(SELECT machine_id FROM devices WHERE id=? AND user_id=?)`, s.nowISO(), userID, deviceID, userID)
 
 	writeJSON(w, 200, map[string]any{
 		"ok": true, "skipped": skipped, "inserted": inserted,
@@ -485,24 +490,90 @@ func deviceFilterParam(r *http.Request) string {
 	return id
 }
 
-func (s *Server) accountParams(r *http.Request) (from, to, tz string, ok bool) {
+// zone 是 account-* 端点的时区参数：官方客户端发 `tz`（IANA 名）和/或
+// `tz_offset_minutes`（分钟，东为正）。两者都没有 = UTC。
+type zone struct {
+	name   string
+	offset *int
+}
+
+func (z zone) loc() *time.Location {
+	if z.name != "" {
+		if loc, err := time.LoadLocation(z.name); err == nil {
+			return loc
+		}
+	}
+	if z.offset != nil {
+		return time.FixedZone("", *z.offset*60)
+	}
+	return time.UTC
+}
+
+// dayKey 把 UTC 小时起点转成该时区的本地日期键（YYYY-MM-DD）。
+func (z zone) dayKey(hourStart string) string {
+	t, err := time.Parse(time.RFC3339, hourStart)
+	if err != nil {
+		if len(hourStart) >= 10 {
+			return hourStart[:10]
+		}
+		return hourStart
+	}
+	return t.In(z.loc()).Format("2006-01-02")
+}
+
+func zoneFromQuery(q url.Values) zone {
+	z := zone{name: q.Get("tz")}
+	if raw := q.Get("tz_offset_minutes"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			z.offset = &n
+		}
+	}
+	return z
+}
+
+func (s *Server) accountParams(r *http.Request) (from, to string, z zone, ok bool) {
 	q := r.URL.Query()
-	from, to, tz = q.Get("from"), q.Get("to"), q.Get("tz")
+	from, to = q.Get("from"), q.Get("to")
+	z = zoneFromQuery(q)
 	if from == "" || to == "" {
-		return "", "", "", false
+		return "", "", z, false
 	}
 	if len(from) != 10 || len(to) != 10 {
 		// 非法日期：参考实现返回 500 Invalid time value
-		return from, to, tz, true
+		return from, to, z, true
 	}
-	if tz == "" {
-		tz = "UTC"
+	return from, to, z, true
+}
+
+// fetchHourlyZoned 取「本地日 [from,to]」覆盖的用量行：
+// 官方实现把 UTC 查询窗口向两侧各放宽一天再按本地日裁剪，这样 UTC+9 的用户
+// 在本地日凌晨（前一天的 UTC 下午）的用量不会被漏掉。
+func (s *Server) fetchHourlyZoned(userID, deviceID, from, to string, z zone) []usageRow {
+	start, err1 := time.Parse("2006-01-02", from)
+	end, err2 := time.Parse("2006-01-02", to)
+	if err1 != nil || err2 != nil {
+		return s.fetchHourly(userID, deviceID, from+"T00:00:00Z", to+"T23:59:59Z")
 	}
-	return from, to, tz, true
+	rows := s.fetchHourly(userID, deviceID,
+		start.AddDate(0, 0, -1).Format("2006-01-02")+"T00:00:00Z",
+		end.AddDate(0, 0, 2).Format("2006-01-02")+"T00:00:00Z")
+	out := make([]usageRow, 0, len(rows))
+	for _, x := range rows {
+		d := z.dayKey(x.HourStart)
+		if d >= from && d <= to {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+// todayZoned 返回调用方时区里的"今天"（rolling 窗口的锚点）。
+func (s *Server) todayZoned(z zone) string {
+	return z.dayKey(s.nowISO())
 }
 
 func (s *Server) accountSummary(w http.ResponseWriter, r *http.Request, sub string) {
-	from, to, _, ok := s.accountParams(r)
+	from, to, z, ok := s.accountParams(r)
 	if !ok {
 		fail(w, 400, "Missing from/to")
 		return
@@ -517,20 +588,28 @@ func (s *Server) accountSummary(w http.ResponseWriter, r *http.Request, sub stri
 		return
 	}
 	dev := deviceFilterParam(r)
-	rows := s.fetchHourly(sub, dev, from+"T00:00:00Z", to+"T23:59:59Z")
+	rows := s.fetchHourlyZoned(sub, dev, from, to, z)
 	totals := sumRows(rows)
-	days := totals["days"]
 	delete(totals, "days")
+	// 官方 RPC 的 days 是 COUNT(DISTINCT 本地日桶)：同一批行在东京可能只落在一天里，
+	// 不能用 UTC 日期切片数（那会把跨时区的行数错）。
+	rangeDays := map[string]bool{}
+	for _, x := range rows {
+		rangeDays[z.dayKey(x.HourStart)] = true
+	}
+	days := len(rangeDays)
 
-	// rolling 窗口基于冻结时钟
-	today := s.now.UTC().Format("2006-01-02")
-	d7 := s.now.UTC().AddDate(0, 0, -6).Format("2006-01-02")
-	d30 := s.now.UTC().AddDate(0, 0, -29).Format("2006-01-02")
-	r7 := s.fetchHourly(sub, dev, d7+"T00:00:00Z", today+"T23:59:59Z")
-	r30 := s.fetchHourly(sub, dev, d30+"T00:00:00Z", today+"T23:59:59Z")
+	// rolling 窗口锚在**调用方时区的今天**（官方实现用 zonedDayKey(now)），
+	// 否则 UTC+9 的凌晨会算成"昨天"。
+	today := s.todayZoned(z)
+	todayDate, _ := time.Parse("2006-01-02", today)
+	d7 := todayDate.AddDate(0, 0, -6).Format("2006-01-02")
+	d30 := todayDate.AddDate(0, 0, -29).Format("2006-01-02")
+	r7 := s.fetchHourlyZoned(sub, dev, d7, today, z)
+	r30 := s.fetchHourlyZoned(sub, dev, d30, today, z)
 	activeDays30 := map[string]bool{}
 	for _, x := range r30 {
-		activeDays30[x.HourStart[:10]] = true
+		activeDays30[z.dayKey(x.HourStart)] = true
 	}
 	var bill30, conv30 int64
 	for _, x := range r30 {
@@ -546,7 +625,7 @@ func (s *Server) accountSummary(w http.ResponseWriter, r *http.Request, sub stri
 	for _, x := range r7 {
 		bill7 += x.Billable
 		conv7 += x.Conversations
-		activeDays7[x.HourStart[:10]] = true
+		activeDays7[z.dayKey(x.HourStart)] = true
 	}
 
 	writeJSON(w, 200, map[string]any{
@@ -565,19 +644,6 @@ func (s *Server) accountSummary(w http.ResponseWriter, r *http.Request, sub stri
 	})
 }
 
-// dayKey 按 tz 把 UTC 小时转成本地日期键（简化：支持 UTC 与 +08:00 固定偏移）。
-func dayKey(hourStart, tz string) string {
-	t, err := time.Parse(time.RFC3339, hourStart)
-	if err != nil {
-		return hourStart[:10]
-	}
-	loc, err := time.LoadLocation(tz)
-	if err != nil {
-		loc = time.UTC
-	}
-	return t.In(loc).Format("2006-01-02")
-}
-
 // dayAgg 严格对齐 golden 的 account-daily data[] 结构。
 type dayAgg struct {
 	Day           string           `json:"day"`
@@ -593,11 +659,11 @@ type dayAgg struct {
 	Models        map[string]int64 `json:"models"`
 }
 
-func (s *Server) aggregateByDay(rows []usageRow, tz string) []dayAgg {
+func aggregateByDay(rows []usageRow, z zone) []dayAgg {
 	type k struct{ day string }
 	m := map[k]*dayAgg{}
 	for _, x := range rows {
-		d := dayKey(x.HourStart, tz)
+		d := z.dayKey(x.HourStart)
 		a, ok := m[k{d}]
 		if !ok {
 			a = &dayAgg{Day: d, Models: map[string]int64{}}
@@ -622,18 +688,18 @@ func (s *Server) aggregateByDay(rows []usageRow, tz string) []dayAgg {
 }
 
 func (s *Server) accountDaily(w http.ResponseWriter, r *http.Request, sub string) {
-	from, to, tz, ok := s.accountParams(r)
+	from, to, z, ok := s.accountParams(r)
 	if !ok {
 		fail(w, 400, "Missing from/to")
 		return
 	}
-	rows := s.fetchHourly(sub, deviceFilterParam(r), from+"T00:00:00Z", to+"T23:59:59Z")
-	writeJSON(w, 200, map[string]any{"from": from, "to": to, "data": s.aggregateByDay(rows, tz)})
+	rows := s.fetchHourlyZoned(sub, deviceFilterParam(r), from, to, z)
+	writeJSON(w, 200, map[string]any{"from": from, "to": to, "data": aggregateByDay(rows, z)})
 }
 
 func (s *Server) accountHourly(w http.ResponseWriter, r *http.Request, sub string) {
 	// 参考实现对 hourly endpoint 默认使用“今天”（忽略 from/to）；契约快照锁定此行为。
-	day := s.now.UTC().Format("2006-01-02")
+	day := s.todayZoned(zoneFromQuery(r.URL.Query()))
 	rows := s.fetchHourly(sub, deviceFilterParam(r), day+"T00:00:00Z", day+"T23:59:59Z")
 	data := []map[string]any{}
 	for _, x := range rows {
@@ -647,12 +713,12 @@ func (s *Server) accountHourly(w http.ResponseWriter, r *http.Request, sub strin
 }
 
 func (s *Server) accountMonthly(w http.ResponseWriter, r *http.Request, sub string) {
-	from, to, _, ok := s.accountParams(r)
+	from, to, z, ok := s.accountParams(r)
 	if !ok {
 		fail(w, 400, "Missing from/to")
 		return
 	}
-	rows := s.fetchHourly(sub, deviceFilterParam(r), from+"T00:00:00Z", to+"T23:59:59Z")
+	rows := s.fetchHourlyZoned(sub, deviceFilterParam(r), from, to, z)
 	byMonth := map[string]int64{}
 	for _, x := range rows {
 		byMonth[x.HourStart[:7]] += x.TotalTokens
@@ -669,6 +735,17 @@ func (s *Server) accountMonthly(w http.ResponseWriter, r *http.Request, sub stri
 	writeJSON(w, 200, map[string]any{"from": from, "to": to, "data": data})
 }
 
+// accountHeatmap 对齐官方 tokentracker-account-heatmap：
+//
+//	GET ?weeks=52&to=YYYY-MM-DD&week_starts_on=sun|mon&tz=…&tz_offset_minutes=…&format=compact
+//
+// 与官方的三处关键一致点：
+//  1. 日期桶按**调用方时区**归日（`zonedDayKey`），查询窗口向两侧各放宽一天再裁剪；
+//  2. `to` 缺省是调用方时区的"今天"，不是 UTC 今天；
+//  3. `format=compact` 走稀疏线格式（dashboard 默认就带这个参数），
+//     `days` 只含有数据的日期，模型名只出现一次、按索引用。
+//
+// level：0=无用量，其余按当日 billable 与区间最大值的比值分 1..4（与官方同阈值）。
 func (s *Server) accountHeatmap(w http.ResponseWriter, r *http.Request, sub string) {
 	q := r.URL.Query()
 	weeks := 52
@@ -683,9 +760,10 @@ func (s *Server) accountHeatmap(w http.ResponseWriter, r *http.Request, sub stri
 			weeks = n
 		}
 	}
+	z := zoneFromQuery(q)
 	to := q.Get("to")
 	if to == "" {
-		to = s.now.UTC().Format("2006-01-02")
+		to = s.todayZoned(z)
 	}
 	end, err := time.Parse("2006-01-02", to)
 	if err != nil {
@@ -694,18 +772,22 @@ func (s *Server) accountHeatmap(w http.ResponseWriter, r *http.Request, sub stri
 	}
 	start := end.AddDate(0, 0, -weeks*7+1)
 	from := start.Format("2006-01-02")
-	weekStarts := q.Get("week_starts_on")
-	if strings.ToLower(weekStarts) != "mon" {
-		weekStarts = "sun"
+	weekStarts := "sun"
+	if strings.ToLower(q.Get("week_starts_on")) == "mon" {
+		weekStarts = "mon"
 	}
-	rows := s.fetchHourly(sub, deviceFilterParam(r), from+"T00:00:00Z", to+"T23:59:59Z")
+
+	rows := s.fetchHourlyZoned(sub, deviceFilterParam(r), from, to, z)
 	type daily struct {
 		total, bill int64
 		models      map[string]int64
 	}
 	byDay := map[string]*daily{}
 	for _, x := range rows {
-		day := dayKey(x.HourStart, "UTC")
+		day := z.dayKey(x.HourStart)
+		if day < from || day > to {
+			continue
+		}
 		d := byDay[day]
 		if d == nil {
 			d = &daily{models: map[string]int64{}}
@@ -715,59 +797,121 @@ func (s *Server) accountHeatmap(w http.ResponseWriter, r *http.Request, sub stri
 		d.bill += x.Billable
 		d.models[x.Model] += x.TotalTokens
 	}
-	max := int64(0)
+	var maxValue int64
 	active := 0
 	for _, d := range byDay {
 		if d.bill > 0 {
 			active++
-			if d.bill > max {
-				max = d.bill
+			if d.bill > maxValue {
+				maxValue = d.bill
 			}
 		}
 	}
-	cells := []map[string]any{}
+	calcLevel := func(v int64) int {
+		if v <= 0 {
+			return 0
+		}
+		if maxValue == 0 {
+			return 1
+		}
+		ratio := float64(v) / float64(maxValue)
+		switch {
+		case ratio <= 0.25:
+			return 1
+		case ratio <= 0.5:
+			return 2
+		case ratio <= 0.75:
+			return 3
+		default:
+			return 4
+		}
+	}
+
+	// 冻结时钟下按天推进：官方同样不把起点对齐到周起始，而是直接 7 个一组切。
+	type cell struct {
+		day    string
+		total  int64
+		bill   int64
+		level  int
+		models map[string]int64 // nil = 当天没有数据行（与官方的 models:null 对应）
+	}
+	cells := make([]cell, 0, weeks*7)
 	for day := start; !day.After(end); day = day.AddDate(0, 0, 1) {
 		key := day.Format("2006-01-02")
-		d := byDay[key]
-		total, bill := int64(0), int64(0)
-		var models any
-		if d != nil {
-			total, bill, models = d.total, d.bill, d.models
+		c := cell{day: key}
+		if d := byDay[key]; d != nil {
+			c.total, c.bill, c.models = d.total, d.bill, d.models
+			c.level = calcLevel(d.bill)
 		}
-		level := 0
-		if bill > 0 {
-			level = 1
-			if max > 0 {
-				ratio := float64(bill) / float64(max)
-				if ratio > 0.75 {
-					level = 4
-				} else if ratio > 0.5 {
-					level = 3
-				} else if ratio > 0.25 {
-					level = 2
-				}
+		cells = append(cells, c)
+	}
+
+	if q.Get("format") == "compact" {
+		// 稀疏线格式：days = [[day, total_tokens, [modelIndex, tokens, ...]], ...]
+		modelNames := []string{}
+		modelIndex := map[string]int{}
+		days := make([][3]any, 0, len(byDay))
+		for _, c := range cells {
+			if c.models == nil {
+				continue
 			}
+			pairs := make([]int64, 0, len(c.models)*2)
+			names := make([]string, 0, len(c.models))
+			for name := range c.models {
+				names = append(names, name)
+			}
+			sort.Strings(names) // 稳定输出（官方是 SQL 顺序，这里固定按名字）
+			for _, name := range names {
+				idx, ok := modelIndex[name]
+				if !ok {
+					idx = len(modelNames)
+					modelNames = append(modelNames, name)
+					modelIndex[name] = idx
+				}
+				pairs = append(pairs, int64(idx), c.models[name])
+			}
+			days = append(days, [3]any{c.day, c.total, pairs})
 		}
-		cells = append(cells, map[string]any{"day": key, "total_tokens": total, "billable_total_tokens": bill, "level": level, "models": models})
+		writeJSON(w, 200, map[string]any{
+			"format": "compact", "from": from, "to": to, "week_starts_on": weekStarts,
+			"active_days": active, "streak_days": 0, "max_value": maxValue,
+			"model_names": modelNames, "days": days,
+		})
+		return
 	}
+
 	weeksArr := [][]map[string]any{}
-	for i := 0; i < len(cells); i += 7 {
-		j := i + 7
-		if j > len(cells) {
-			j = len(cells)
+	row := []map[string]any{}
+	for _, c := range cells {
+		var models any
+		if c.models != nil {
+			models = c.models
 		}
-		weeksArr = append(weeksArr, cells[i:j])
+		row = append(row, map[string]any{
+			"day": c.day, "total_tokens": c.total, "billable_total_tokens": c.bill,
+			"level": c.level, "models": models,
+		})
+		if len(row) == 7 {
+			weeksArr = append(weeksArr, row)
+			row = []map[string]any{}
+		}
 	}
-	writeJSON(w, 200, map[string]any{"from": from, "to": to, "week_starts_on": weekStarts, "active_days": active, "streak_days": 0, "weeks": weeksArr})
+	if len(row) > 0 {
+		weeksArr = append(weeksArr, row)
+	}
+	writeJSON(w, 200, map[string]any{
+		"from": from, "to": to, "week_starts_on": weekStarts,
+		"active_days": active, "streak_days": 0, "weeks": weeksArr,
+	})
 }
 
 func (s *Server) accountModelBreakdown(w http.ResponseWriter, r *http.Request, sub string) {
-	from, to, _, ok := s.accountParams(r)
+	from, to, z, ok := s.accountParams(r)
 	if !ok {
 		fail(w, 400, "Missing from/to")
 		return
 	}
-	rows := s.fetchHourly(sub, deviceFilterParam(r), from+"T00:00:00Z", to+"T23:59:59Z")
+	rows := s.fetchHourlyZoned(sub, deviceFilterParam(r), from, to, z)
 	type agg struct {
 		total, bill, input, output, cached, creation, reasoning int64
 		cost                                                    float64
@@ -850,13 +994,13 @@ func (s *Server) accountModelBreakdown(w http.ResponseWriter, r *http.Request, s
 // "账户级来源"（cursor / trae-cn 这类只能按账户取总数、没有设备归属的源）；
 // 自托管所有用量都来自带 device_id 的上传，所以它永远是空数组。
 func (s *Server) accountDevices(w http.ResponseWriter, r *http.Request, sub string) {
-	from, to, _, ok := s.accountParams(r)
+	from, to, z, ok := s.accountParams(r)
 	if !ok {
 		fail(w, 400, "Missing from/to")
 		return
 	}
 	byDevice := map[string]int64{}
-	for _, x := range s.fetchHourly(sub, "", from+"T00:00:00Z", to+"T23:59:59Z") {
+	for _, x := range s.fetchHourlyZoned(sub, "", from, to, z) {
 		byDevice[x.DeviceID] += x.TotalTokens
 	}
 	rows, err := s.db.Query(`SELECT id,device_name,COALESCE(platform,''),created_at FROM devices
@@ -914,20 +1058,55 @@ func (s *Server) billing(w http.ResponseWriter, r *http.Request, sub, role strin
 			"limits": map[string]any{"machines": nil, "sync_minutes": 0,
 				"hourly_history_days": nil, "daily_history_months": nil, "trial_days": 0},
 		})
-	case "remove-device":
+	case "devices":
+		// 官方 dashboard 的设备卡片就是这一支：GET ?action=devices&current_machine_id=<本机机器 id>
+		// 返回 cloud_list_machines 的 jsonb（含 machines / machine_count / membership）。
+		writeJSON(w, 200, s.billingMachines(sub, r.URL.Query().Get("current_machine_id")))
+	case "remove-device", "resume-device":
+		if r.Method != http.MethodPost {
+			fail(w, 405, "Method not allowed")
+			return
+		}
 		var b struct {
 			MachineID string `json:"machine_id"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&b)
-		_, _ = s.db.Exec(`UPDATE device_tokens SET revoked_at=? WHERE token_hash IN
-			(SELECT token_hash FROM device_tokens dt JOIN devices d ON d.id=dt.device_id WHERE d.machine_id=? AND d.user_id=?)`,
-			s.nowISO(), b.MachineID, sub)
-		_, _ = s.db.Exec(`UPDATE devices SET revoked_at=? WHERE machine_id=? AND user_id=?`, s.nowISO(), b.MachineID, sub)
-		_, _ = s.db.Exec(`UPDATE cloud_machines SET status='paused' WHERE machine_id=? AND user_id=?`, b.MachineID, sub)
-		writeJSON(w, 200, map[string]any{
-			"ok": true, "machines": s.listMachines(sub), "membership": s.membership(sub),
-			"machine_count": s.machineCount(sub), "machine_limit": nil, "over_machine_limit": nil,
-		})
+		if b.MachineID == "" {
+			fail(w, 400, "machine_id is required")
+			return
+		}
+		// 认机器：dashboard 传回来的是我们给它的 machine_id（可能是设备机 machine_id，
+		// 也可能是 cloud_machines 行 id），两种都按 (user_id, machine_id, id) 匹配。
+		var rowID, machineKey string
+		if err := s.db.QueryRow(`SELECT id, COALESCE(machine_id,'') FROM cloud_machines
+			WHERE user_id=? AND (id=? OR machine_id=?)`, sub, b.MachineID, b.MachineID).
+			Scan(&rowID, &machineKey); err != nil {
+			fail(w, 404, "machine not found")
+			return
+		}
+		status := "paused"
+		if action == "resume-device" {
+			status = "active"
+		}
+		if _, err := s.db.Exec(`UPDATE cloud_machines SET status=? WHERE id=? AND user_id=?`,
+			status, rowID, sub); err != nil {
+			fail(w, 500, err.Error())
+			return
+		}
+		if status == "paused" {
+			// 暂停 = 这台机器不能再上报：撤销它的设备与设备 token（官方语义）。
+			_, _ = s.db.Exec(`UPDATE device_tokens SET revoked_at=? WHERE token_hash IN
+				(SELECT token_hash FROM device_tokens dt JOIN devices d ON d.id=dt.device_id
+				 WHERE d.user_id=? AND d.machine_id=? AND d.revoked_at IS NULL)`,
+				s.nowISO(), sub, machineKey)
+			_, _ = s.db.Exec(`UPDATE devices SET revoked_at=? WHERE user_id=? AND machine_id=? AND revoked_at IS NULL`,
+				s.nowISO(), sub, machineKey)
+		}
+		// 官方在状态变更后返回的列表里 current_machine_id 传 null（全部 is_current=false），
+		// 客户端判断"是不是本机"用的是 devices GET 那次的响应，所以这里跟官方保持一致。
+		out := s.billingMachines(sub, "")
+		out["ok"] = true
+		writeJSON(w, 200, out)
 	case "account":
 		fallthrough
 	default:

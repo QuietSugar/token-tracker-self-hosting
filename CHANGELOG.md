@@ -2,6 +2,83 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — 与官方模块逐个对拍：时区归日、heatmap compact、设备管理卡
+
+上一轮把设备维度做出来了，这一轮把**官方客户端真实请求的每个参数**都对了一遍。
+对拍对象是上游 `dashboard/edge-patches/*` 与 `dashboard/src/components/cloud/*`
+（v1.4.14；account-* 相关文件自 v1.4.12 起未改动）。
+
+### 1. 时区（`tz` / `tz_offset_minutes`）—— 原来会漏数据
+
+以前所有 account-* 端点都按 **UTC 日**归日、按 UTC 窗口取数。对东京/北京用户来说，
+本地凌晨 0–9 点产生的用量在 UTC 里还属于前一天，**查询当天时这段被整体漏掉**。
+官方做法是窗口向两侧各放宽一天、再按本地日裁剪；现已照做：
+
+| 位置 | 修正 |
+|---|---|
+| `account-summary` | 区间统计 + rolling 7/30 天都按本地日；rolling 锚点是**本地今天** |
+| `account-summary.days` | 改成 `COUNT(DISTINCT 本地日)`（官方 RPC 定义），跨时区的行不再重复计天 |
+| `-daily / -monthly / -model-breakdown / -heatmap` | 同一套本地日窗口 |
+| `-devices` | 每台设备总量用同一窗口，"各设备之和 == 总量"在任何时区都成立 |
+| `-hourly` | 缺省"今天"也改成调用方时区的今天 |
+
+实测（东京，本地 2026-10-20）：`2026-10-19T16:30Z`（本地 10-20 01:30）的 120 tokens
+现在会算进 10-20；旧实现查 `from=to=2026-10-20` 只看到 80。
+
+### 2. heatmap 的 `format=compact`
+
+dashboard / 菜单栏**默认**就给 heatmap 加 `&format=compact`，我们之前忽略了它（结果正确但
+多传一倍以上流量，也缺 `max_value`）。现已实现稀疏线格式
+`{format,from,to,week_starts_on,active_days,streak_days,max_value,model_names,days}`，
+`days` 只含有数据的日期、模型名按索引引用；用官方 `expandHeatmapCompact()` 展开后与
+dense 响应**逐格相同**（已用官方模块实测比对）。默认（不带 `format`）的 dense 输出保持原样。
+
+### 3. 设备管理卡（billing）
+
+dashboard 的"云端设备"卡片走 `tokentracker-billing?action=devices&current_machine_id=…`，
+我们之前没有这一支（返回的是 account 的响应，卡片永远是空的）。现在：
+
+- `?action=devices` 返回 `cloud_list_machines` 形状
+  `{machines[{machine_id,name,platform,last_seen_at,is_current,status}], machine_count,
+  machine_limit:null, membership, over_machine_limit:null}`；
+- `name`/`platform` 取**设备行**，所以在设备卡片里改的名字立刻显示；
+- `is_current` 认 `current_machine_id`（本机高亮）；
+- `ingest` 时更新 `cloud_machines.last_seen_at`（"最后活跃"不再恒为未知）；
+- `POST ?action=remove-device` / `?action=resume-device`（`{"machine_id":…}`）
+  暂停 / 恢复；暂停同时撤销该机器的设备与 device token；
+- RPC `cloud_list_machines` 与它共用同一实现（含 `p_current_machine_id`），
+  `machine_count` 只数 active（与 golden 一致）。
+
+### 测试
+
+- 新增 `parity_test.go`（4 个用例）：东京/UTC 两种归日、`tz_offset_minutes` 等价、
+  devices 与 summary 求和一致、heatmap 本地日 + `to` 缺省本地今天 + compact 结构、
+  billing `devices`/`remove-device`/`resume-device`/`last_seen_at`、RPC 与 billing 同源。
+- `go test -race ./...`：SQLite ✅ / PostgreSQL 16 ✅
+- 契约：`go-sqlite`、`go-postgres` 均 **33 PASS / 0 FAIL / 2 SKIP**（含
+  `cloud_list_machines` 与 `billing/device-revocation` 的机器列表 golden）
+
+### 用官方模块对拍（不是自说自话）
+
+`src/lib/cloud-account.js#fetchAccountUsage` + `src/lib/heatmap-compact.js` 直接打自部署服务：
+
+```
+✓ usage-summary / usage-daily / usage-heatmap 经官方模块拿到数据
+✓ compact 展开 == 官方 dense 形状（逐格比较 day/total/level/models）
+✓ 东京 10-20 聚合两行（含 UTC 前一天 16:30 的 120）
+✓ 无数据格子 models=null
+✓ billing?action=devices：机器列表 / 设备名取自设备行 / is_current / last_seen_at
+✓ remove-device → paused，resume-device → active
+```
+
+### 文档
+
+`docs/oauth-selfhosted.md` §4.6 扩写：新增"时区：为什么今天不是 UTC 的今天"、
+"heatmap 的 `format=compact`"、"设备管理（billing）"三节；`go-server/README.md`
+补时区 / compact / billing 行为；`STATUS.md`、根 `README.md` 同步。
+
+---
+
 ## 2026-10-27 — 多设备维度对齐官方 + 彻底删掉「默认账户」的兼容包袱
 
 两件事一起做，因为现在按「还没有任何真实部署」来设计：不留迁移路径，只保留最少的规则。

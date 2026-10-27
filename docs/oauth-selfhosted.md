@@ -207,6 +207,60 @@ curl -s -X POST -H "Authorization: Bearer $ACCESS" -H 'Content-Type: application
 
 只能改自己名下**未撤销**的设备；同一平台下与另一台在用设备重名 → `409`。
 
+### 时区：为什么"今天"不是 UTC 的今天
+
+官方客户端每个 `account-*` 请求都带 `tz`（IANA 名）和 `tz_offset_minutes`。服务端按两者
+之一把 UTC 小时行归到**本地日**，并且把 UTC 查询窗口向两侧各放宽一天再裁剪。
+这不是洁癖，是必要的：北京时间/东京时间凌晨 0–9 点产生的用量，UTC 还停在前一天。
+
+```
+本地 2026-10-20 01:30（东京）= UTC 2026-10-19T16:30Z
+  → 旧实现：查 10-20 的 UTC 窗口，这 120 tokens 被漏掉
+  → 现在：窗口 [10-19, 10-22) 全部取出，按本地日裁剪 → 算进 10-20
+```
+
+同样受影响的字段：
+
+- `account-summary` 的 `rolling.last_7d/last_30d` 锚点是**本地今天**（不是 UTC 今天）；
+- `account-summary` 的 `days` 是 `COUNT(DISTINCT 本地日)`（官方 RPC 的定义），
+  跨时区的两行可能只算一天；
+- `account-devices` 的每台设备总量与 summary 用**同一个**窗口，所以"各设备之和 == 总量"
+  在任何时区都成立。
+
+### heatmap 的 `format=compact`
+
+dashboard / 菜单栏客户端**默认**就给 heatmap 加 `&format=compact`（省一半以上流量）。
+这里支持两种线格式，字段与官方逐字对齐：
+
+| 格式 | 形状 |
+|---|---|
+| 默认（dense） | `{from,to,week_starts_on,active_days,streak_days,weeks:[[cell ×7]…]}`，`cell = {day,total_tokens,billable_total_tokens,level,models}` |
+| `format=compact` | `{format:"compact",from,to,week_starts_on,active_days,streak_days,max_value,model_names:[…],days:[[day,total,[idx,tokens,…]],…]}` |
+
+`days` 只含有数据的日期；`models` 里的模型名只出现一次、按索引引用。客户端的
+`expandHeatmapCompact()` 会把 compact 展开成与 dense **逐格相同**的结构
+（档位 `level` 由区间最大值算：≤25% → 1，≤50% → 2，≤75% → 3，否则 4）。
+
+### 设备管理（billing）
+
+dashboard 的"云端设备"卡片走 `tokentracker-billing?action=devices`：
+
+```sh
+curl -s -H "Authorization: Bearer $ACCESS" \
+  'https://tt.lan/functions/tokentracker-billing?action=devices&current_machine_id=<本机机器 id>'
+
+{"machines":[{"machine_id":"m-laptop","name":"书房的 MacBook","platform":"darwin",
+              "last_seen_at":"2026-10-26T00:00:00Z","is_current":true,"status":"active"}],
+ "machine_count":1,"machine_limit":null,"membership":{…},"over_machine_limit":null}
+```
+
+- `name`/`platform` 取**设备行**（重命名后卡片上立刻是新名字）；
+- `is_current` 用请求里的 `current_machine_id` 比对，卡片据此显示"当前设备"；
+- `last_seen_at` 在每次 `ingest` 时更新；
+- `POST ?action=remove-device` / `resume-device`（body `{"machine_id":"…"}`）暂停 / 恢复；
+  暂停会同时撤销该机器的设备与 device token（这才是"停止上报"）；
+- 同一份数据也通过 RPC `cloud_list_machines` 暴露（`p_current_machine_id` 同样生效）。
+
 ---
 
 ## 5. 数据落库

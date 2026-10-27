@@ -540,12 +540,8 @@ func (s *Server) rpc(w http.ResponseWriter, r *http.Request) {
 	case "cloud_start_trial":
 		writeJSON(w, 500, map[string]any{"code": "P0001", "message": "self-hosted access is free and does not require a trial"})
 	case "cloud_list_machines":
-		m := s.membership(uid)
-		machines := s.listMachines(uid)
-		writeJSON(w, 200, map[string]any{
-			"machines": machines, "membership": m, "machine_count": len(machines),
-			"machine_limit": nil, "over_machine_limit": nil,
-		})
+		cur, _ := args["p_current_machine_id"].(string)
+		writeJSON(w, 200, s.billingMachines(uid, cur))
 	case "account_usage_grouped_cached":
 		writeJSON(w, 200, s.usageGrouped(args))
 	default:
@@ -553,27 +549,66 @@ func (s *Server) rpc(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) listMachines(userID string) []map[string]any {
-	rows, err := s.db.Query(`SELECT id,name,machine_id,platform,status,last_seen_at,is_current FROM cloud_machines WHERE user_id=?`, userID)
+// listMachines 返回 cloud_list_machines 形状的机器列表（官方 RPC 的字段）：
+//
+//	{machine_id, name, platform, last_seen_at, is_current, status}
+//
+// 字段集合以契约 golden 为准（cloud_list_machines 的响应里没有机器行 id）。
+//
+// 与官方一致的三点：
+//   - 名字/平台优先取**设备行**（用户在设备卡片里改过名就该显示新名字）；
+//   - `is_current` 用调用方传进来的 current_machine_id 比对（本机就是当前这台）；
+//   - 按创建时间排序（官方 ORDER BY m.created_at, m.id），而不是按名字。
+func (s *Server) listMachines(userID, currentMachineID string) []map[string]any {
+	rows, err := s.db.Query(`SELECT m.id, m.name, COALESCE(m.machine_id,''), COALESCE(m.platform,''),
+		m.status, m.last_seen_at, m.created_at,
+		COALESCE((SELECT d.device_name FROM devices d WHERE d.user_id=m.user_id
+			AND d.machine_id=m.machine_id AND d.revoked_at IS NULL ORDER BY d.created_at, d.id LIMIT 1),''),
+		COALESCE((SELECT d.platform FROM devices d WHERE d.user_id=m.user_id
+			AND d.machine_id=m.machine_id AND d.revoked_at IS NULL ORDER BY d.created_at, d.id LIMIT 1),'')
+		FROM cloud_machines m WHERE m.user_id=? AND m.status<>'merged'
+		ORDER BY m.created_at, m.id`, userID)
 	if err != nil {
 		return []map[string]any{}
 	}
 	defer rows.Close()
 	out := []map[string]any{}
 	for rows.Next() {
-		var id, name, mid, platform, status string
+		var id, name, mid, platform, status, createdAt string
+		var devName, devPlatform string
 		var lastSeen sql.NullString
-		var cur flexibleBool
-		_ = rows.Scan(&id, &name, &mid, &platform, &status, &lastSeen, &cur)
+		if rows.Scan(&id, &name, &mid, &platform, &status, &lastSeen, &createdAt, &devName, &devPlatform) != nil {
+			continue
+		}
+		if devName != "" {
+			name = devName
+		}
+		if devPlatform != "" {
+			platform = devPlatform
+		}
+		if mid == "" {
+			mid = id
+		}
+		cur := currentMachineID != "" && (mid == currentMachineID || id == currentMachineID)
 		out = append(out, map[string]any{
-			"machine_id": mid, "name": name, "platform": platform, "status": status,
-			"is_current": bool(cur), "last_seen_at": nil,
+			"machine_id": mid, "name": name,
+			"platform": nullStr(platform), "status": status,
+			"is_current": cur, "last_seen_at": nullStr(lastSeen.String),
 		})
 	}
-	sort.Slice(out, func(i, j int) bool {
-		return fmt.Sprint(out[i]["name"]) < fmt.Sprint(out[j]["name"])
-	})
 	return out
+}
+
+// billingMachines 是 `?action=devices` / remove / resume 的响应：
+// 等于 cloud_list_machines 的 jsonb（machines/machine_count/machine_limit/membership/over_machine_limit）。
+// 自托管没有配额，machine_limit 恒为 null、over_machine_limit 恒为 null（与官方 RPC 一致）。
+func (s *Server) billingMachines(userID, currentMachineID string) map[string]any {
+	machines := s.listMachines(userID, currentMachineID)
+	return map[string]any{
+		"machines": machines, "machine_count": s.machineCount(userID),
+		"machine_limit": nil, "membership": s.membership(userID),
+		"over_machine_limit": nil,
+	}
 }
 
 // ---------- 账户聚合 ----------
