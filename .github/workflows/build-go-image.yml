@@ -214,7 +214,7 @@ jobs:
           echo "优雅停服后主库大小: $size bytes"
           # 全新空库只有 1 个 page（4096B）；落盘后为多页。这里只要 >8KB 就说明数据已 checkpoint 到主库。
           [ "$size" -gt 8192 ] || fail "停服后主库仅 $size 字节，数据可能没落盘"
-          echo "6/7 优雅关闭后数据已 checkpoint 到主库（$size bytes）"
+          echo "6/8 优雅关闭后数据已 checkpoint 到主库（$size bytes）"
 
           docker start tt-sqlite >/dev/null
           for _ in $(seq 1 60); do
@@ -227,7 +227,7 @@ jobs:
           if docker logs tt-sqlite 2>&1 | tail -20 | grep -qi 'checksum drift'; then
             fail "重启后出现 checksum drift"
           fi
-          echo "7/7 重启成功、库文件非空、无 checksum drift"
+          echo "7/8 重启成功、库文件非空、无 checksum drift"
 
           if docker run --rm -e TT_JWT_SECRET=short "$SMOKE_IMAGE" >/dev/null 2>&1; then
             fail "缺失/过短的 TT_JWT_SECRET 竟然启动成功"
