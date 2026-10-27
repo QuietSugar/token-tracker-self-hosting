@@ -52,6 +52,9 @@ func testDB(t *testing.T) *store.DB {
 
 func testServer(t *testing.T) (*Server, *store.DB) {
 	t.Helper()
+	// 冻结时钟：生产默认用真实时间（见 New），但测试里的断言写着具体日期，
+	// 必须让"今天"是确定的，否则用例会随运行日期漂移。
+	t.Setenv("TT_NOW", "2026-10-26T00:00:00Z")
 	db := testDB(t)
 	return New(db), db
 }

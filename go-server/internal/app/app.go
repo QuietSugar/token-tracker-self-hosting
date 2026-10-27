@@ -55,7 +55,11 @@ type Server struct {
 }
 
 func New(db *store.DB) *Server {
-	now := time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC)
+	// 默认用真实时间。曾经的默认值是**写死的** 2026-10-26T00:00:00Z，只留给
+	// 契约快照用——结果是：真实部署里服务端认为"今天"永远是那一天，「今日」视图
+	// 是空的、heatmap 的 to 与 rolling 窗口全部错位、签出的 access token 的 exp
+	// 也停在过去。契约/回归测试需要冻结时间就显式设 TT_NOW。
+	now := time.Now().UTC()
 	if v := os.Getenv("TT_NOW"); v != "" {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
 			now = t.UTC()
@@ -227,7 +231,7 @@ func fail(w http.ResponseWriter, status int, msg string) {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]any{"ok": true}) })
+	mux.HandleFunc("/health", s.health)
 	mux.HandleFunc("/_test/health", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]any{"ok": true}) })
 	if s.testMode {
 		// Dangerously powerful fixture-only endpoints are absent from production by default.
@@ -242,12 +246,21 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/auth/", s.authAPI)
 	mux.HandleFunc("/functions/", s.functions)
 	mux.HandleFunc("/api/database/rpc/", s.rpc)
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 404, map[string]any{"error": "not found"}) })
-	return mux
+	// "/" 是内置只读看板（零依赖单文件）；其它未注册路径仍是 404 JSON。
+	mux.HandleFunc("/", s.root)
+	return s.withAccessLog(mux)
 }
 
 func (s *Server) auth(r *http.Request) (sub, role, token string, ok bool) {
-	h := r.Header.Get("Authorization")
+	h := strings.TrimSpace(r.Header.Get("Authorization"))
+	// 兜底头：有些反向代理/内网网关会把 Authorization 当自己的凭据吃掉，
+	// 表现就是"密码能登录、一读数据就 401"。内建看板会同时发这个头。
+	if !strings.HasPrefix(h, "Bearer ") {
+		h = strings.TrimSpace(r.Header.Get("X-TokenTracker-Token"))
+		if h != "" && !strings.HasPrefix(h, "Bearer ") {
+			h = "Bearer " + h
+		}
+	}
 	if !strings.HasPrefix(h, "Bearer ") {
 		return "", "", "", false
 	}

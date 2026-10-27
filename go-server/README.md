@@ -144,6 +144,32 @@ docker pull ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental-<short
 
 ---
 
+### 1.5 浏览器看板（内建，只读）
+
+服务端自己带一个页面，**不用装任何前端**：浏览器打开 `http://<你的地址>:8080/` 就是看板。
+
+- 登录：用 owner 的邮箱 + 密码（§3.7 那套 `/api/auth/sessions`），或者点"直接粘贴 JWT"，
+  把 `./scripts/issue-token.sh --json` 打印的 token 贴进去。token 只存在 `sessionStorage`，
+  关掉标签页就失效，不落盘、不写 cookie。
+- 内容：6 个统计卡（总量/输入/输出/缓存读+写/推理/费用）、最近 26 周热力图、按模型条形图、
+  按设备列表、按日明细；周期切换「今日 / 近 7 天 / 本月 / 全部」，「全部」= 近 24 个月。
+- **只读**：页面只发 GET，唯一的 POST 是登录本身；不提供改设备名、删设备、改用量之类的操作
+  （设备管理见 §3.6 的 CLI 与官方客户端）。
+- 零外部请求：样式、脚本全内联，不引 CDN/字体/统计脚本。所以内网没有公网出口也能正常显示，
+  响应头里 `Content-Security-Policy` 也把外联直接堵死。
+- 设备下拉**列出全部设备**，包括当前时间范围内 0 用量的（标注"无用量"）。官方 dashboard 会
+  把 0 用量的设备藏起来，看起来像"设备丢了"，这里刻意不藏。
+
+- access token 只有 1 小时（`TT_ACCESS_TOKEN_TTL`）。过期时页面会用登录拿到的 refresh token
+  自动续一次再重试，续不上才回登录页，并写明是哪个请求、什么状态码、返回了什么。
+- 如果你的反代/网关会把 `Authorization` 当自己的凭据吃掉（表现：密码能登录，一读数据全是 401），
+  看板同时发的 `X-TokenTracker-Token: Bearer <jwt>` 能兜住；服务端接受任意一个。
+  确认是不是这一层的问题：`TT_ACCESS_LOG=true` 起服务，请求那一行会显示 `auth=no`。
+
+想换成官方 dashboard，按 §3.6 配 `TT_DASHBOARD_URL` 即可，两者不冲突。
+
+---
+
 ## 2. 配置参考
 
 | 环境变量 | 默认 | 说明 |
@@ -164,7 +190,8 @@ docker pull ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental-<short
 | `TT_AUTH_ALLOWED_ORIGINS` | 空 = 回显任意 Origin | `/api/auth/*` 允许的跨域来源（逗号分隔）。带 cookie 的跨域不能用 `*`。 |
 | `TT_AUTH_COOKIE_SECURE` | `auto` | cookie 的 `Secure`：`auto`（直连看 TLS、反代看 `X-Forwarded-Proto`）/ `true` / `false`。 |
 | `TT_AUTH_REVOKE_ON_REUSE` | `false` | 旧 refresh token 被重放时是否撤销该用户全部会话（默认只拒绝，避免并发刷新误伤）。 |
-| `TT_NOW` | 真实时间 | 冻结时钟（RFC3339）。**仅测试**用。 |
+| `TT_NOW` | 真实时间 | 冻结时钟（RFC3339）。**仅测试**用；不设就用真实时间。 |
+| `TT_ACCESS_LOG` | `false` | 打开后每个请求打一行 `access: GET /path 200 auth=yes origin=-`。排查"密码能登录、一读数据就 401"时用它确认代理有没有把 `Authorization` 吃掉。 |
 | `TT_ENABLE_TEST_ENDPOINTS` | `false` | 打开 `/_test/*`（含**可执行任意 SQL** 的 `/_test/sql`）。**生产必须保持 false。** |
 
 ### 2.1 JWT 约定
@@ -552,7 +579,10 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tokentracker
 
 ### 6.2 健康检查
 
-- `GET /health` → `{"ok":true}`（进程存活 + 路由就绪；**不查数据库**）。
+- `GET /health` → `{"ok":true,"engine":"postgres","version":"…","ref":"…"}`
+  （进程存活 + 路由就绪；**不查数据库**）。`version`/`ref` 来自构建时的 `-ldflags`，
+  官方镜像会填成发布版本与提交号，自己 `go build` 则是 `dev`/`unknown`——
+  排查"容器里到底是哪个镜像"时第一眼就看它。
 - 想知道数据库是否可用：看启动日志，或直接请求一个需要 DB 的只读接口（未认证返回 401 也说明进程在跑）。
 - Docker 里已内置 `HEALTHCHECK`（compose 用 `wget`），`docker ps` 会显示 `healthy`。
 
@@ -590,6 +620,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tokentracker
 | 启动即退：`schema migration 1 checksum drift` | 用新版本二进制连了旧 schema 的库（或有人手改了表） | 用与备份/旧数据同版本的镜像启动；不要手改表结构 |
 | `sql: unknown driver "postgres"` | 用了自行裁剪的构建，缺少驱动 import | 用官方镜像或完整 `go build ./cmd/server` |
 | 401 一直返回 | JWT 密钥与签发方不一致 / `exp` 过期 / 缺 `role` | 用 jwt.io 解 payload 对比 `TT_JWT_SECRET` |
+| **登录成功但所有 `/functions/*` 都 401** | 反向代理/SSO/预览隧道把 `Authorization` 头吃了（它在那一层被当成自己的凭据） | 开 `TT_ACCESS_LOG=true` 看请求行是不是 `auth=no`；是的话让代理透传该头，或用 `X-TokenTracker-Token`（内建看板两个都发） |
 | 403 `server role required` | 调了 `/api/database/rpc/*` 但 JWT `role` 不是 `project_admin` | 用服务角色 token，或改用 `/functions/*` |
 | 上传报 `Upload too large` / `Too many buckets` | 单次 body >1 MiB / >500 桶 | 客户端分批 |
 | 容器 `read_only` 下启动失败 | `/tmp` 不可写 | compose 已加 `tmpfs: /tmp`，自行部署时别忘 |
