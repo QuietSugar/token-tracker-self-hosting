@@ -118,7 +118,12 @@ func (s *Server) deviceApproveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	code := r.FormValue("user_code")
-	if _, err := s.approveDeviceCode(s.defaultSub, code); err != nil {
+	owner, err := s.ensureOwner("device")
+	if err != nil {
+		http.Error(w, "批准失败："+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := s.approveDeviceCode(owner, code); err != nil {
 		http.Error(w, "批准失败："+err.Error(), http.StatusBadRequest)
 		return
 	}

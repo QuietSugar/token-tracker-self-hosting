@@ -119,7 +119,7 @@ ANON=$(./go-server/scripts/issue-token.sh --role anon --json)
 
 | 模式 | 行为 | 适合 |
 |---|---|---|
-| `auto`（**推荐**） | `authorize` 立刻批准到 `TT_DEFAULT_ACCOUNT`，客户端第一轮 poll 就拿到 token | 家里/局域网自用，没人想点按钮 |
+| `auto`（**推荐**） | `authorize` 立刻批准到 **owner 账户**（没有就先建一个空的并钉住），客户端第一轮 poll 就拿到 token | 家里/局域网自用，没人想点按钮 |
 | `page` | 客户端打印 `http(s)://<host>/device?user_code=…`，打开点"批准" | 想让"批准"仍然是个动作 |
 | `jwt`（默认） | `POST /functions/tokentracker-device-flow-grant` 带 JWT，或用 `scripts/approve-device.sh` | 想保留审批边界 |
 
@@ -140,6 +140,10 @@ open "https://tt.lan:8443/device"      # 输入 ABCD-EFGH 点批准
 
 服务端会把 device token 绑到 `machine_id`（客户端用它自己的机器指纹上报），
 同一台机器重复 `device-login` 会**复用同一台设备行、发新 token**，不会积累重复设备。
+
+**设备归属谁？** 一律归属这台机器的 **owner 账户** —— 也就是你之后登录/注册的那个账户，
+不再是过去那个写死的 UUID。先 `device-login` 还是先登录都行，最终是同一个账户
+（规则与迁移见 [`oauth-selfhosted.md`](oauth-selfhosted.md) §4.5）。
 
 ---
 

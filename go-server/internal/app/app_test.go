@@ -349,7 +349,6 @@ func TestDeviceAuthorizeAnchorsVerificationURIToRequestHost(t *testing.T) {
 func TestDeviceAutoApproveGivesUsableToken(t *testing.T) {
 	s, _ := testServer(t)
 	s.deviceApprove = "auto"
-	s.defaultSub = "22222222-2222-4222-8222-222222222222"
 	h := s.Handler()
 
 	w := requestJSON(t, h, "POST", "/functions/tokentracker-device-flow-authorize", "",
@@ -371,8 +370,20 @@ func TestDeviceAutoApproveGivesUsableToken(t *testing.T) {
 		DeviceToken string `json:"device_token"`
 	}
 	_ = json.Unmarshal(p.Body.Bytes(), &poll)
-	if poll.Status != "approved" || poll.UserID != s.defaultSub || poll.DeviceToken == "" {
-		t.Fatalf("poll=%s (status=%q user=%q token=%q)", p.Body.String(), poll.Status, poll.UserID, poll.DeviceToken)
+	owner, err := s.ownerSub()
+	if err != nil || owner == "" {
+		t.Fatalf("owner not created by auto approve: owner=%q err=%v", owner, err)
+	}
+	if poll.Status != "approved" || poll.UserID != owner || poll.DeviceToken == "" {
+		t.Fatalf("poll=%s (status=%q user=%q owner=%q token=%q)", p.Body.String(), poll.Status, poll.UserID, owner, poll.DeviceToken)
+	}
+	// 归属必须落在 owner 上，不能是另一个账户
+	var deviceOwners int
+	if err := s.db.QueryRow(`SELECT count(*) FROM devices WHERE user_id=?`, owner).Scan(&deviceOwners); err != nil {
+		t.Fatal(err)
+	}
+	if deviceOwners != 1 {
+		t.Fatalf("devices under owner=%d want 1 (设备必须归属 owner 账户)", deviceOwners)
 	}
 
 	// 拿到的 token 必须真的能上传（客户端下一步就是 ingest）
@@ -391,7 +402,6 @@ func TestDeviceAutoApproveGivesUsableToken(t *testing.T) {
 func TestDeviceApprovalPage(t *testing.T) {
 	s, _ := testServer(t)
 	s.deviceApprove = "page"
-	s.defaultSub = "33333333-3333-4333-8333-333333333333"
 	h := s.Handler()
 
 	authRes := requestJSON(t, h, "POST", "/functions/tokentracker-device-flow-authorize", "", map[string]any{"machine_id": "m-page"})

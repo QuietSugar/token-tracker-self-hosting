@@ -87,7 +87,13 @@ func (s *Server) deviceAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.deviceApprove == "auto" {
-		if _, err := s.approveDeviceCode(s.defaultSub, uc); err != nil {
+		// 归属到 owner（没有就先建一个空 owner 再钉住），不再用配置里的魔法 UUID。
+		owner, err := s.ensureOwner("device")
+		if err != nil {
+			fail(w, 500, err.Error())
+			return
+		}
+		if _, err := s.approveDeviceCode(owner, uc); err != nil {
 			fail(w, 500, err.Error())
 			return
 		}

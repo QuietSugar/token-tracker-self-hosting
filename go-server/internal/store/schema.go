@@ -296,6 +296,18 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
 CREATE UNIQUE INDEX IF NOT EXISTS auth_sessions_token ON auth_sessions(token_hash);
 CREATE INDEX IF NOT EXISTS auth_sessions_user ON auth_sessions(user_id);
 `},
+	{2, "auth-owner", `
+-- 「这台机器的所有者」单例。为什么需要它：
+--   自托管没有平台账号表，device-login（设备授权）与 /api/auth/*（登录）原本各自
+--   产生一个账户 id，同一台机器于是有两条互不相干的账户，跨设备汇总看不到对方。
+--   auth_owner 把「归属」收敛成一个可解析的事实：slot=1 恒为唯一一行。
+CREATE TABLE IF NOT EXISTS auth_owner (
+  slot INTEGER PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE REFERENCES auth_users(id) ON DELETE CASCADE,
+  source TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+`},
 }
 
 // SchemaLedgerVersion 是「core schema + 所有增量 step」的逻辑版本，仅用于日志与文档；

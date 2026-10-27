@@ -160,7 +160,7 @@ PostgreSQL 模式（连真实 PG 建 schema、health 200、日志脱敏、`/_tes
 | `TT_LISTEN_ADDR` | `127.0.0.1:8080` | 监听地址。容器里用 `0.0.0.0:8080`。 |
 | `TT_DASHBOARD_URL` | 空 = 按请求推导 | 设备授权返回的 `verification_uri` / `verification_uri_complete` 前缀。**留空时**用 `X-Forwarded-Proto` + `Host` 推导（推荐，官方客户端要求它与客户端 `base_url` 同源）。 |
 | `TT_DEVICE_APPROVE` | `jwt` | 设备授权怎么被批准：`jwt`（POST `device-flow-grant` 带 JWT）/ `page`（访问 `/device` 点按钮，无认证）/ `auto`（申请即批准，官方客户端 `device-login` 零交互）。详见 [`../docs/official-client.md`](../docs/official-client.md)。 |
-| `TT_DEFAULT_ACCOUNT` | `11111111-1111-4111-8111-111111111111` | `page` / `auto` 批准时归属的账户 sub（与 `scripts/issue-token.sh` 默认值一致）。 |
+| `TT_OWNER_ACCOUNT` | 空（自动解析） | 可选：把**所有者账户** id 钉死。设备批准、注册、`issue-token.sh` 都指向它。旧名 `TT_DEFAULT_ACCOUNT` 仍被接受，但"默认账户"的语义已删除（见 `docs/oauth-selfhosted.md` §4.5）。 |
 | `TT_AUTH_EMAIL` / `TT_AUTH_PASSWORD` | – | 启动时若库里还没有账户，用它创建 owner（幂等，不覆盖已有密码）。官方客户端/dashboard 的登录框就用这一组。 |
 | `TT_ACCESS_TOKEN_TTL` | `3600` | access token（HS256 JWT）有效期，秒。 |
 | `TT_REFRESH_TOKEN_TTL` | `7776000` | refresh token 有效期（90 天），也是 cookie Max-Age。 |
@@ -390,13 +390,18 @@ popover        →  GET  /functions/tokentracker-account-*    Authorization: Bea
 [`../docs/oauth-selfhosted.md`](../docs/oauth-selfhosted.md)。
 
 ```sh
-# 第一次部署：把 owner 账户钉下来，客户端就能登录了
+# 第一次部署：给 owner 账户设好邮箱密码，客户端就能登录了
 TT_AUTH_EMAIL=me@lan.test TT_AUTH_PASSWORD='至少8位' \
 TT_DEVICE_APPROVE=auto ./bin/tokentracker-server
 
 # 自检：登录 → 轮换 → 撤销 → 读 account-summary
 ./scripts/check-oauth.sh me@lan.test '至少8位' https://tt.lan
 ```
+
+设备上报（`device-login`）与登录（`/api/auth/*`）归属**同一个 owner 账户**：先设备后账号、
+先账号后设备最终都收敛到它，所以跨设备汇总不会互相看不见（规则见
+[`../docs/oauth-selfhosted.md`](../docs/oauth-selfhosted.md) §4.5）。
+`scripts/issue-token.sh` 不再猜 sub，它会问 `GET /api/auth/owner`。
 
 **没有**第三方 OAuth、邮件验证、找回密码、多账户后台——自托管定位下这些是负担。
 账号体系只有在"想让官方 dashboard / 菜单栏的跨设备视图工作"时才需要；
