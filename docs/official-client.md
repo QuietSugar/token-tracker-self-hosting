@@ -256,7 +256,105 @@ account-summary → total_tokens= 7500
 
 ---
 
-## 7. 排错
+## 7. 从官方云切到自建：第一次 sync 会发生什么
+
+**结论：会把客户端本地队列里的历史全部重放过去，但重放的只是"本地队列里还有的"，不是云端的历史。**
+下面是逐条依据（读的是上游 v1.4.13 的源码，不是推测）。
+
+### 7.1 切地址时客户端会主动把上传进度归零
+
+`src/commands/init.js`：
+
+```js
+const changedInstance = normalizeInstanceBaseUrl(previousRuntime.baseUrl) !== runtime.baseUrl ||
+  previousRuntime.anonKey !== runtime.anonKey;
+if (changedInstance) { resetInstanceState(trackerDir); deviceToken = null; deviceId = null; }
+```
+
+`resetInstanceState`（`src/lib/runtime-config.js`）只做两件事：把 `queue.state.json` 写成
+`{offset: 0}`，删掉 relay cookie / cloud device token / 限流状态。**`queue.jsonl` 本身不动**
+（append-only，已上传过的行也留着）。
+
+而 `offset` 是"队列文件已上传到第几个字节"，`sync` 就是从 offset 往后发。所以归零 = 下一次
+`tracker sync` 从头重放。上游自己修旧 InsForge 项目迁移时用的就是这招（`offset: 0` +
+注释 "ingest 是整行 upsert，重放幂等"）。
+
+### 7.2 重放的范围
+
+| 会被上传 | 不会被上传 |
+|---|---|
+| `tracker/queue.jsonl` 里的**半小时桶**（source / model / token 数 / 时间） | `project.queue.jsonl`、`session.queue.jsonl`（按设计永不外传） |
+| 队列里的 `account_session_state` 控制记录（服务端回 200 并忽略） | **官方云端独有的历史**：其它设备上报的、或本地日志已被工具自己清理掉的（例如 Claude Code 默认只留约 30 天 transcripts） |
+| 客户端这次重新解析出来的桶（取决于本地日志还在不在） | 计费/套餐/结账记录（自托管没有这些表） |
+
+所以"云端看到 12 个月、切过来只剩 3 个月"是正常的：**本地队列有才是真的有**。想要云端那段
+历史，只能从官方 dashboard 导出后走 `import-usage.py`（§3.5）。
+
+### 7.3 顺序：init → device-login → sync
+
+换实例会清掉 `deviceToken` / `deviceId`（新后端库里没有这个 token），必须重新
+`device-login`。少了这一步，`sync` 只会打印 `Uploaded: skipped (no device token)`，
+看着像"没数据"。
+
+```sh
+cp -a ~/.tokentracker ~/.tokentracker.bak        # 切之前留一份
+export NODE_EXTRA_CA_CERTS=/path/to/ca.pem       # 局域网 https 才需要
+ANON=$(./scripts/issue-token.sh --role anon --json)
+tracker init --base-url https://tt.lan:8443 --anon-key "$ANON"
+tracker device-login --base-url https://tt.lan:8443 --anon-key "$ANON"   # 浏览器点「批准」
+tracker sync --drain                             # 反复跑，直到没有 pending
+```
+
+### 7.4 一次传不完
+
+每批 200 桶；普通 `tracker sync` 最多 5 批，`--drain` 是 100 批。历史多就多跑几次
+`tracker sync --drain`，直到输出里不再有 `Remaining: … pending`。
+
+想看进度（`offset` 追上文件字节数就传完了）：
+
+```sh
+python3 -c "import json,os;p=os.path.expanduser('~/.tokentracker/tracker/queue.state.json');print('offset',json.load(open(p))['offset'])"
+stat -c %s ~/.tokentracker/tracker/queue.jsonl      # macOS: stat -f %z
+```
+
+### 7.5 重放安全吗
+
+安全，而且是服务端刻意保证的：主键 `(user_id, device_id, hour_start, source, model)`，
+重复上传是**整行替换**（不是累加），所以重放一百遍总量都不变。实测：同一个队列
+（374 桶 / 909,911 tokens）重放两遍，设备总量仍是 909,911。
+
+⚠️ **别用别的工具把同一批数据"规整"后再灌一遍**：服务端的键是时间戳字符串，
+`2026-10-20T00:30:00.000Z`（客户端形状）和 `2026-10-20T00:30:00Z` 是**两行**。
+`import-usage.py` 会归整到整点，所以它适合导入"客户端从没传过的历史"，不要拿它重灌
+客户端已经传过的同一批桶。
+
+### 7.6 客户端不给你重放时的兜底：`replay-queue.py`
+
+有三种情况客户端的自动重放帮不上：客户端已把 offset 推过去了但那个后端的数据没留住、
+换机器/换账号搬历史、以及想核对"那次 sync 到底传全没有"。这时用：
+
+```sh
+cd go-server
+./scripts/replay-queue.py --base https://tt.lan:8443 --jwt "$JWT" --dry-run   # 先看统计
+./scripts/replay-queue.py --base https://tt.lan:8443 --jwt "$JWT"             # 真重放
+```
+
+它会读 `~/.tokentracker/tracker/queue.jsonl`（`--queue` 可指定备份），跳过控制记录、
+按客户端同样的规则补默认值（`codex` / `unknown`）、按键合并重复行，**时间戳原样保留**
+（否则会和服务端已有的行变成两份），并打印客户端自己的 `offset` 进度。`--since` /
+`--until` / `--limit` 可以只搬一段先试。
+
+### 7.7 一个踩过的坑：队列尾部只剩控制记录
+
+如果队列最后一批里只有 `account_session_state`（TRAE / cursor 这类 account-level 来源的
+会话去重记录），客户端会发 `hourly: []` + `account_session_states: [...]`。早期服务端对
+这种"没有用量桶"的请求回 400，客户端就不会推进 offset —— 那一批被无限重试，
+`tracker sync` 从此**永久失败**（报 `HTTP 400: No usage buckets provided`）。
+现在服务端明确回 200（`inserted: 0`、忽略这些记录），队列能正常往前走；真正空的 body 仍是 400。
+
+---
+
+## 8. 排错
 
 | 症状 | 原因 | 处理 |
 |---|---|---|

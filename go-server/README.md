@@ -361,7 +361,30 @@ timestamp,provider,model,prompt_tokens,completion_tokens,cached_tokens,reasoning
 | `HTTP 413: Upload too large` | 单批超限 | 调小 `--batch` |
 | 导入成功但 summary 是 0 | `from/to` 选的日期不含数据 | 用脚本提示里打印的日期区间再查 |
 
-### 3.5.6 想长期自动推送？
+### 3.5.6 从官方客户端自己的队列重放（`replay-queue.py`）
+
+官方客户端自己会重放：`tracker init --base-url <新地址>` 检测到实例变化会把
+`queue.state.json` 的 `offset` 归零，下一次 `tracker sync` 就从头传（详见
+[`../docs/official-client.md`](../docs/official-client.md) §7）。**正常切换用不着本脚本。**
+
+它管的是这三种情况：客户端已把 offset 推过去了但那个后端的数据没留住、换机/换账号搬历史、
+以及核对"那次 sync 到底传全没有"：
+
+```sh
+cd go-server
+./scripts/replay-queue.py --base http://192.168.1.10:8080 --jwt "$JWT" --dry-run  # 先看统计
+./scripts/replay-queue.py --base http://192.168.1.10:8080 --jwt "$JWT"            # 真重放
+```
+
+读 `~/.tokentracker/tracker/queue.jsonl`（`--queue` 可指向备份）。它按**客户端同样的规则**
+处理：跳过 `kind` 控制记录、缺 `source`/`model` 补 `codex`/`unknown`、按键合并重复行、
+**时间戳原样保留**（否则会与客户端已上传的行变成两份），并打印客户端的 `offset` 进度；
+`--since` / `--until` / `--limit` 可以先搬一段。重放是幂等的（整行替换），总量不会翻倍。
+
+> ⚠️ 不要用 §3.5 的 `import-usage.py` 重灌客户端已经传过的同一批桶：它会把时间归整到整点，
+> 而服务端的键是时间戳字符串，`…T00:30:00.000Z` 与 `…T00:30:00Z` 是两行。
+
+### 3.5.7 想长期自动推送？
 
 把同一份导出逻辑做成定时任务即可，脚本天然幂等：
 
@@ -409,6 +432,11 @@ tracker sync
 `/device` 页面会显示申请方的 `client_info` 与 `machine_id`，批准前能看出是不是自己的机器。
 `page`/`auto` 都等于「能访问本服务（且拿到 user_code）的人可以把设备接进 owner 账户」，
 这是局域网自用定位下的有意取舍；**不要**把这两种模式暴露到公网。
+
+> **从官方云切过来的时候会怎样**：`tracker init` 发现实例变了，会把上传进度归零，
+> 下一次 `sync` 把本地 `queue.jsonl` 里的历史**全部重放**到你的后端（重放是整行替换，
+> 安全）；但重放的是"本地队列里还有的"，云端独有的历史需要另外导出导入。
+> 细节、进度核对与兜底脚本见 [`../docs/official-client.md`](../docs/official-client.md) §7。
 
 ⚠️ **客户端硬性要求**：`base_url` 只能是 `https://…` 或 `http://localhost`（`127.0.0.1`/`::1`）。
 局域网 IP 走明文 HTTP 会被客户端自己拒掉 —— 见 `docs/official-client.md` §2 的三条出路
@@ -636,6 +664,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tokentracker
 | **登录成功但所有 `/functions/*` 都 401** | 反向代理/SSO/预览隧道把 `Authorization` 头吃了（它在那一层被当成自己的凭据） | 开 `TT_ACCESS_LOG=true` 看请求行是不是 `auth=no`；是的话让代理透传该头，或用 `X-TokenTracker-Token`（内建看板两个都发） |
 | 403 `server role required` | 调了 `/api/database/rpc/*` 但 JWT `role` 不是 `project_admin` | 用服务角色 token，或改用 `/functions/*` |
 | 上传报 `Upload too large` / `Too many buckets` | 单次 body >1 MiB / >500 桶 | 客户端分批 |
+| `HTTP 400: No usage buckets provided` | ≤ 本次发布的服务端对"只有 `account_session_states`、没有用量桶"的批次回了 400 → 客户端 offset 卡死、sync 永久失败 | 升级到本版（现在回 200 并忽略这些记录）；升级前无法自愈，因为客户端不会跳过失败批次 |
 | 容器 `read_only` 下启动失败 | `/tmp` 不可写 | compose 已加 `tmpfs: /tmp`，自行部署时别忘 |
 | PG 重启后连不上 | 连接池里是死连接 | 正常会在 `ConnMaxLifetime` 内自然恢复；立即恢复用 `docker compose restart tokentracker-go` |
 

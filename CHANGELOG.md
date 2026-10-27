@@ -2,6 +2,54 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — 切库重放：文档、`replay-queue.py`、ingest 卡队列修复
+
+用户问「切到私有部署后第一次 sync 会把数据都同步过去吗」。读上游源码确认了答案，
+顺手发现并修掉一个会让 sync **永久卡住**的问题。
+
+### 答：会重放，但重放的是本地队列
+
+`src/commands/init.js` 在 `baseUrl`/`anonKey` 变化时调 `resetInstanceState()`，它把
+`queue.state.json` 的 `offset` 写成 0（`queue.jsonl` 不动）。`offset` 是"已上传到第几个字节"，
+所以下一次 `sync` 从文件头重放。上游修旧 InsForge 项目迁移时用的就是这个手法。
+限制也写清楚了：只重放本地队列里还有的桶；`project.queue.jsonl`/`session.queue.jsonl`
+永不外传；云端独有历史（别的设备的、本地日志已被清理的）要另外导出导入。
+
+### 修复：队列尾部只剩 `account_session_states` 时 sync 永久失败
+
+客户端会把 TRAE / cursor 这类 account-level 来源的会话去重记录
+（`kind: "account_session_state"`）和用量桶放在同一批上传；**队列尾部可能只剩这类记录**，
+此时请求体是 `hourly: []` + `account_session_states: [...]`。服务端原来对"没有用量桶"
+一律回 400 `No usage buckets provided` —— 客户端不会推进 offset，那一批被无限重试，
+`tracker sync` 从此永久失败。
+
+现在：有 `account_session_states` 就回 200（`inserted: 0`、`skipped: n`、
+`account_session_states: "ignored"`），真正空的 body 仍是 400。
+自托管没有 account-level 数据模型，这些记录没有地方可写，但**必须收下并放行**。
+
+### 新增：`go-server/scripts/replay-queue.py`
+
+把 `~/.tokentracker/tracker/queue.jsonl` 重放进自托管后端。用于客户端自动重放帮不上的三种情况：
+换过地址但后端数据没留住、换机/换账号搬历史、核对"那次 sync 传全没有"。
+
+与客户端行为对齐：跳过 `kind` 控制记录、缺 `source`/`model` 补 `codex`/`unknown`、
+按键合并重复行、**时间戳原样保留**（服务端键是时间戳字符串，`…00:30:00.000Z` 与
+`…00:30:00Z` 是两行，规整会造成双算），并打印客户端自己的 `offset` 进度。
+支持 `--since/--until/--limit/--dry-run`、`--jwt` 自动签 device token。
+
+实测：造 415 行 / 374 唯一桶（含毫秒时间戳、`:30` 桶、控制记录、39 行重复、1 行缺
+source/model），重放后设备总量 909,911 tokens 与 dry-run 统计完全一致；**重放第二遍仍是
+909,911**（整行替换，不累加）。
+
+### 文档
+
+- `docs/official-client.md` 新增 §7「从官方云切到自建：第一次 sync 会发生什么」
+  （源码依据、重放范围表、正确顺序、`--drain` 与进度核对、重放安全性、`replay-queue.py`、
+  控制记录那个坑），原「排错」顺延为 §8。
+- `go-server/README.md`：§3.5.6 新增 `replay-queue.py`（原「长期自动推送」改 §3.5.7），
+  §3.6 加一段「从官方云切过来会怎样」并链到 §7；§8 排错表补一行
+  `HTTP 400: No usage buckets provided` 的历史原因。
+
 ## 2026-10-27 — 新机接入与官方流程对齐：默认 `TT_DEVICE_APPROVE=page`
 
 ### 之前的问题：多了一步官方没有的"手批"
