@@ -1,15 +1,12 @@
-// TokenTracker 自托管后端（Go）。同一份代码支持 SQLite 与 PostgreSQL。
+// TokenTracker 自托管后端（Go）。只支持 PostgreSQL。
 //
-// 启动（SQLite，默认）：
-//
-//	TT_DATABASE_PATH=/tmp/tt.db TT_JWT_SECRET=... ./tokentracker-server
-//
-// 启动（PostgreSQL）：
+// 启动：
 //
 //	TT_DATABASE_URL='postgres://tt:tt@127.0.0.1:5432/tt?sslmode=disable' \
 //	  TT_JWT_SECRET=... ./tokentracker-server
 //
-// 端点见 internal/app/app.go；引擎差异见 docs/go-postgres.md。
+// 端点见 internal/app/app.go；部署与运维见 go-server/README.md。
+// （SQLite 支持已移除，归档在 tag `sqlite-final`。）
 package main
 
 import (
@@ -24,12 +21,9 @@ import (
 	"time"
 	_ "time/tzdata" // Embed IANA time-zone database; runtime image stays package-free.
 
-	"path/filepath"
-
 	"github.com/QuietSugar/tokentracker-selfhost-go/internal/app"
 	"github.com/QuietSugar/tokentracker-selfhost-go/internal/store"
 	_ "github.com/lib/pq"  // registers the "postgres" driver
-	_ "modernc.org/sqlite" // registers the "sqlite" driver (CGO=0)
 )
 
 // Build metadata is injected by Docker -ldflags.
@@ -43,9 +37,8 @@ func main() {
 }
 
 func run() error {
-	// SQLite DB / WAL / SHM files may contain the full usage history and device identities.
-	// Default to owner-only permissions even if the host's umask is permissive.
-	// (No-op for PostgreSQL, which stores data in the server's data directory.)
+	// 数据都在 PostgreSQL 里，进程本身不落盘；保留 0077 只是兜底：
+	// 万一将来写了临时文件/日志，也不会因为宿主 umask 宽松而变成 world-readable。
 	syscall.Umask(0077)
 
 	secret := os.Getenv("TT_JWT_SECRET")
@@ -86,8 +79,9 @@ func run() error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	log.Printf("TokenTracker Go server listening on %s (engine=%s, dsn=%s)",
-		addr, db.Dialect(), describeDSN(db.Dialect(), cfg.DSN))
+	// engine=postgres 是镜像 smoke 的断言锚点，不要改这段字面量。
+	log.Printf("TokenTracker Go server listening on %s (engine=postgres, dsn=%s)",
+		addr, describeDSN(cfg.DSN))
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -109,58 +103,42 @@ func run() error {
 	return httpSrv.Shutdown(shutdownCtx)
 }
 
-// databaseConfig 解析引擎与连接串：
+// databaseConfig 解析连接串：
 //
-//	TT_DATABASE_URL     postgres://... 或 SQLite 文件路径（优先）
-//	TT_DATABASE_PATH    旧变量，等价于只给 SQLite 文件路径
-//	TT_DATABASE_DRIVER  显式指定 sqlite / postgres（默认按 URL scheme 推断）
-//	TT_POSTGRES_SCHEMA  仅 PostgreSQL：把表建在指定 schema 里（测试/多实例隔离）
+//	TT_DATABASE_URL    PostgreSQL 连接串（唯一必填项，没有默认值）
+//	TT_POSTGRES_SCHEMA 把表建在指定 schema 里（测试/多实例隔离）
 //	TT_POSTGRES_SCHEMA_EPHEMERAL=true  退出时 DROP SCHEMA CASCADE（配合上一项）
+//
+// 旧变量 TT_DATABASE_PATH / TT_DATABASE_DRIVER 已随 SQLite 支持一起移除；
+// 如果还有人设着，启动时提示一句而不是静默忽略。
 func databaseConfig() (store.Config, error) {
+	for _, legacy := range []string{"TT_DATABASE_PATH", "TT_DATABASE_DRIVER"} {
+		if os.Getenv(legacy) != "" {
+			log.Printf("warning: %s is no longer supported (SQLite removed); set TT_DATABASE_URL to a postgres:// DSN instead", legacy)
+		}
+	}
 	dsn := os.Getenv("TT_DATABASE_URL")
-	path := os.Getenv("TT_DATABASE_PATH")
-	if dsn != "" && path != "" {
-		log.Printf("both TT_DATABASE_URL and TT_DATABASE_PATH are set; using TT_DATABASE_URL")
-	}
-	if dsn == "" {
-		dsn = path
-	}
-	if dsn == "" {
-		dsn = "tokentracker.db"
-	}
-	dialect, err := store.ParseDialect(os.Getenv("TT_DATABASE_DRIVER"))
-	if err != nil {
+	cfg := store.Config{DSN: dsn}
+	if err := store.ValidateDSN(dsn); err != nil {
 		return store.Config{}, err
 	}
-	cfg := store.Config{Dialect: dialect, DSN: dsn}
 	if schema := os.Getenv("TT_POSTGRES_SCHEMA"); schema != "" {
 		cfg.Schema = schema
 		cfg.DropSchemaOnClose = strings.EqualFold(os.Getenv("TT_POSTGRES_SCHEMA_EPHEMERAL"), "true")
-	}
-	if d, err := store.DetectDialect(dsn); err == nil && dialect != "" && dialect != d && dsn != "tokentracker.db" {
-		// 只有显式给出 DSN 时才可能矛盾；显式 driver 优先，但要让运维看到。
-		log.Printf("warning: TT_DATABASE_DRIVER=%s overrides DSN-inferred engine %s", dialect, d)
 	}
 	return cfg, nil
 }
 
 // describeDSN 隐藏 DSN 里的密码，日志里只出现安全形态。
-func describeDSN(d store.Dialect, dsn string) string {
-	if d == store.Postgres {
-		if i := strings.Index(dsn, "://"); i >= 0 {
-			rest := dsn[i+3:]
-			if at := strings.LastIndex(rest, "@"); at >= 0 {
-				if colon := strings.Index(rest[:at], ":"); colon >= 0 {
-					rest = rest[:colon] + ":***" + rest[at:]
-				}
+func describeDSN(dsn string) string {
+	if i := strings.Index(dsn, "://"); i >= 0 {
+		rest := dsn[i+3:]
+		if at := strings.LastIndex(rest, "@"); at >= 0 {
+			if colon := strings.Index(rest[:at], ":"); colon >= 0 {
+				rest = rest[:colon] + ":***" + rest[at:]
 			}
-			return "postgres://" + rest
 		}
-		return "postgres(key=value)"
+		return dsn[:i+3] + rest
 	}
-	abs, err := filepath.Abs(dsn)
-	if err != nil {
-		return dsn
-	}
-	return abs
+	return "postgres(key=value)"
 }

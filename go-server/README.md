@@ -22,7 +22,7 @@
 | | |
 |---|---|
 | ✅ 是 | 独立的 Go HTTP 服务，实现 TokenTracker v1.4.12 的 14 个私有函数核心路径：设备 token、用量上传（整行修正/幂等）、账户 summary/daily/hourly/monthly/heatmap/model-breakdown/devices、自托管免费策略、billing catalog。 |
-| ✅ 是 | 同一份二进制、同一个镜像，**两种数据库**：PostgreSQL（推荐）或 SQLite（零依赖单文件）。 |
+| ✅ 是 | 单一引擎：**PostgreSQL**（2026-10 起不再支持 SQLite，归档在 tag `sqlite-final`）。 |
 | ❌ 不是 | 公网多用户服务，也不是 InsForge + PostgREST 的替代品（不提供 InsForge SDK 兼容 API）。 |
 | ❌ 不是 | 生产 GA。没有速率限制、审计日志、多副本锁；见 [STATUS.md](STATUS.md)。 |
 
@@ -95,15 +95,15 @@ docker compose -f docker-compose.postgres-go.example.yml logs -f tokentracker-go
 # 期望日志：TokenTracker Go server listening on 0.0.0.0:8080 (engine=postgres, dsn=postgres://tokentracker:***@tokentracker-postgres:5432/tokentracker?sslmode=disable)
 ```
 
-### 1.2 Docker Compose + SQLite（单机零依赖）
+### 1.2 没有 PostgreSQL 怎么办
 
-```sh
-export TT_JWT_SECRET="$(openssl rand -hex 32)"
-# TT_DASHBOARD_URL 留空（compose 里默认就是空），服务端按请求推导设备授权页地址
-docker compose -f docker-compose.sqlite-go.example.yml up -d
-curl -fsS http://127.0.0.1:8080/health && echo OK
-docker compose -f docker-compose.sqlite-go.example.yml logs | grep engine=sqlite
-```
+服务**只**支持 PostgreSQL，没有"单文件零依赖"模式：
+
+- 已经有 PG（NAS 上的 postgres 容器、群晖套件、云上 RDS）→ 直接用 §1.1，把
+  `TT_DATABASE_URL` 指向它即可，不需要跑本节。
+- 想"一条命令全起来" → §1.1 的 compose 已经把 PG 包在里面了，你不需要单独装。
+- 确实只能用 SQLite → 回到 tag `sqlite-final`（`git checkout sqlite-final`），
+  那是最后一个支持 SQLite 的版本；该分支不再维护，也不要指望能升到新版。
 
 ### 1.3 直接跑二进制（不用 Docker）
 
@@ -111,20 +111,13 @@ docker compose -f docker-compose.sqlite-go.example.yml logs | grep engine=sqlite
 cd go-server
 CGO_ENABLED=0 go build -trimpath -o bin/tokentracker-server ./cmd/server
 
-# SQLite
-TT_JWT_SECRET=$(openssl rand -hex 32) \
-TT_DATABASE_PATH=/var/lib/tokentracker/tokentracker.db \
-TT_LISTEN_ADDR=127.0.0.1:8080 \
-./bin/tokentracker-server
-
-# PostgreSQL
 TT_JWT_SECRET=$(openssl rand -hex 32) \
 TT_DATABASE_URL='postgres://tokentracker:密码@127.0.0.1:5432/tokentracker?sslmode=disable' \
 TT_LISTEN_ADDR=127.0.0.1:8080 \
 ./bin/tokentracker-server
 ```
 
-二进制是 `CGO=0` 静态链接，任何 Linux/amd64、linux/arm64 主机可直接运行，无需 SQLite 库。
+二进制是 `CGO=0` 静态链接，任何 Linux/amd64、linux/arm64 主机可直接运行；数据库连接是纯 TCP，不需要装客户端库。
 
 ### 1.4 用已发布的镜像（推荐）
 
@@ -134,8 +127,6 @@ docker pull ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental
 docker pull ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental-<short_sha>
 ```
 
-- 同一镜像也以旧名发布，兼容早期 compose：
-  `ghcr.io/quietsugar/token-tracker-self-hosting-sqlite-go:experimental`。
 - 平台：`linux/amd64` + `linux/arm64`（arm64 仅由 CI 构建，未在真机验收）。
 - 不发布 `latest`：实验镜像不应成为隐式默认，请显式 pin `experimental-<sha>`。
 - **首次使用**：GHCR 包默认 private，需要在 GitHub「Packages → token-tracker-self-hosting-go →
@@ -148,9 +139,8 @@ docker pull ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental-<short
     --repo QuietSugar/token-tracker-self-hosting
   ```
 
-每次镜像构建都会在推送**之前**跑容器 smoke：SQLite 模式（health、`/_test/sql` 404、uid 10001、
-DB/WAL/SHM 0600、优雅停服后数据落盘、重启后无 checksum drift、弱 secret 拒绝启动）与
-PostgreSQL 模式（连真实 PG 建 schema、health 200、日志脱敏、`/_test/sql` 404）。smoke 不通过不会产生 tag。
+每次镜像构建都会在推送**之前**跑容器 smoke（连真实 PostgreSQL）：建 schema、health 200、
+日志 `engine=postgres` 与密码脱敏、`/_test/sql` 404。smoke 不通过不会产生 tag。
 
 ---
 
@@ -159,9 +149,9 @@ PostgreSQL 模式（连真实 PG 建 schema、health 200、日志脱敏、`/_tes
 | 环境变量 | 默认 | 说明 |
 |---|---|---|
 | `TT_JWT_SECRET` | **必填** | HS256 密钥，**≥32 字节**，否则拒绝启动。必须与你签发 JWT 的认证层一致。 |
-| `TT_DATABASE_URL` | – | `postgres://…`（或 `postgresql://`、lib/pq 的 `host=… user=…` 形式）→ PostgreSQL；其他值 → SQLite 文件路径。**优先级最高**。 |
-| `TT_DATABASE_PATH` | `tokentracker.db` | 仅 SQLite 文件路径（旧变量，保留兼容）。与 `TT_DATABASE_URL` 同时设置时后者生效并打警告。 |
-| `TT_DATABASE_DRIVER` | 按 DSN 推断 | `sqlite` / `postgres`。一般不用设。 |
+| `TT_DATABASE_URL` | **必填** | `postgres://…`（或 `postgresql://`、lib/pq 的 `host=… user=…` 形式）。没有默认值：不设或给了 SQLite 路径都会拒绝启动并提示迁移（SQLite 支持已移除，见 tag `sqlite-final`）。 |
+| ~~`TT_DATABASE_PATH`~~ | – | **已移除**（SQLite 时代变量）。还在设会打一行警告并被忽略。 |
+| ~~`TT_DATABASE_DRIVER`~~ | – | **已移除**。只有 PostgreSQL，不需要选引擎。 |
 | `TT_POSTGRES_SCHEMA` | 默认 search_path | 仅 PG：把表放进指定 schema（多实例共用一个库、或测试隔离）。启动时 `CREATE SCHEMA IF NOT EXISTS`。 |
 | `TT_POSTGRES_SCHEMA_EPHEMERAL` | `false` | 仅 PG：进程退出时 `DROP SCHEMA … CASCADE`。**只用于测试，别在生产开。** |
 | `TT_LISTEN_ADDR` | `127.0.0.1:8080` | 监听地址。容器里用 `0.0.0.0:8080`。 |
@@ -436,8 +426,7 @@ TT_DEVICE_APPROVE=auto ./bin/tokentracker-server
 ### 4.1 用自带脚本
 
 ```sh
-# SQLite（在线一致快照；缺 sqlite3 时退化为文件复制并提示先停服务）
-./go-server/scripts/backup.sh sqlite --data-dir /var/lib/tokentracker --out /backup
+# PostgreSQL（pg_dump -Fc）
 
 # PostgreSQL（pg_dump 自定义格式）
 ./go-server/scripts/backup.sh postgres \
@@ -464,14 +453,6 @@ docker compose exec -T tokentracker-postgres \
 ```
 
 ### 4.2 恢复
-
-SQLite（脚本会打印逐步命令并要求你手工确认）：
-
-```sh
-./go-server/scripts/backup.sh restore-sqlite --backup /backup/tt-sqlite-YYYY.db --data-dir /var/lib/tokentracker
-```
-
-PostgreSQL：
 
 ```sh
 ./go-server/scripts/backup.sh restore-postgres \
@@ -591,7 +572,6 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tokentracker
 - [ ] HTTPS：纯内网可信环境可以不启用（token 会在局域网内明文传输）；一旦要跨网络访问，请自行加 TLS 反代
 - [ ] `TT_ENABLE_TEST_ENDPOINTS` 未设置（或为 `false`）；反代对 `/_test` 直接 404
 - [ ] PostgreSQL：独立低权限账号（只在目标库/schema 上有 DML+DDL），不从公网暴露 5432
-- [ ] SQLite：数据目录 `0700`，DB 文件 `0600`（服务默认 umask 077 已保证）
 - [ ] 容器：`read_only` + `cap_drop: [ALL]` + `no-new-privileges` + 非 root（uid 10001）。
       **非 root 来自镜像**（`go-server/Dockerfile` 的 `USER 10001:10001`），两个 compose 示例都**没有**写
       `user:`；自行写 compose 时不要以为示例里有而漏配，也不要另加 `user:` 覆盖成别的 uid
@@ -608,12 +588,10 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tokentracker
 | 启动即退：`TT_JWT_SECRET is required and must be at least 32 bytes` | 密钥未设/太短 | 生成 ≥32 字节随机值 |
 | 启动即退：`database not reachable …` | PG 未就绪/连接串或 `sslmode` 错/网络不通 | `pg_isready`、检查 DSN、防火墙；服务会重试 30s 再放弃 |
 | 启动即退：`schema migration 1 checksum drift` | 用新版本二进制连了旧 schema 的库（或有人手改了表） | 用与备份/旧数据同版本的镜像启动；不要手改表结构 |
-| 启动即退：`store: Config.Schema is PostgreSQL-only` | 给 SQLite 设了 `TT_POSTGRES_SCHEMA` | 去掉该变量 |
 | `sql: unknown driver "postgres"` | 用了自行裁剪的构建，缺少驱动 import | 用官方镜像或完整 `go build ./cmd/server` |
 | 401 一直返回 | JWT 密钥与签发方不一致 / `exp` 过期 / 缺 `role` | 用 jwt.io 解 payload 对比 `TT_JWT_SECRET` |
 | 403 `server role required` | 调了 `/api/database/rpc/*` 但 JWT `role` 不是 `project_admin` | 用服务角色 token，或改用 `/functions/*` |
 | 上传报 `Upload too large` / `Too many buckets` | 单次 body >1 MiB / >500 桶 | 客户端分批 |
-| SQLite `database is locked` | 多个进程/网络文件系统访问同一个 DB | 只跑单实例、数据放本地盘 |
 | 容器 `read_only` 下启动失败 | `/tmp` 不可写 | compose 已加 `tmpfs: /tmp`，自行部署时别忘 |
 | PG 重启后连不上 | 连接池里是死连接 | 正常会在 `ConnMaxLifetime` 内自然恢复；立即恢复用 `docker compose restart tokentracker-go` |
 
@@ -629,9 +607,9 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tokentracker
    自托管模式下这些功能是有意排除的（付费 RPC 返回明确拒绝）。
 4. **单实例语义**：ingest 的整行修正靠进程内互斥；PG 上跑多副本前必须补 advisory lock。
 5. **没有速率限制 / 审计日志 / 指标导出**。
-6. **SQLite 与 PostgreSQL 之间没有自动数据迁移工具**：切换引擎目前等于重新上传用量
-   （设备与设备 token 需重新签发）。若需要，可以基于 `/functions/tokentracker-ingest` 写一个搬数脚本，
-   但要自己处理 device token 的重新签发。
+6. **只支持 PostgreSQL**：没有"单文件零依赖"模式，也没有 SQLite ↔ PostgreSQL 的数据迁移工具。
+   如果你在 tag `sqlite-final` 上跑过 SQLite 实例，请在那条分支上导出 CSV/JSONL，
+   再用 `scripts/import-usage.py` 导入本服务。
 7. **没有 schema 增量迁移**（只有 version 1）：升级前必须备份。
 8. **只有 linux/amd64 做过本地 smoke**；arm64 由 CI 构建但未在真机验收。
 
@@ -641,12 +619,13 @@ sudo systemctl daemon-reload && sudo systemctl enable --now tokentracker
 
 ```sh
 cd go-server
-go test -race ./...                                          # SQLite
+export TT_TEST_DATABASE_URL='postgres://…?sslmode=disable'    # 没有默认库：不给就跑不了
+go test -race ./...
 TT_TEST_DATABASE_URL='postgres://…?sslmode=disable' go test -race ./...   # 真实 PostgreSQL
 go vet ./...
 
 cd ..
-CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs ./contract/scripts/verify.sh
+CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs ./contract/scripts/verify.sh
 GO_POSTGRES_URL='postgres://…?sslmode=disable' \
   CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs ./contract/scripts/verify.sh
 # 两条基线都是 33 PASS / 0 FAIL / 2 SKIP

@@ -5,35 +5,30 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	_ "github.com/lib/pq"
-	_ "modernc.org/sqlite"
 )
 
-// testDB 返回隔离的存储层实例：默认临时 SQLite 文件；
-// 设置 TT_TEST_DATABASE_URL 时使用真实 PostgreSQL 的独立 schema。
+// testDB 返回隔离的存储层实例：每个测试一个独立 PostgreSQL schema。
+// 存储层只支持 PostgreSQL，未设置 TT_TEST_DATABASE_URL 时直接失败
+// （失败信息里带起库命令，见 go-server/scripts/test-with-pg.sh）。
 func testDB(t *testing.T) *DB {
 	t.Helper()
-	ctx := context.Background()
-	if dsn := os.Getenv("TT_TEST_DATABASE_URL"); dsn != "" {
-		db, err := Open(ctx, Config{
-			Dialect:           Postgres,
-			DSN:               dsn,
-			Schema:            "tt_store_" + strings.ToLower(randHex(6)),
-			DropSchemaOnClose: true,
-		})
-		if err != nil {
-			t.Fatalf("open postgres: %v", err)
-		}
-		t.Cleanup(func() { _ = db.Close() })
-		return db
+	dsn := os.Getenv("TT_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Fatalf("TT_TEST_DATABASE_URL is not set: the store layer is PostgreSQL-only.\n"+
+			"  go-server/scripts/test-with-pg.sh            # 起一个临时 PG 并打印 DSN\n"+
+			"  export TT_TEST_DATABASE_URL=postgres://tokentracker:tokentracker-dev@127.0.0.1:55432/tokentracker?sslmode=disable")
 	}
-	db, err := Open(ctx, Config{DSN: filepath.Join(t.TempDir(), "test.db")})
+	db, err := Open(context.Background(), Config{
+		DSN:               dsn,
+		Schema:            "tt_store_" + strings.ToLower(randHex(6)),
+		DropSchemaOnClose: true,
+	})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("open postgres: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	return db
@@ -64,8 +59,8 @@ func TestInstallIsIdempotentAndUsesOwnMigrationLedger(t *testing.T) {
 		t.Fatalf("schema migration ledger = version %d/count %d/checksum len %d, want %d/1/64",
 			version, count, len(checksum), SchemaVersion)
 	}
-	if checksum != SchemaChecksum(db.Dialect()) {
-		t.Fatalf("ledger checksum %s != rendered schema checksum %s", checksum, SchemaChecksum(db.Dialect()))
+	if checksum != SchemaChecksum() {
+		t.Fatalf("ledger checksum %s != core DDL checksum %s", checksum, SchemaChecksum())
 	}
 	if _, err := db.Query(`SELECT * FROM self_host_installations`); err == nil {
 		t.Fatal("must not fabricate the PostgreSQL-only 15-step migration ledger")
@@ -113,9 +108,8 @@ func TestInstallCreatesFreePoliciesAndOwnerForeignKeys(t *testing.T) {
 	}
 }
 
-// 外键 + ON DELETE CASCADE 在两种引擎上都必须真实生效
-// （SQLite 依赖 PRAGMA foreign_keys=ON，PostgreSQL 默认开启）。
-func TestForeignKeysCascadeOnBothEngines(t *testing.T) {
+// 外键 + ON DELETE CASCADE 必须真实生效（不能只写在 DDL 里）。
+func TestForeignKeysCascade(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 	if err := Install(ctx, db); err != nil {
@@ -149,41 +143,41 @@ func TestForeignKeysCascadeOnBothEngines(t *testing.T) {
 	}
 }
 
-// 布尔列在 SQLite 是 INTEGER、在 PG 是 boolean；渲染结果必须各自正确。
-func TestSchemaRendersEngineSpecificBooleans(t *testing.T) {
-	sqlite := SchemaSQL(SQLite)
-	if !strings.Contains(sqlite, "PRAGMA foreign_keys = ON;") {
-		t.Fatal("sqlite DDL must keep the foreign_keys pragma")
+// core DDL 必须是 PostgreSQL 方言：布尔列用 boolean、不能残留任何方言占位符。
+func TestSchemaIsPostgresDialect(t *testing.T) {
+	ddl := SchemaSQL()
+	if strings.Contains(ddl, "{{") {
+		t.Fatal("core DDL still contains template placeholders")
 	}
-	if !strings.Contains(sqlite, "is_current INTEGER NOT NULL DEFAULT 0") {
-		t.Fatal("sqlite DDL must render is_current as INTEGER")
+	if strings.Contains(ddl, "PRAGMA") {
+		t.Fatal("core DDL must not contain PRAGMA statements")
 	}
-	pg := SchemaSQL(Postgres)
-	if strings.Contains(pg, "PRAGMA") {
-		t.Fatal("postgres DDL must not contain PRAGMA statements")
+	for _, want := range []string{
+		"is_current boolean NOT NULL DEFAULT false",
+		"enabled boolean NOT NULL DEFAULT false",
+	} {
+		if !strings.Contains(ddl, want) {
+			t.Fatalf("core DDL missing %q", want)
+		}
 	}
-	if !strings.Contains(pg, "is_current boolean NOT NULL DEFAULT false") {
-		t.Fatal("postgres DDL must render is_current as boolean")
-	}
-	if !strings.Contains(pg, "enabled boolean NOT NULL DEFAULT false") {
-		t.Fatal("postgres DDL must render enabled as boolean")
-	}
-	if SchemaChecksum(SQLite) == SchemaChecksum(Postgres) {
-		t.Fatal("per-engine checksums must differ")
+	if len(SchemaChecksum()) != 64 {
+		t.Fatalf("checksum = %q, want 64 hex chars", SchemaChecksum())
 	}
 }
 
-// 引入 PostgreSQL 支持后，SQLite 渲染结果必须逐字节保持原样：
-// 否则已部署的 SQLite 实例会因为 checksum drift 拒绝启动。
-func TestSQLiteSchemaStaysByteCompatibleWithV1(t *testing.T) {
-	const legacyV1Checksum = "88f2602f1da545faf205fd76ef1a2927f490ea8ebfd8641e9e34d0b022de69df"
-	if got := SchemaChecksum(SQLite); got != legacyV1Checksum {
-		t.Fatalf("sqlite schema checksum drifted: %s != %s\n%s", got, legacyV1Checksum, SchemaSQL(SQLite))
+// core DDL 的 checksum 是 fail-closed 的证据：改动任何字符都会让已部署实例
+// 拒绝启动，所以这里把当前值钉死。新增表请走 additiveSteps，不要改 schemaBody。
+func TestSchemaChecksumIsPinned(t *testing.T) {
+	const pinned = "c5fe0bf2129c2d0357b2bb90ba4e77535ceccaa830e0ef47d972322651a04497"
+	if got := SchemaChecksum(); got != pinned {
+		t.Fatalf("core DDL checksum drifted: %s != %s\n"+
+			"如果你确实要改 core DDL，请同时：①把 additive 迁移写好 ②更新这里与文档 "+
+			"③确认没有已部署实例（否则它们会启动即失败）", got, pinned)
 	}
 }
 
 func TestSplitStatements(t *testing.T) {
-	stmts := splitStatements(SchemaSQL(Postgres))
+	stmts := splitStatements(SchemaSQL())
 	if len(stmts) < 10 {
 		t.Fatalf("split produced %d statements, want >= 10", len(stmts))
 	}
@@ -220,45 +214,38 @@ func TestRewritePlaceholders(t *testing.T) {
 	}
 }
 
-func TestDetectDialectAndParse(t *testing.T) {
-	for _, dsn := range []string{"postgres://u:p@h:5432/db", "postgresql://u@h/db"} {
-		if d, err := DetectDialect(dsn); err != nil || d != Postgres {
-			t.Fatalf("DetectDialect(%q) = %v,%v", dsn, d, err)
+func TestValidateDSN(t *testing.T) {
+	for _, dsn := range []string{
+		"postgres://u:p@h:5432/db",
+		"postgresql://u@h/db",
+		"host=127.0.0.1 user=tt dbname=tt sslmode=disable", // lib/pq key=value
+	} {
+		if err := ValidateDSN(dsn); err != nil {
+			t.Fatalf("ValidateDSN(%q) = %v, want nil", dsn, err)
 		}
 	}
+	// SQLite 支持已移除：文件路径必须被拒绝，且错误信息要能指引迁移。
 	for _, dsn := range []string{"tokentracker.db", "/var/lib/tt/tt.db", "file:tt.db"} {
-		if d, err := DetectDialect(dsn); err != nil || d != SQLite {
-			t.Fatalf("DetectDialect(%q) = %v,%v", dsn, d, err)
+		err := ValidateDSN(dsn)
+		if err == nil {
+			t.Fatalf("ValidateDSN(%q) must be rejected (SQLite support removed)", dsn)
+		}
+		if !strings.Contains(err.Error(), "SQLite support was removed") || !strings.Contains(err.Error(), "sqlite-final") {
+			t.Fatalf("ValidateDSN(%q) error lacks migration hint: %v", dsn, err)
 		}
 	}
-	if _, err := DetectDialect("mysql://u@h/db"); err == nil {
-		t.Fatal("unsupported scheme must be rejected")
+	if err := ValidateDSN("mysql://u@h/db"); err == nil || !strings.Contains(err.Error(), "only supports PostgreSQL") {
+		t.Fatalf("mysql DSN should be rejected with a clear message, got %v", err)
 	}
-	if d, err := ParseDialect("postgresql"); err != nil || d != Postgres {
-		t.Fatal("ParseDialect(postgresql) should map to postgres")
-	}
-	if d, err := ParseDialect(""); err != nil || d != "" {
-		t.Fatalf("ParseDialect(empty) = %q,%v; want unspecified (infer from DSN)", d, err)
-	}
-	if _, err := ParseDialect("oracle"); err == nil {
-		t.Fatal("unsupported engine name must be rejected")
+	if err := ValidateDSN(""); err == nil {
+		t.Fatal("empty DSN must be rejected")
 	}
 }
 
 func TestInsertIgnoreRendering(t *testing.T) {
-	if got := (Dialect(SQLite)).DriverName(); got != "sqlite" {
-		t.Fatalf("sqlite driver name = %s", got)
-	}
-	if got := (Dialect(Postgres)).DriverName(); got != "postgres" {
-		t.Fatalf("postgres driver name = %s", got)
-	}
-	db := &DB{dialect: SQLite}
-	if got := db.InsertIgnore("t(a) VALUES(?)"); got != "INSERT OR IGNORE INTO t(a) VALUES(?)" {
-		t.Fatalf("sqlite insert-ignore = %s", got)
-	}
-	db = &DB{dialect: Postgres}
+	db := &DB{}
 	if got := db.InsertIgnore("t(a) VALUES(?)"); got != "INSERT INTO t(a) VALUES(?) ON CONFLICT DO NOTHING" {
-		t.Fatalf("postgres insert-ignore = %s", got)
+		t.Fatalf("insert-ignore = %s", got)
 	}
 }
 

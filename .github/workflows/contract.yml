@@ -1,7 +1,7 @@
 name: contract
 
 # 契约测试自动化：确保 golden 快照可复现、静态契约未漂移、体系自洽。
-# 未来 Go+SQLite 实现就绪后，加一个 matrix 或第二个 job 用 CONTRACT_ADAPTER 跑跨实现对比。
+# Go 实现的跨实现对比在 go-server.yml 里（postgres 15/16 矩阵）。
 
 on:
   push:
@@ -147,45 +147,3 @@ jobs:
           name: contract-report
           path: ${{ runner.temp }}/contract-report*
           retention-days: 14
-
-  # ------------------------------------------------------------ candidate
-  # 未来在这里启用 Go+SQLite 的跨实现对比。
-  candidate:
-    name: Candidate implementation (Go+SQLite)
-    needs: static
-    if: false   # 改为 true 并在下面接好 adapter 后启用
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with: { go-version: '1.23' }
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - name: Build candidate
-        run: |
-          echo "TODO - 编译 Go 服务到 GO_SERVER_BIN"
-      - name: Verify candidate against golden
-        env:
-          CONTRACT_ADAPTER: ./contract/adapters/go-sqlite.cjs
-          GO_SERVER_BIN: ${{ github.workspace }}/go-server/bin/tokentracker-server
-        run: ./contract/scripts/verify.sh
-
-  # ------------------------------------------------------------ benchmark
-  benchmark:
-    name: Weekly performance baseline
-    needs: [self-test]
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'benchmark')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: ./contract/scripts/setup-upstream.sh
-      - run: BENCH_ITERATIONS=3 ./contract/scripts/benchmark.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: benchmark
-          path: |
-            contract/BENCHMARK.md
-            contract/benchmark.json
-          retention-days: 30

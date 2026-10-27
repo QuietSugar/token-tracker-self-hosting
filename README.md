@@ -22,7 +22,7 @@
 > 下面「维护者」相关的章节都是**可选的**，与「把服务跑起来」无关。
 >
 > 📦 **当前可用的部署形态**（详见各文档）：
-> - **Go 后端（推荐上手）**：单二进制 + 单镜像，SQLite 或 PostgreSQL 二选一，实验性但客户端已实测。
+> - **Go 后端（推荐上手）**：单二进制 + 单镜像，只需要一个 PostgreSQL，实验性但客户端已实测。
 > - **InsForge + PostgreSQL 工件镜像**：正式交付物，携带已审计 SQL 与 14 个私有函数。
 
 ---
@@ -33,7 +33,7 @@
 >
 > 🤖 **本仓库由 Agent 长期维护**。首次跨环境接手先读 [`docs/HANDOFF.md`](docs/HANDOFF.md)，再按 [`MAINTENANCE.md`](MAINTENANCE.md) 的会话启动协议恢复详细状态。
 >
-> 🐳 **正式交付物**是 Docker 工件镜像（linux/amd64）：携带已审计 SQL 与 14 个私有函数，面向 InsForge + PostgreSQL。另有**实验性 Go 后端镜像（SQLite + PostgreSQL 双引擎）**，两种引擎各自通过 33 个行为契约 + 2 个 PG 专属 SKIP；尚未达到生产 GA。
+> 🐳 **正式交付物**是 Docker 工件镜像（linux/amd64）：携带已审计 SQL 与 14 个私有函数，面向 InsForge + PostgreSQL。另有**实验性 Go 后端镜像（PostgreSQL）**，通过 33 个行为契约 + 2 个 PG 专属 SKIP；尚未达到生产 GA。
 >
 > 定位是**局域网自用**（单账户 owner、账号体系默认关闭、不做第三方登录）。使用与运维看 [`go-server/README.md`](go-server/README.md)，设计与取舍看 [`docs/go-postgres.md`](docs/go-postgres.md)，缺口看 [`go-server/STATUS.md`](go-server/STATUS.md)。
 
@@ -41,7 +41,7 @@
 
 ## 当前状态
 
-**v1.4.12 正式 InsForge 工件已生成；本地真实标准环境已验收。公共 VPS 部署尚未开始。另有 Go 实验性垂直切片（SQLite / PostgreSQL 双引擎，非 GA）。**
+**v1.4.12 正式 InsForge 工件已生成；本地真实标准环境已验收。公共 VPS 部署尚未开始。另有 Go 实验性垂直切片（PostgreSQL，非 GA）。**
 
 - [x] 归档维护提示词、可复用提示词、总体规划
 - [x] 锁定首个上游构建点：v1.4.12 / `8d32a956181bf52fae449c89b8f6520253566283`
@@ -53,7 +53,7 @@
 - [x] **本地标准栈验收**：官方 InsForge v2.3.3 + PG 15.18，15 步 SQL / 幂等重装 / L3 并发测试 5 PASS
 - [ ] **首次公共 VPS 部署**：配置自己的域名、密钥，上传 14 个函数（未连接/操作任何用户实例）
 - [ ] **VPS 验收**：按 [`docs/runbook.md`](docs/runbook.md) 逐项打勾
-- [x] 建立 Go 实验后端（SQLite）：33 行为 PASS / 2 PG 专属 SKIP；尚不作生产替代
+- [x] 建立 Go 实验后端（PostgreSQL）：33 行为 PASS / 2 PG 专属 SKIP；尚不作生产替代
 - [x] Go 后端支持 PostgreSQL：同一份代码/镜像，PG 上同样 33 PASS（CI 覆盖 PG 15/16）
 - [x] **官方客户端接入实测**（v1.4.12 CLI：`device-login` / `sync` / `doctor` 全通，见 [`docs/official-client.md`](docs/official-client.md)）
 - [x] **认证层 `/api/auth/*`**（同 InsForge 流程）：登录 / 刷新轮换 / 撤销 / 跨设备 account 视图，见 [`docs/oauth-selfhosted.md`](docs/oauth-selfhosted.md)
@@ -61,7 +61,7 @@
 - [x] **多设备维度**（对齐官方 dashboard）：`account-devices` 按设备返回，`account-*` 支持 `device_id` 过滤，设备可重命名（§4.6）
 - [x] **与官方模块逐个对拍**：本地日/时区归日、heatmap `format=compact`、设备管理卡（暂停/恢复/最后活跃）（§4.6）
 - [ ] 完成 Go 后端剩余数据模型、安全、运维后再评估 GA
-- [ ] 决定是否保留 SQLite（成本分析见 [`docs/go-postgres.md`](docs/go-postgres.md) §5）
+- [x] 决定移除 SQLite，只保留 PostgreSQL（决定记录见 [`docs/go-postgres.md`](docs/go-postgres.md) §5，归档点 tag `sqlite-final`）
 
 ---
 
@@ -131,16 +131,16 @@ tokentracker-selfhost/
 │   ├── github-app-setup.md      # GitHub App 认证配置
 │   ├── docker-image.md          # Docker 镜像交付设计与使用
 │   ├── database-choice.md       # 为什么正式 InsForge 路径硬依赖 PostgreSQL
-│   └── go-postgres.md           # Go 后端 PG/SQLite 双引擎设计、验收与成本分析
+│   └── go-postgres.md           # 为什么只用 PostgreSQL、验收证据与「删掉 SQLite」的决定记录
 ├── contract/                    # 契约测试体系（为 Go 改造做一致性基准）
 │   ├── README.md / SPEC.md      # 体系说明 / 实现者契约规范
 │   ├── scenarios/               # 35 个语言无关用例（8 组）
 │   ├── golden/1.4.12/           # 录制的行为快照 + L1 静态契约 + 校验和
 │   ├── lib/                     # 归一化 / 执行器 / 对比器 / 录制器 / 进程池
-│   ├── adapters/                # 参考实现 + Go 实验 adapter（sqlite / postgres）
+│   ├── adapters/                # 参考实现 + Go 实验 adapter（postgres）
 │   ├── scripts/                 # record / verify / self-test / benchmark
 │   └── RESULTS.md               # 当前结果摘要与改造者下一步
-├── go-server/                   # 实验性 Go 后端垂直切片（SQLite / PostgreSQL，非生产 GA）
+├── go-server/                   # 实验性 Go 后端垂直切片（PostgreSQL，非生产 GA）
 │   ├── README.md                # 使用者手册：部署 / 配置 / 备份恢复 / 升级 / 排错
 │   ├── STATUS.md                # 支持范围 / 缺口 / 验收门槛（先读）
 │   ├── scripts/                 # full-test.sh（全量测试）/ backup.sh（备份恢复）
@@ -167,8 +167,8 @@ tokentracker-selfhost/
 │   ├── verify.yml               # 密钥/编码/产物/contract L1 gate
 │   ├── build-image.yml          # 正式工件镜像 GHCR build
 │   ├── contract.yml             # Golden 可复现 + PG/TS self-test + Go candidate
-│   ├── go-server.yml            # Go 双引擎 unit + 契约（SQLite / PG 15/16）
-│   └── build-go-image.yml       # Go 实验镜像 build（含 SQLite+PG 双模式 smoke，通过才推送）
+│   ├── go-server.yml            # Go unit + 契约（PG 15/16 矩阵）
+│   └── build-go-image.yml       # Go 实验镜像 build（含真 PG smoke，通过才推送）
 └── releases/
     ├── _template/               # review.md / acceptance.md 模板
     └── 1.4.12/                  # 已生成 SQL + 14 函数 + 校验和 + 记录
@@ -238,7 +238,7 @@ tokentracker-selfhost/
 | `./scripts/reproduce.sh` | 从上游 commit 重建产物并逐字节校验 | 写 /tmp 临时目录 |
 | `./contract/scripts/record.sh` | 录制契约黄金快照（PG+TS 参考实现） | 写 `contract/golden/` |
 | `./contract/scripts/self-test.sh` | 契约体系自测（必须 100% PASS） | 写报告 |
-| `CONTRACT_ADAPTER=... ./contract/scripts/verify.sh` | 对 Go 实现跑一致性验证（sqlite / postgres adapter） | 写报告 |
+| `CONTRACT_ADAPTER=... ./contract/scripts/verify.sh` | 对 Go 实现跑一致性验证（postgres adapter，需一个 PG） | 写报告 |
 | `./contract/scripts/benchmark.sh` | 性能基准 | 写报告 |
 | `docker run --rm <image> commands` | 输出 VPS 上要执行的完整部署命令 | 否 |
 

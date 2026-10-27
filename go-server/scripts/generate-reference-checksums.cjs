@@ -12,7 +12,7 @@ const lines=[
   "// Code generated from contract/golden/"+version+"/static.json — DO NOT EDIT.",
   "// PostgreSQL reference migration checksums are an audit crosswalk only.",
   "package store","",
-  "// PostgreSQLReferenceSteps contains PG step IDs/checksums; these are NOT applied to SQLite.",
+  "// PostgreSQLReferenceSteps contains the upstream PG migration step IDs/checksums.",
   "var PostgreSQLReferenceSteps = []struct{ ID, Checksum string }{",
 ];
 for(const s of data.steps.items) lines.push(`\t{${JSON.stringify(s.id)}, ${JSON.stringify(s.checksum)}},`);

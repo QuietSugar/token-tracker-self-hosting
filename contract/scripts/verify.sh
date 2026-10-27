@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 对候选实现（Go+SQLite）跑契约测试并对比 golden。
+# 对候选实现（Go + PostgreSQL）跑契约测试并对比 golden。
 #
 # 用法:
-#   CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs ./contract/scripts/verify.sh
+#   CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs ./contract/scripts/verify.sh
 #   ./contract/scripts/verify.sh --static-only      # 只校验静态契约（无需运行时）
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

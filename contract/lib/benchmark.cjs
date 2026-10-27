@@ -117,7 +117,7 @@ async function main() {
     "", "单位：毫秒（整个 case 的 wall time，含实例启动）。", "",
     "## 跨实现比较", "",
     "1. 先跑参考实现，保存 `contract/benchmark.json` 为 `benchmark.reference.json`。",
-    "2. 再跑 Go+SQLite：`CONTRACT_ADAPTER=... ./contract/scripts/benchmark.sh`。",
+    "2. 再跑 Go+PostgreSQL：`CONTRACT_ADAPTER=... ./contract/scripts/benchmark.sh`。",
     "3. 比较两份 `stats[].p50Ms` 的比值；>2x 视为需要调查的回归。", "",
     "## 复现", "", "```sh",
     "BENCH_ITERATIONS=3 ./contract/scripts/benchmark.sh", "```", "",

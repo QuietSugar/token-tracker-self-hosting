@@ -1,6 +1,6 @@
 # 契约规范（Contract Specification）
 
-本文件是**实现者契约**：任何想替代当前后端的实现（Go + SQLite/PostgreSQL 或其他）都必须满足它。
+本文件是**实现者契约**：任何想替代当前后端的实现（本仓库的 Go + PostgreSQL，或其他）都必须满足它。
 测试体系按此规范判定"一致"。
 
 ---
@@ -13,7 +13,7 @@
 
 ```js
 module.exports = {
-  name: "go-sqlite",                    // 实现标识
+  name: "go-postgres",                  // 实现标识
   async start(config) -> Adapter,       // 启动一个隔离实例（全新空库）
   // Adapter:
   //   .request(slug, {method, query, headers, body, token}) -> {status, headers, body}
@@ -128,14 +128,14 @@ UUID、machine_id、token。这样参考实现与 Go 实现能拿到**完全相�
 
 ### 允许的偏差（需显式登记）
 
-某些差异是**有意为之**（例如 SQLite 没有 `timestamptz`，时间用 ISO 文本存储）。
+某些差异是**有意为之**（例如时间用 ISO 文本而不是 `timestamptz` 存储）。
 这类偏差必须登记在 `contract/waivers.json`：
 
 ```json
 {
   "waivers": [
     { "case": "07-aggregation/timezone-bucket", "path": "body.tz",
-      "reason": "SQLite 无 timestamptz；Go 层用 UTC 文本等价实现", "approvedBy": "...", "date": "..." }
+      "reason": "时间用 UTC 文本而非 timestamptz；Go 层等价实现", "approvedBy": "...", "date": "..." }
   ]
 }
 ```
@@ -150,7 +150,7 @@ UUID、machine_id、token。这样参考实现与 Go 实现能拿到**完全相�
 
 | 项 | 来源 | Go 实现要做什么 |
 |---|---|---|
-| 15 个安装步骤 id + `sha256(step.sql)` | `manifest-report.md` | 在 SQLite 里建等价 schema，步骤顺序固定 |
+| 15 个安装步骤 id + `sha256(step.sql)` | `manifest-report.md` | 建等价 schema，步骤顺序固定 |
 | 14 个函数 slug + 文件 + public 标记 | `functions/functions.json` | 实现同名端点 |
 | 服务器密钥名清单 | `functions.json.serverSecrets` | 配置相同环境变量 |
 | 排除项 | `functions.json.excluded` | 不实现付费 webhook / 排行榜 |
@@ -164,10 +164,10 @@ UUID、machine_id、token。这样参考实现与 Go 实现能拿到**完全相�
 
 Go 实现者需要交付：
 
-- [ ] `adapters/go-sqlite.cjs`（或等价 HTTP 服务 + 一个薄 adapter）
+- [x] `adapters/go-postgres.cjs`（或等价 HTTP 服务 + 一个薄 adapter）
 - [ ] `capabilities.json`：声明支持/不支持的用例
 - [ ] `waivers.json`：登记所有有意偏差
-- [ ] `mapping.json`：PG 对象 → SQLite 对象的映射（表名、类型、函数等价实现）
+- [x] `mapping.json`：PG 对象 → 候选实现的映射（表名、类型、函数等价实现）
 - [ ] 通过 `./contract/scripts/verify.sh`，报告 0 FAIL
 - [ ] 若 SKIP 或 WAIVER 存在，在 `report.md` 里逐项说明
 

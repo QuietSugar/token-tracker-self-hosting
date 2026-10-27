@@ -225,20 +225,20 @@ jobs:
 
 ---
 
-## 11. Go 迁移实验（SQLite / PostgreSQL 双引擎）的维护规则
+## 11. Go 迁移实验（PostgreSQL）的维护规则
 
 1. Go 实现是**实验分支/垂直切片**，不得与正式 InsForge 镜像混用标签、配置或发布说明。
-2. 每次改动必须跑 `cd go-server && go test -race ./... && go vet ./...`（默认 SQLite），
-   并再跑一次 `TT_TEST_DATABASE_URL='postgres://…' go test -race ./...`（真实 PG）。
-3. 每次改动必须跑两个 adapter 的契约：
-   `CONTRACT_ADAPTER=./contract/adapters/go-sqlite.cjs ./contract/scripts/verify.sh` 与
+2. 存储层只支持 PostgreSQL，`go test` **没有默认库**：
+   `cd go-server && ./scripts/test-with-pg.sh --full`（或先 export `TT_TEST_DATABASE_URL`
+   再 `go test -race ./... && go vet ./...`）。
+3. 每次改动必须跑契约：
    `GO_POSTGRES_URL='postgres://…' CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs ./contract/scripts/verify.sh`；
-   两条基线都是 33 PASS / 0 FAIL / 2 SKIP，任一方 FAIL 阻塞合并。
+   基线 33 PASS / 0 FAIL / 2 SKIP，FAIL 阻塞合并。
 4. 2 个 SKIP 是刻意的 PG 专属 step/checksum ledger，不许把自有 schema migration 假装成 15 个 PG SQL step；
-   两种引擎都用 `schema_migrations(version=1, checksum=sha256(该引擎渲染后的 DDL))`。
-   SQLite 渲染结果逐字节锁定（`TestSQLiteSchemaStaysByteCompatibleWithV1`），改动它会破坏既有实例的 checksum。
-5. 引擎选择只允许通过 `store.Dialect` 与 `store.DB` 包装层；**禁止**在 handler 里写 `if dialect == ...`
-   或直接 `sql.Open` 绕过方言改写。新增 SQL 一律用 `?` 占位符。
+   本服务用 `schema_migrations(version=1, checksum=sha256(core DDL))`，checksum 由
+   `TestSchemaChecksumIsPinned` 钉死——改 core DDL 必须同时写 additive 迁移并更新文档。
+5. 所有 SQL 通过 `store.DB`/`store.Tx` 包装层执行（它们负责把 `?` 改写成 `$n`）；
+   **禁止**在 handler 里直接 `sql.Open` 或手写 `$1` 占位符。
 6. 每次更改 Go contract，重新跑 PGlite 参考自测和可复现 golden；不要为了 Go 实现而无评审地改 reference golden。
 7. 真实并发/锁语义用 `./contract/scripts/standard-env-test.sh` 在真实 PG 15.18 上验；当前 5 PASS / 0 FAIL。不要用 PGlite 声称并发验证完成。
 8. 生产 GA 前阻断项见 `go-server/STATUS.md`；在完整 schema、更多行为矩阵、安全审查、恢复/备份与客户端 E2E 未通过前，镜像标签只能是 `experimental`。

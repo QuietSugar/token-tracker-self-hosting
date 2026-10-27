@@ -1,16 +1,15 @@
-// Package store 提供 TokenTracker 自托管后端的存储层。
+// Package store 提供 TokenTracker 自托管后端的存储层（PostgreSQL only）。
 //
 // 设计原则：
-//   - 同一套 Go 业务代码跑在两种引擎上（SQLite / PostgreSQL）：
-//     占位符、幂等插入、布尔字面量、DDL 都由本包按 Dialect 渲染。
+//   - 只有一个引擎。业务代码写 `?` 占位符，由本包统一改写成 `$n`；
+//     不再有方言分支、双份 DDL、双份 checksum。
 //   - 不依赖 PG 的 RLS / PL/pgSQL / advisory lock / timestamptz；
 //     这些语义在 Go 应用层实现（见 app 包的 handlers 与 sync.Mutex）。
-//   - 两种引擎的列类型保持可互换：时间存 RFC3339 UTC 文本，金额存十进制文本，
-//     识别列存 TEXT。这样跨引擎的 Scan 目标、排序（ISO 文本即时间序）、
-//     LIKE/比较语义完全一致，业务层不需要任何方言分支。
-//     代价是 PG 侧没有 timestamptz/numeric 的原生类型校验；理由与迁移路线见
-//     docs/go-postgres.md。
-//   - SQLite 的写操作用事务 + 单连接模拟 PG 的 advisory_xact_lock 串行化。
+//   - 列类型刻意保持"文本化"：时间存 RFC3339 UTC 文本，金额存十进制文本，
+//     识别列存 TEXT。排序（ISO 文本即时间序）、LIKE/比较语义因此在
+//     Go 侧完全可预测。代价是 PG 侧没有 timestamptz/numeric 的原生类型校验；
+//     理由见 docs/go-postgres.md。
+//   - 2026-10 起不再支持 SQLite（归档点 tag `sqlite-final`）。
 package store
 
 import (
@@ -23,31 +22,20 @@ import (
 	"strings"
 )
 
-// SchemaVersion 是逻辑 schema 的版本号；SQLite 与 PostgreSQL 共用同一版本号。
-// 迁移账本里记录的 checksum 是「该引擎渲染后的 DDL」的 sha256，
-// 因此同一个 version 在两种引擎上 checksum 不同（这是预期行为）。
+// SchemaVersion 是逻辑 schema 的版本号。
+// 迁移账本里记录的 checksum 是 core DDL 的 sha256（与引擎无关，因为只有一个引擎）。
 const SchemaVersion = 1
 
 // appliedAt 固定值：保持契约/测试输出可复现，不使用 wall clock。
 const appliedAt = "2026-10-26T00:00:00Z"
 
-// sqlitePreamble 只对 SQLite 执行：WAL、外键、锁等待。
-// PostgreSQL 不需要等价设置（外键默认强制、没有写者串行化问题）。
-const sqlitePreamble = `
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = WAL;
-PRAGMA busy_timeout = 5000;
-`
-
-// schemaBody 是两种引擎共用的逻辑 schema，含三个占位符：
+// schemaBody 是完整的 core DDL（PostgreSQL）。
 //
-//	{{ENGINE}} 引擎名（只出现在注释里）
-//	{{BOOL}}   布尔列类型（SQLite: INTEGER，PostgreSQL: boolean）
-//	{{FALSE}}  布尔假值（SQLite: 0，PostgreSQL: false）
-//
-// 其余列类型（TEXT / INTEGER）在两种引擎里都合法，故意不做改写。
+// 注意：这段文本的 sha256 会被写进 schema_migrations 做 fail-closed 校验，
+// 修改任何字符都会让已部署实例启动即拒绝（"checksum drift"）。
+// 新增表/列请走下方 additiveSteps，不要改这里。
 const schemaBody = `
--- {{ENGINE}} 自身的迁移账本（不冒充 PG 的 15-step SQL 安装账本）。
+-- PostgreSQL 自身的迁移账本（不冒充 PG 的 15-step SQL 安装账本）。
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   checksum TEXT NOT NULL,
@@ -112,7 +100,7 @@ CREATE TABLE IF NOT EXISTS cloud_machines (
   platform TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   last_seen_at TEXT,
-  is_current {{BOOL}} NOT NULL DEFAULT {{FALSE}},
+  is_current boolean NOT NULL DEFAULT false,
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS cloud_machine_aliases (
@@ -153,28 +141,16 @@ CREATE INDEX IF NOT EXISTS usage_cache_owner ON usage_cache(cache_key);
 -- 支付/订单表存在但为空（API 兼容性；自托管模式不产生任何行）
 CREATE TABLE IF NOT EXISTS cloud_payments (id TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS cloud_orders (id TEXT PRIMARY KEY);
-CREATE TABLE IF NOT EXISTS cloud_payment_providers (id TEXT PRIMARY KEY, enabled {{BOOL}} NOT NULL DEFAULT {{FALSE}});
+CREATE TABLE IF NOT EXISTS cloud_payment_providers (id TEXT PRIMARY KEY, enabled boolean NOT NULL DEFAULT false);
 CREATE TABLE IF NOT EXISTS cloud_catalog (id TEXT PRIMARY KEY);
 `
 
-// SchemaSQL 渲染指定引擎的完整 DDL（幂等：全部 IF NOT EXISTS）。
-func SchemaSQL(d Dialect) string {
-	engine, boolean, falseLiteral := "SQLite", "INTEGER", "0"
-	preamble := sqlitePreamble
-	if d == Postgres {
-		engine, boolean, falseLiteral = "PostgreSQL", "boolean", "false"
-		preamble = ""
-	}
-	return preamble + strings.NewReplacer(
-		"{{ENGINE}}", engine,
-		"{{BOOL}}", boolean,
-		"{{FALSE}}", falseLiteral,
-	).Replace(schemaBody)
-}
+// SchemaSQL 返回完整的 core DDL（幂等：全部 IF NOT EXISTS）。
+func SchemaSQL() string { return schemaBody }
 
-// SchemaChecksum 是渲染后 DDL 的 sha256（十六进制）。
-func SchemaChecksum(d Dialect) string {
-	sum := sha256.Sum256([]byte(SchemaSQL(d)))
+// SchemaChecksum 是 core DDL 的 sha256（十六进制）。
+func SchemaChecksum() string {
+	sum := sha256.Sum256([]byte(SchemaSQL()))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -334,24 +310,23 @@ func AdditiveSteps() []int {
 // Install 建表并写入迁移账本；可重复调用（幂等）。
 // PostgreSQLReferenceSteps 仅是审计映射（见 checksums.go），不进入本账本。
 func Install(ctx context.Context, db *DB) error {
-	for _, stmt := range splitStatements(SchemaSQL(db.Dialect())) {
+	for _, stmt := range splitStatements(SchemaSQL()) {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("schema: %w", err)
 		}
 	}
-	checksum := SchemaChecksum(db.Dialect())
+	checksum := SchemaChecksum()
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	// checksum 与引擎绑定：已应用的 schema 被意外改写（或把另一引擎的账本
-	// 搬过来）时 fail closed。
+	// 已应用的 schema 被意外改写时 fail closed（checksum 覆盖整段 DDL）。
 	var prior string
 	err = tx.QueryRowContext(ctx, `SELECT checksum FROM schema_migrations WHERE version=?`, SchemaVersion).Scan(&prior)
 	switch {
 	case err == nil && prior != checksum:
-		return fmt.Errorf("%s schema migration %d checksum drift: installed=%s current=%s", db.Dialect(), SchemaVersion, prior, checksum)
+		return fmt.Errorf("schema migration %d checksum drift: installed=%s current=%s", SchemaVersion, prior, checksum)
 	case err == nil:
 		// 已安装且 checksum 一致：无需写入
 	case errors.Is(err, sql.ErrNoRows):
@@ -393,8 +368,8 @@ func installAdditiveSteps(ctx context.Context, db *DB) error {
 		err := db.QueryRowContext(ctx, `SELECT checksum FROM schema_additions WHERE version=?`, st.Version).Scan(&prior)
 		switch {
 		case err == nil && prior != checksum:
-			return fmt.Errorf("%s additive migration %d (%s) checksum drift: installed=%s current=%s",
-				db.Dialect(), st.Version, st.Name, prior, checksum)
+			return fmt.Errorf("additive migration %d (%s) checksum drift: installed=%s current=%s",
+				st.Version, st.Name, prior, checksum)
 		case err == nil:
 			continue // 已应用
 		case !errors.Is(err, sql.ErrNoRows):
@@ -414,7 +389,7 @@ func installAdditiveSteps(ctx context.Context, db *DB) error {
 	return nil
 }
 
-// additiveChecksum 只覆盖该 step 自己的名字与 SQL（不含引擎渲染差异，step 里不用占位符）。
+// additiveChecksum 只覆盖该 step 自己的名字与 SQL。
 func additiveChecksum(name, sqlText string) string {
 	sum := sha256.Sum256([]byte(name + "\x00" + sqlText))
 	return hex.EncodeToString(sum[:])

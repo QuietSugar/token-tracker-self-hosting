@@ -1,11 +1,11 @@
 {
   "group": "install",
-  "description": "安装契约：PG 的 15 步账本/旧步骤 checksum 属于 PostgreSQL 专属；跨实现验证 SQLite 自有迁移版本与幂等数据保留。",
+  "description": "安装契约：PG 的 15 步账本/旧步骤 checksum 属于 PostgreSQL 专属；跨实现验证候选实现自有迁移版本与幂等数据保留。",
   "cases": [
     {
       "id": "install/ledger-15-steps",
       "tags": ["L1", "install", "postgres-specific"],
-      "implementationSpecific": "PostgreSQL 专属：SQLite 版本使用自己的 schema_migrations；Go adapter 显式 SKIP，不伪造 PG SQL 安装账本。",
+      "implementationSpecific": "PostgreSQL 专属：候选实现使用自己的 schema_migrations；Go adapter 显式 SKIP，不伪造 PG SQL 安装账本。",
       "steps": [
         { "op": "query", "sql": "SELECT step, checksum FROM public.tokentracker_self_host_installations ORDER BY step",
           "capture": ["rows.length", "rows[*].step", "rows[*].checksum"] }
@@ -33,7 +33,7 @@
     {
       "id": "install/checksum-drift-refused",
       "tags": ["install", "error", "postgres-specific"],
-      "implementationSpecific": "PostgreSQL 专属：旧 SQL step checksum 不可变规则；SQLite migration versioning 由 schema_migrations 单独测试。",
+      "implementationSpecific": "PostgreSQL 专属：旧 SQL step checksum 不可变规则；候选实现的 migration versioning 由 schema_migrations 单独测试。",
       "steps": [
         { "op": "tamperChecksum", "step": "01-private-baseline" },
         { "op": "rerunInstall", "expectError": true, "capture": ["error"] },

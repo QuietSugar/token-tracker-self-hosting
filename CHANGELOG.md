@@ -2,6 +2,51 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — 删除 SQLite 支持，只保留 PostgreSQL
+
+**先说归档点**：删除之前给当时的 `main` 打了 tag **`sqlite-final`**
+（`1ec6984`），那是最后一个同时支持两个引擎的提交。需要"单文件零依赖"形态的人
+从那里 checkout 即可；该分支不再维护，也没有到新版的搬数工具。
+
+### 为什么删
+
+不是"少维护一个引擎"这种账面理由，而是**保真度**：SQLite 分支的测试通过率不能证明
+PostgreSQL 上的并发、类型严格性、约束语义正确，却让人误以为"两种引擎都验证过了"。
+而这个项目从第一天起就只有 PG 上跑过真实数据。
+
+同时它把成本摊到每一次改动上：方言层、DDL 双渲染、双份 CI、双份 compose、
+双份契约 adapter、两套 checksum 语义的文档解释。
+
+### 删除清单
+
+| 面向 | 变化 |
+|---|---|
+| 依赖 | 删除 `modernc.org/{sqlite,libc,mathutil,memory}`；`go.sum` 45 行 → 2 行 |
+| 代码 | 删 `store/dialect.go`（Dialect/ParseDialect/DetectDialect/bind）；新增 `store/placeholders.go`（只留 `?`→`$n` 改写）；`schemaBody` 把 `{{ENGINE}}/{{BOOL}}/{{FALSE}}` 烘焙成 PostgreSQL 字面量；删掉从未被引用的 `flexibleBool`/`parseBoolText`；`Config.Dialect` 字段移除 |
+| 启动 | `TT_DATABASE_URL` 变**必填**；`TT_DATABASE_PATH`/`TT_DATABASE_DRIVER` 移除（设了会打警告）。DSN 给文件路径时报错带迁移提示：`SQLite support was removed (archived at tag sqlite-final)…` |
+| 测试 | `testDB()` 不再有 SQLite 默认值，未设 `TT_TEST_DATABASE_URL` 直接失败并打印起库命令；新增 `scripts/test-with-pg.sh`（docker 一键起临时 PG，`--full` 跑全量）；`TestSchemaChecksumIsPinned` 钉死 core DDL 的 sha256；新增 `TestValidateDSN` 覆盖 SQLite 路径被拒绝 |
+| CI | `go-server.yml` 删 sqlite job（保留 PG 15/16 矩阵）；`contract.yml` 删掉从未启用的 `candidate` job；`build-go-image.yml` 删 sqlite smoke 与兼容旧名 `-sqlite-go` 标签 |
+| 镜像 | `Dockerfile` 去掉 `TT_DATABASE_PATH` 默认值、`/data` 卷与 sqlite 标签；`TT_DASHBOARD_URL` 默认改为空（空值按请求推导，避免占位域名让 device-login 失败） |
+| 契约 | 删除 `adapters/go-sqlite.cjs` 与 `go-sqlite.example.cjs`；`capabilities.json` 实现名改 `go-postgres`；SPEC/mapping/scenarios 里的 "SQLite 等价实现"措辞改为实现中立 |
+| 脚本 | `backup.sh` 只保留 PostgreSQL（`sqlite`/`restore-sqlite` 子命令改为明确报错）；`full-test.sh` 重排为 L0 build / L1 unit(PG) / L2 契约(PG) / L3 镜像 smoke(PG) |
+| 文档 | `go-server/README.md`（§1.2 改成"没有 PostgreSQL 怎么办"、配置表、§9 第 6 条）、`STATUS.md`（新增「SQLite 去哪了」附录）、`docs/go-postgres.md`（重写为决定记录）、`docs/database-choice.md`、`docs/HANDOFF.md`、根 `README.md` 同步 |
+
+### 顺带修掉的两处文档漂移
+
+- `go-server/README.md` §9 写"只有 **14 张表**"，实际是 **16 张业务表 + 2 张账本**
+  （`auth_credentials`/`auth_sessions`/`auth_owner` 是后来按 additive step 加的，数字没跟）。
+- §9 第 7 条写"**没有 schema 增量迁移**（只有 version 1）"，与 `schema_additions`
+  已上线两个 step 的事实矛盾——这句会让人以为升级必须重建库。
+
+### 校验
+
+- `go build ./...`、`go vet ./...`、`go test -race ./...`（真实 PostgreSQL 16）全过
+- 契约 `CONTRACT_ADAPTER=./contract/adapters/go-postgres.cjs`：33 PASS / 0 FAIL / 2 SKIP（与删除前一致）
+- `scripts/check-encoding.sh`、`scripts/check-secrets.sh` 通过
+- 三个 workflow 用 YAML 解析器校验通过
+
+---
+
 ## 2026-10-27 — 文档修正：3 个 issue（定位矛盾 / 4 项打磨 / 使用者入口）
 
 三个 issue 的每条声明都逐条核实过，全部属实；顺带修了两处 issue 没列出的同类问题。
