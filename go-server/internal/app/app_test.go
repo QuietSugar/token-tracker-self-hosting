@@ -402,10 +402,13 @@ func TestDeviceAutoApproveGivesUsableToken(t *testing.T) {
 	}
 }
 
-// TT_DEVICE_APPROVE=page：/device 页面 + 表单批准（无 JWT），默认配置下该端点必须 403。
+// 默认模式（page）就是官方流程：客户端打印 URL → 浏览器点批准 → 终端自己完成。
+// 这里不覆盖 s.deviceApprove，验证的是**开箱即用**的行为。
 func TestDeviceApprovalPage(t *testing.T) {
 	s, _ := testServer(t)
-	s.deviceApprove = "page"
+	if s.deviceApprove != "page" {
+		t.Fatalf("默认批准模式应为 page（与官方一致），实际 %q", s.deviceApprove)
+	}
 	h := s.Handler()
 
 	authRes := requestJSON(t, h, "POST", "/functions/tokentracker-device-flow-authorize", "", map[string]any{"machine_id": "m-page"})
@@ -436,7 +439,7 @@ func TestDeviceApprovalPage(t *testing.T) {
 		t.Fatalf("poll after page approval: %s", poll.Body.String())
 	}
 
-	// 默认模式（jwt）下不允许匿名批准
+	// jwt 模式下不允许匿名批准（想保留审批边界的人用它）
 	s.deviceApprove = "jwt"
 	pw2 := httptest.NewRecorder()
 	h.ServeHTTP(pw2, p)
