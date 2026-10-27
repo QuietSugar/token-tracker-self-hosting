@@ -144,7 +144,7 @@ if (changedInstance) { resetInstanceState(trackerDir); deviceToken = null; devic
 cloud token / 限流状态；**`queue.jsonl` 不动**（append-only，已上传过的行也留着）。
 
 `offset` 是"队列文件已上传到第几个字节"，`sync` 从它往后发 —— 归零就是从文件头重放。
-上游自己修旧 InsForge 项目迁移时用的也是这招（注释：ingest 是整行 upsert，重放幂等）。
+上游自己做数据迁移时用的也是这招：ingest 是整行 upsert，重放是幂等的。
 
 ### 5.2 重放范围
 
