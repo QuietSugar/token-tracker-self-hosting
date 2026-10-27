@@ -206,3 +206,88 @@ func TestDeviceIssueCreatesAccountOnFirstUse(t *testing.T) {
 		t.Fatalf("无 token 状态=%d, want 401", u.Code)
 	}
 }
+
+// TestDeviceIssueIsRepeatableForSameDevice 覆盖「客户端重装 / 重新登录」：
+// 同一 (user, platform, device_name, machine_id) 反复调 device-token-issue，
+// 必须每次 200 且复用同一个 device 行（不能撞 devices 的唯一索引返回 500），
+// 也不能在 cloud_machines 里堆出多台同名机器。
+func TestDeviceIssueIsRepeatableForSameDevice(t *testing.T) {
+	s, db := testServer(t)
+	h := s.Handler()
+	uid := "33333333-3333-4333-8333-333333333333"
+	jwt := s.signJWT(uid, "authenticated", s.now.Unix()+3600)
+	body := map[string]any{"device_name": "desktop", "platform": "linux", "machine_id": "m-same"}
+
+	var ids []string
+	var tokens []string
+	for i := 0; i < 3; i++ {
+		w := requestJSON(t, h, "POST", "/functions/tokentracker-device-token-issue", jwt, body)
+		if w.Code != 200 {
+			t.Fatalf("第 %d 次 device-token-issue 状态=%d body=%s", i+1, w.Code, w.Body.String())
+		}
+		var resp map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		id, _ := resp["device_id"].(string)
+		tok, _ := resp["token"].(string)
+		if id == "" || tok == "" {
+			t.Fatalf("第 %d 次响应缺字段: %s", i+1, w.Body.String())
+		}
+		ids = append(ids, id)
+		tokens = append(tokens, tok)
+	}
+
+	for i := 1; i < len(ids); i++ {
+		if ids[i] != ids[0] {
+			t.Fatalf("同一设备应复用 device_id：%v", ids)
+		}
+	}
+	if tokens[0] == tokens[1] || tokens[1] == tokens[2] {
+		t.Fatal("每次应签发新的 device token（旧 token 不被复用）")
+	}
+
+	var devices, machines, activeTokens int
+	if err := db.QueryRow(`SELECT count(*) FROM devices WHERE user_id=? AND revoked_at IS NULL`, uid).Scan(&devices); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM cloud_machines WHERE user_id=? AND status='active'`, uid).Scan(&machines); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM device_tokens WHERE user_id=? AND revoked_at IS NULL`, uid).Scan(&activeTokens); err != nil {
+		t.Fatal(err)
+	}
+	if devices != 1 {
+		t.Fatalf("active devices=%d，want 1（应复用设备行）", devices)
+	}
+	if machines != 1 {
+		t.Fatalf("active cloud_machines=%d，want 1（不应重复插入同名机器）", machines)
+	}
+	if activeTokens != 3 {
+		t.Fatalf("active device_tokens=%d，want 3（每次登录各签一个）", activeTokens)
+	}
+
+	// 最后签发的 token 依然可用
+	if w := requestJSON(t, h, "POST", "/functions/tokentracker-ingest", tokens[2], map[string]any{
+		"buckets": []any{map[string]any{
+			"hour_start": "2026-10-20T10:00:00Z", "source": "codex", "model": "gpt-6",
+			"input_tokens": 7, "total_tokens": 7, "billable_total_tokens": 7, "conversation_count": 1,
+		}},
+	}); w.Code != 200 {
+		t.Fatalf("用最新 token 上传状态=%d body=%s", w.Code, w.Body.String())
+	}
+	// account-devices 这里返回的是「按 source 聚合」，同一份数据只应出现一个 source
+	w := requestJSON(t, h, "GET",
+		"/functions/tokentracker-account-devices?from=2026-10-20&to=2026-10-20", jwt, nil)
+	if w.Code != 200 {
+		t.Fatalf("account-devices 状态=%d", w.Code)
+	}
+	var dev struct {
+		Devices []struct {
+			Source     string `json:"source"`
+			TotalToken int64  `json:"total_tokens"`
+		} `json:"devices"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &dev)
+	if len(dev.Devices) != 1 || dev.Devices[0].TotalToken != 7 {
+		t.Fatalf("account-devices 聚合异常：%s", w.Body.String())
+	}
+}

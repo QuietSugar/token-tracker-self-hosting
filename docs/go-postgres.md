@@ -57,6 +57,24 @@ docker compose -f go-server/docker-compose.sqlite-go.example.yml up -d     # SQL
 PG 连接串注意 `sslmode`：容器内网通常 `sslmode=disable`；云上托管 PG 用默认
 `require`/`verify-full`。应用不打印密码（启动日志会脱敏成 `user:***@host`）。
 
+### 装好之后：把真实数据接进来
+
+服务端起来只是"空账本"，两种方式填数据：
+
+1. **装官方客户端**，把它上报的 `baseUrl` 指向这台机器（见 `docs/runbook.md`）——之后自动累积。
+2. **已经有历史用量**（CSV / 客户端导出 / 自建脚本的日志）：用
+   [`go-server/scripts/import-usage.py`](../go-server/scripts/import-usage.py) 导入，
+   完整用法见 **`go-server/README.md` §3.5**（三步导入、列名别名表、重复导入不重复计数、常见报错）。
+
+```sh
+cd go-server
+./scripts/import-usage.py --base http://192.168.1.10:8080 \
+  --jwt "$(./scripts/issue-token.sh --json)" --device-name nas --input ~/usage.csv --dry-run
+```
+
+脚本会先把时间统一成 **UTC 整点**再上传——这是最容易踩的坑：服务端按字符串比较
+`hour_start`，带 `+08:00` 偏移的时间不会出现在 `?from=&to=` 的汇总里。
+
 ---
 
 ## 2. 代码上到底改了什么（以及为什么这么改）

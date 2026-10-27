@@ -225,6 +225,112 @@ server {
 
 ---
 
+## 3.5 把已有用量数据导进来（`import-usage.py`）
+
+服务端只提供「按小时桶」的上传接口，不做客户端适配。**如果你不是用官方客户端自动上报**，
+而是本地已经有导出好的用量（CSV / JSONL / 客户端历史），用这个脚本导入。
+
+### 3.5.1 三步导入
+
+```sh
+cd go-server
+
+# 1) 先空跑，检查列映射和时间解析对不对（不发任何请求）
+./scripts/import-usage.py --base http://192.168.1.10:8080 \
+  --jwt "$(./scripts/issue-token.sh --json)" \
+  --device-name nas --input ~/usage.csv --dry-run
+
+# 2) 真导
+./scripts/import-usage.py --base http://192.168.1.10:8080 \
+  --jwt "$(./scripts/issue-token.sh --json)" \
+  --device-name nas --input ~/usage.csv
+
+# 3) 核对
+curl -s -H "Authorization: Bearer $(./scripts/issue-token.sh --json)" \
+  'http://192.168.1.10:8080/functions/tokentracker-account-summary?from=2026-10-01&to=2026-10-31'
+```
+
+已经拿到 device token 的话可以跳过 JWT，直接 `--device-token "$DTOK"`。
+
+### 3.5.2 支持什么输入
+
+| 格式 | 说明 |
+|---|---|
+| CSV / TSV | 第一行是表头；列名支持别名（见下表），大小写/下划线/空格不敏感 |
+| JSONL / NDJSON | 每行一个对象，键名同 API 或别名 |
+| JSON | 一个数组；也接受 `{"buckets":[...]}`、`{"data":[...]}` 之类的包裹 |
+
+列名别名（任一出现即可）：
+
+| API 字段 | 可用列名 |
+|---|---|
+| `hour_start` | `timestamp` `time` `datetime` `date` `hour` `hour_bucket` `ts` |
+| `source` | `provider` `tool` `app` `client` `agent` |
+| `model` | `model_name` |
+| `input_tokens` | `input` `prompt_tokens` `prompt` |
+| `output_tokens` | `output` `completion_tokens` `completion` |
+| `cached_input_tokens` | `cached_tokens` `cache_read_tokens` `cached` |
+| `cache_creation_input_tokens` | `cache_write_tokens` |
+| `reasoning_output_tokens` | `reasoning_tokens` `reasoning` |
+| `total_tokens` | `total` `tokens` |
+| `billable_total_tokens` | `billable` `billable_tokens` |
+| `total_cost_usd` | `cost_usd` `cost` `usd`（可带 `$`） |
+| `conversation_count` | `conversations` `sessions` `requests` `request_count` |
+
+示例 CSV（这份就是脚本自测用的输入）：
+
+```csv
+timestamp,provider,model,prompt_tokens,completion_tokens,cached_tokens,reasoning,cost
+2026-10-18 09:15:00,codex,gpt-6,12000,3400,8000,0,0.42
+2026-10-18T23:30:00+08:00,claude,sonnet-4,5000,900,0,0,0.12
+```
+
+### 3.5.3 会对数据做什么
+
+- **时间归一化**：各种写法（带时区偏移、`2026-10-18 09:15`、epoch 秒/毫秒）统一转成
+  **UTC 整点**（`2026-10-18T09:00:00Z`）。服务端按字符串比较时间，非 UTC 会导致汇总查不到，
+  这一步由脚本保证。
+- **缺字段兜底**：`total_tokens` 缺失时按 `input+output+reasoning+cache_creation` 计算；
+  `billable_total_tokens` 留 0（服务端按 total 处理）；`source`/`model` 缺失给默认值并在统计里体现。
+- **按主键去重**：主键是 `(user, device, hour_start, source, model)`。同一批里重复的只保留最后一条；
+  与库里已有行重复时**整行替换**，所以**脚本可以反复重跑，不会重复计数**。
+- **自动分批**：每批默认 200 条（可 `--batch`，上限 500），并按 ≤512KB 切分，符合服务端限制。
+- **失败重试**：网络/5xx 自动退避重试 4 次；401/400/413 立即报错退出。
+
+### 3.5.4 设备与 token
+
+- `--jwt` 模式会自动申请 device token，并缓存到
+  `~/.cache/token-tracker/device-tokens.json`（权限 0600，按 `服务地址+设备名` 索引），
+  所以**重跑不会因为「同名设备已存在」而失败**；`--no-cache` 可禁用，`--token-cache` 可改路径。
+- 默认 `machine_id = import-<设备名>`；一台机器建议固定用一个 `--device-name`（如 `nas`、`desktop`）。
+- 多个来源机（如 NAS + 笔记本）用不同 `--device-name`，汇总时都会归到同一个账户。
+
+### 3.5.5 常见报错
+
+| 报错 | 原因 | 处理 |
+|---|---|---|
+| `没有可导入的数据` | 时间列没被识别，或 `--since/--until` 过滤空了 | 先 `--dry-run` 看列解析；列名用 §3.5.2 的别名 |
+| `申请 device token 失败（HTTP 500）… unique` | 同名设备/同 machine_id 已存在（旧版本） | 升级到 ≥ 本次发布后不再出现；或换 `--device-name` |
+| `HTTP 401: Unauthorized` | JWT 与 `TT_JWT_SECRET` 不一致，或 device token 被撤销 | 重新 `issue-token.sh`；脚本会自动重签一次 |
+| `HTTP 413: Upload too large` | 单批超限 | 调小 `--batch` |
+| 导入成功但 summary 是 0 | `from/to` 选的日期不含数据 | 用脚本提示里打印的日期区间再查 |
+
+### 3.5.6 想长期自动推送？
+
+把同一份导出逻辑做成定时任务即可，脚本天然幂等：
+
+```cron
+# 每小时导入一次最近的用量（重复上传是整行替换，不会重复计数）
+17 * * * * cd /opt/token-tracker/go-server && ./scripts/import-usage.py \
+  --base http://192.168.1.10:8080 --device-name nas \
+  --jwt "$(cat /etc/token-tracker/jwt)" --input /var/lib/usage/export.csv \
+  >> /var/log/tt-import.log 2>&1
+```
+
+> 注意 `--jwt` 用文件里的长期 token 时，请把该文件设为 `0600`。
+
+---
+
 ## 4. 备份与恢复
 
 原则：**先备份，再升级**。服务无状态（状态全在数据库里），恢复 = 恢复数据库 + 重启容器。

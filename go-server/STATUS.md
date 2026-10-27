@@ -44,9 +44,15 @@
 - 已发布实验镜像 `ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental`（linux/amd64+arm64，含 SBOM/provenance，不发布 latest）；推送前强制 SQLite+PG 双模式 smoke。
 - 新增运维脚本：`scripts/full-test.sh`（L0–L5 全量测试）、`scripts/backup.sh`（SQLite/PG 备份/恢复/清理）、
   `scripts/issue-token.sh`（自签 JWT，替换「注册登录」的替代品）。
+- `scripts/import-usage.py`：把本地已有用量（CSV/JSONL/JSON）导入服务，含时间归一化（任意时区→UTC 整点）、
+  列名别名、按主键去重、自动分批（≤500/批、≤512KB）、退避重试、device token 缓存；
+  与服务端的「整行替换」语义配合，可反复重跑不重复计数。用于**接入真实数据**（见 README §3.5）。
 - **修复**：`device-token-issue` / 设备授权 grant 在账户行不存在时因 `devices.user_id` 外键失败
   （契约用例都预先建了用户，所以没覆盖到）→ 新增 `ensureAccount()` 幂等建账，
   局域网首次使用可直接接通。回归测试 `TestDeviceIssueCreatesAccountOnFirstUse`。
+- **修复**：同名设备/同 `machine_id` 重复调 `device-token-issue` 会撞 partial unique index 返回 500
+  （客户端重装、重新登录、导入脚本重跑都会触发）→ 改为**复用已有 active 设备行并新签 token**，
+  `cloud_machines` 也做去重。回归测试 `TestDeviceIssueIsRepeatableForSameDevice`。
 - **面向使用者的部署运维手册：[`README.md`](README.md)**（快速开始、配置、反代、备份恢复、升级、监控、安全清单、排错、已知限制）。
 - 本地 linux/amd64 镜像 smoke 已通过（CI 里由 `build-go-image.yml` 对每次构建强制执行 SQLite + PG 两种模式）：`/health` 200、运行 UID 10001、SQLite DB/WAL/SHM 为 0600、生产模式 `/_test/sql` 返回 404。
 - 真实 PostgreSQL 标准环境的 L3 脚本与结果（见 `../contract/L3-RESULTS.md`）。
