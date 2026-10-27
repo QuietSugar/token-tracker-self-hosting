@@ -1,10 +1,14 @@
-# 实验用 Go + PostgreSQL 自托管后端。
+# 实验用 Go + PostgreSQL 自托管后端（推荐形态）。
 #
 # 用法:
 #   export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
-#   export TT_JWT_SECRET="$(openssl rand -hex 32)"   # 至少 32 字节
+#   export TT_JWT_SECRET="$(openssl rand -hex 32)"   # 至少 32 字节，必须保密
 #   docker compose -f docker-compose.postgres-go.example.yml up -d
 #   curl http://127.0.0.1:8080/health
+#
+# 备份：go-server/scripts/backup.sh postgres（内部用 pg_dump）
+# 升级：docker compose pull tokentracker-go && docker compose up -d tokentracker-go
+#       （schema 安装幂等；PG 连接池会在重启时重建）
 #
 # ⚠️ 当前只覆盖 STATUS.md 中明确列出的行为；不是 InsForge 替代品/生产 GA。
 # ⚠️ 这里的 postgres:15-alpine 为了示例可读性用 tag；生产请按 OCI digest 固定，
@@ -18,7 +22,6 @@ services:
       POSTGRES_DB: tokentracker
       # 只用于本地示例；生产请换成 secrets 或外部托管 PG
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a strong random password}
-      # 数据目录归 postgres 用户所有；容器内不需要额外扩展
       POSTGRES_INITDB_ARGS: "--data-checksums"
     volumes:
       - tokentracker-pgdata:/var/lib/postgresql/data
@@ -30,17 +33,14 @@ services:
     security_opt:
       - no-new-privileges:true
     # 不发布到宿主机；Go 服务用 compose 内部网络访问。
-    # 需要 psql/备份时临时加 ports 或 `docker compose exec`。
+    # 需要 psql/备份时临时加 ports 或 `docker compose exec tokentracker-postgres psql ...`。
 
   tokentracker-go:
-    image: ghcr.io/quietsugar/token-tracker-self-hosting-sqlite-go:experimental
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        VERSION: experimental
-        VCS_REF: ${GIT_SHA:-local}
-        TARGETARCH: amd64
+    image: ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental
+    # 想本地构建镜像时取消下面 4 行注释（可去掉 image 行）
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
       tokentracker-postgres:
@@ -65,6 +65,7 @@ services:
       interval: 15s
       timeout: 3s
       retries: 3
+      start_period: 10s
 
 volumes:
   tokentracker-pgdata:

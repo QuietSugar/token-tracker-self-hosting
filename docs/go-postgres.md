@@ -28,9 +28,15 @@ go run ./go-server/cmd/server
 Docker：
 
 ```sh
+docker pull ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental
+
 docker compose -f go-server/docker-compose.postgres-go.example.yml up -d   # PG
 docker compose -f go-server/docker-compose.sqlite-go.example.yml up -d     # SQLite
 ```
+
+面向使用者的完整部署/运维手册（备份恢复、升级、反代、systemd、排错）：[`../go-server/README.md`](../go-server/README.md)。
+
+一键全量测试：`cd go-server && ./scripts/full-test.sh`（可带 `TT_POSTGRES_URL` 打开 PG 项；无 docker 时自动 SKIP 镜像 smoke）。
 
 ### 环境变量
 
@@ -109,6 +115,7 @@ PostgreSQL **16.2**（`pgserver` 自带二进制）：
 
 ```sh
 cd go-server
+./scripts/full-test.sh                                        # 全量（推荐）
 go vet ./... && go test -race ./...                          # SQLite：PASS
 TT_TEST_DATABASE_URL='postgres://…?sslmode=disable' go test -race ./...   # Postgres：PASS
 
@@ -123,7 +130,12 @@ GO_POSTGRES_URL='postgres://…?sslmode=disable' \
 - PG adapter 每个用例起独立 schema（`tt_case_<hex>`），退出时 `DROP SCHEMA CASCADE`，
   与 SQLite adapter 的"每个用例一个全新数据库文件"等价。
 - CI：`.github/workflows/go-server.yml` 在 **PostgreSQL 15 与 16** 两个矩阵上跑同一批测试 + 契约，
-  另外单独跑 SQLite 那一份。**注意：本仓库从未在真实用户 VPS 上验收 PG 部署。**
+  另外单独跑 SQLite 那一份；`.github/workflows/build-go-image.yml` 在每次镜像构建时跑
+  **SQLite 模式 + PostgreSQL 模式**的容器 smoke（health、非 root、0600、`/_test/*` 404、重启后数据仍在、
+  弱 secret 拒绝启动、PG 连接与日志脱敏），smoke 不通过就不会推送镜像。
+- 备份/恢复已实测：SQLite 快照可重启恢复；PG 用 `pg_dump -Fc` 备份 → 删库 → `pg_restore` → 14 张表与
+  `schema_migrations` checksum 一致 → 服务正常启动（详见 `go-server/scripts/backup.sh`）。
+- **注意：本仓库从未在真实用户 VPS 上验收 PG 部署。**
 
 ---
 

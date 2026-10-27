@@ -35,9 +35,13 @@
 - `TT_JWT_SECRET` 启动时强制至少 32 字节；SQLite DB/WAL/SHM 文件默认 owner-only 权限。
 - 每 case 独立实例：SQLite 用全新文件，PG 用全新 schema（`tt_case_<hex>`，退出 `DROP SCHEMA CASCADE`）。
 - `Dockerfile` + 两个 compose 示例（`docker-compose.sqlite-go.example.yml` / `docker-compose.postgres-go.example.yml`）；
+  镜像推到 `ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental[-<sha>]`（旧名 `-sqlite-go` 同步推送兼容）；
   独立 buildx/GHCR workflow（仅 `experimental` tag，不覆盖正式镜像）。基础镜像按 OCI digest 固定。
 - 新增 `.github/workflows/go-server.yml`：SQLite 一份流水线 + PostgreSQL **15/16 矩阵**各一份，均跑 unit + 契约。
-- 本地 linux/amd64 镜像 smoke 已通过：`/health` 200、运行 UID 10001、SQLite DB/WAL/SHM 为 0600、生产模式 `/_test/sql` 返回 404。
+- 新增 `.github/workflows/build-go-image.yml`：amd64 构建 → **镜像 smoke（SQLite 模式 + PostgreSQL 模式）** → 通过后才推送多平台镜像（含 SBOM/provenance）。
+- 新增运维脚本：`scripts/full-test.sh`（L0–L5 全量测试）、`scripts/backup.sh`（SQLite/PG 备份/恢复/清理）。
+- **面向使用者的部署运维手册：[`README.md`](README.md)**（快速开始、配置、反代、备份恢复、升级、监控、安全清单、排错、已知限制）。
+- 本地 linux/amd64 镜像 smoke 已通过（CI 里由 `build-go-image.yml` 对每次构建强制执行 SQLite + PG 两种模式）：`/health` 200、运行 UID 10001、SQLite DB/WAL/SHM 为 0600、生产模式 `/_test/sql` 返回 404。
 - 真实 PostgreSQL 标准环境的 L3 脚本与结果（见 `../contract/L3-RESULTS.md`）。
 
 ### 测试结果（2026-10-26）
@@ -66,6 +70,8 @@ L3 真实 PG 15.18:  5 PASS / 0 FAIL
 
 ```sh
 cd go-server
+./scripts/full-test.sh                                 # 全量：gofmt/vet/build/unit×2引擎/契约×2引擎/docker smoke
+# 或手工逐条：
 go test -race ./...                                    # SQLite
 TT_TEST_DATABASE_URL='postgres://user:pass@127.0.0.1:5432/db?sslmode=disable' \
   go test -race ./...                                   # 同一批测试跑在真实 PostgreSQL

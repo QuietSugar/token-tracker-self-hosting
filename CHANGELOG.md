@@ -2,6 +2,40 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — Go 镜像流水线 + 面向使用者的运维文档 + 全量测试脚本
+
+### 新增
+
+- `.github/workflows/build-go-image.yml`：amd64 构建 → **容器 smoke（SQLite 模式 + PostgreSQL 模式）** →
+  通过后才推送 `linux/amd64,linux/arm64` 镜像到 GHCR（SBOM + provenance）。
+  镜像名 `ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental[-<sha>]`，
+  同时推送旧名 `-sqlite-go:experimental` 以兼容早期 compose；**不发布 `latest`**。
+- `go-server/README.md`：使用者手册（快速开始、环境变量、JWT 约定、反代/TLS、备份恢复、升级、
+  systemd、健康检查/日志、安全清单、故障排查表、已知限制、卸载）。
+- `go-server/scripts/full-test.sh`：L0 gofmt/vet/build → L1 unit(SQLite) → L2 unit(PostgreSQL) →
+  L3/L4 契约（两引擎）→ L5 Docker smoke；输出 PASS/FAIL/SKIP 汇总表。
+- `go-server/scripts/backup.sh`：SQLite 在线快照、PostgreSQL `pg_dump -Fc`、恢复、按天清理。
+- `go-server/.dockerignore`：构建上下文排除 `bin/`、`.db`、`.env` 等。
+
+### 变更
+
+- 两个 compose 示例改用新镜像名；sqlite 示例去掉内联 build（改为注释，默认拉镜像）。
+- 文档同步：`go-server/STATUS.md`、`docs/go-postgres.md`、`docs/HANDOFF.md`、根 `README.md`。
+
+### 验收（本地全量）
+
+```
+gofmt / go vet / CGO=0 build            PASS
+go test -race（SQLite）                  PASS
+go test -race（PostgreSQL 16.2）         PASS
+契约 go-sqlite                          33 PASS / 0 FAIL / 2 SKIP
+契约 go-postgres                        33 PASS / 0 FAIL / 2 SKIP
+Docker 镜像 smoke                       本沙箱无 docker → SKIP（由 CI 强制）
+备份/恢复演练                             SQLite 快照可启动；PG dump→drop→restore 后 14 表与 checksum 一致
+```
+
+---
+
 ## 2026-10-26 — Go 后端支持 PostgreSQL（双引擎，同一份代码）
 
 用户要求：Go 版本支持 PostgreSQL；并问「支持 PG 是否更简单」「不再支持 SQLite 是否降低维护成本」。

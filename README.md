@@ -12,7 +12,8 @@
 >
 > 🤖 **本仓库由 Agent 长期维护**。首次跨环境接手先读 [`docs/HANDOFF.md`](docs/HANDOFF.md)，再按 [`MAINTENANCE.md`](MAINTENANCE.md) 的会话启动协议恢复详细状态。
 >
-> 🐳 **当前正式交付物**是 Docker 工件镜像（linux/amd64）：携带已审计 SQL 与 14 个私有函数，面向 InsForge + PostgreSQL。另有**实验性 Go 后端镜像（SQLite + PostgreSQL 双引擎）**，两种引擎各自通过 33 个行为契约 + 2 个 PG 专属 SKIP；尚未达到生产 GA。见 [`docs/docker-image.md`](docs/docker-image.md)、[`docs/go-postgres.md`](docs/go-postgres.md) 与 [`go-server/STATUS.md`](go-server/STATUS.md)。
+> 🐳 **当前正式交付物**是 Docker 工件镜像（linux/amd64）：携带已审计 SQL 与 14 个私有函数，面向 InsForge + PostgreSQL。另有**实验性 Go 后端镜像（SQLite + PostgreSQL 双引擎）**，两种引擎各自通过 33 个行为契约 + 2 个 PG 专属 SKIP；尚未达到生产 GA。
+使用与运维看 [`go-server/README.md`](go-server/README.md)，设计与取舍看 [`docs/go-postgres.md`](docs/go-postgres.md)，缺口看 [`go-server/STATUS.md`](go-server/STATUS.md)。
 
 ---
 
@@ -113,7 +114,9 @@ tokentracker-selfhost/
 │   ├── scripts/                 # record / verify / self-test / benchmark
 │   └── RESULTS.md               # 当前结果摘要与改造者下一步
 ├── go-server/                   # 实验性 Go 后端垂直切片（SQLite / PostgreSQL，非生产 GA）
+│   ├── README.md                # 使用者手册：部署 / 配置 / 备份恢复 / 升级 / 排错
 │   ├── STATUS.md                # 支持范围 / 缺口 / 验收门槛（先读）
+│   ├── scripts/                 # full-test.sh（全量测试）/ backup.sh（备份恢复）
 │   ├── Dockerfile               # linux/amd64 实验镜像
 │   └── internal/{app,store}/    # Go HTTP / 存储层（方言适配，双引擎）
 ├── tracking/
@@ -138,7 +141,7 @@ tokentracker-selfhost/
 │   ├── build-image.yml          # 正式工件镜像 GHCR build
 │   ├── contract.yml             # Golden 可复现 + PG/TS self-test + Go candidate
 │   ├── go-server.yml            # Go 双引擎 unit + 契约（SQLite / PG 15/16）
-│   └── build-go-image.yml       # Go 实验镜像 build
+│   └── build-go-image.yml       # Go 实验镜像 build（含 SQLite+PG 双模式 smoke，通过才推送）
 └── releases/
     ├── _template/               # review.md / acceptance.md 模板
     └── 1.4.12/                  # 已生成 SQL + 14 函数 + 校验和 + 记录
