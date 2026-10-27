@@ -55,6 +55,11 @@
   注册/引导都指向它。**没有任何"默认账户"常量或环境变量**（`TT_DEFAULT_ACCOUNT`、
   `TT_OWNER_ACCOUNT` 全部删除，连同历史认领与 merge-account 的兼容路径）。
   新增 `/api/auth/owner`（仅回环，供脚本解析 sub）。
+- **时区与 compact**：`account-*` 全部认 `tz` / `tz_offset_minutes`，按本地日归日
+  （UTC 窗口两侧各放宽一天再裁剪）；summary 的 rolling 锚在本地今天、`days` 是本地活跃天数；
+  heatmap 支持官方的 `format=compact` 稀疏线格式。
+- **设备管理**：`billing?action=devices` 返回 `cloud_list_machines` 形状（含 `is_current`），
+  `remove-device` / `resume-device` 暂停恢复（暂停撤销 device token），`ingest` 更新 `last_seen_at`。
 - **设备维度（对齐官方）**：`account-devices` 返回每台设备一行；所有 `account-*`
   端点支持 `?device_id=<uuid>` 过滤；RPC `account_usage_grouped` 支持
   `p_device_id` / `p_device_ids`；`device-rename` 用官方的 `{device_id, device_name}` 且重名 409。

@@ -233,8 +233,16 @@ server {
 **设备维度**：`tokentracker-account-devices` 返回每台设备一行
 （`{id, device_name, platform, created_at, total_tokens}`，只含未撤销设备、按用量降序）；
 `account-summary` / `-daily` / `-hourly` / `-monthly` / `-heatmap` / `-model-breakdown`
-都接受 `?device_id=<uuid>` 只统计该设备，形状不对时忽略。详见
-[`../docs/oauth-selfhosted.md`](../docs/oauth-selfhosted.md) §4.6。
+都接受 `?device_id=<uuid>` 只统计该设备，形状不对时忽略。
+
+**时区**：所有 `account-*` 端点认官方的 `tz` / `tz_offset_minutes`，按**本地日**归日
+（UTC 窗口两侧各放宽一天再裁剪）；summary 的 rolling 窗口锚在本地今天，`days` 是
+本地活跃天数。**heatmap** 支持 `format=compact`（dashboard 默认就带）。
+
+**设备管理**：`tokentracker-billing?action=devices[&current_machine_id=…]` 返回
+`cloud_list_machines` 形状（machines/machine_count/membership），`remove-device` /
+`resume-device` 可暂停/恢复（暂停会撤销该机器的 device token）；`ingest` 会更新
+`last_seen_at`。详见 [`../docs/oauth-selfhosted.md`](../docs/oauth-selfhosted.md) §4.6。
 
 **CORS**：服务对所有 `/functions/*` 返回 `Access-Control-Allow-Origin: *`（与参考实现一致）。
 如果你要限制来源，请在反代层改写该响应头。

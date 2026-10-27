@@ -37,6 +37,7 @@
 - [x] **认证层 `/api/auth/*`**（同 InsForge 流程）：登录 / 刷新轮换 / 撤销 / 跨设备 account 视图，见 [`docs/oauth-selfhosted.md`](docs/oauth-selfhosted.md)
 - [x] **账户归属收敛**：`auth_owner` 单例，`device-login` 与登录同一账户；「默认账户 UUID」概念及其兼容代码全部删除（§4.5）
 - [x] **多设备维度**（对齐官方 dashboard）：`account-devices` 按设备返回，`account-*` 支持 `device_id` 过滤，设备可重命名（§4.6）
+- [x] **与官方模块逐个对拍**：本地日/时区归日、heatmap `format=compact`、设备管理卡（暂停/恢复/最后活跃）（§4.6）
 - [ ] 完成 Go 后端剩余数据模型、安全、运维后再评估 GA
 - [ ] 决定是否保留 SQLite（成本分析见 [`docs/go-postgres.md`](docs/go-postgres.md) §5）
 
