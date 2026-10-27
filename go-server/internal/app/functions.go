@@ -405,6 +405,14 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Buckets []bucket `json:"buckets"`
 		Hourly  []bucket `json:"hourly"`
+		// 官方的 account_session_states 是队列里的**控制记录**（TRAE / cursor 这类
+		// account-level 来源用它去重会话），客户端会把它们和用量桶一起上传，
+		// 而且可能**单独**成批（队列尾部只剩这些记录时）。
+		//
+		// 自托管没有 account-level 数据模型，这些记录没有任何地方可写——但必须
+		// 回 200。回 4xx 的话客户端不会推进 queue.state.json 的 offset，那一批会被
+		// 无限重试，用户的 sync 从此永久失败（"HTTP 400: No usage buckets provided"）。
+		SessionStates []json.RawMessage `json:"account_session_states"`
 	}
 	if json.Unmarshal(body, &b) != nil {
 		fail(w, 400, "Invalid JSON body")
@@ -415,6 +423,16 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 		rows = b.Hourly
 	}
 	if len(rows) == 0 {
+		if len(b.SessionStates) > 0 {
+			// 明确"收下了，但没有可写的内容"，让客户端把 offset 推过去。
+			writeJSON(w, 200, map[string]any{
+				"ok": true, "inserted": 0, "skipped": len(b.SessionStates),
+				"account_session_states": "ignored",
+				"upload_scope":           "cloud",
+				"membership":             s.membership(userID),
+			})
+			return
+		}
 		fail(w, 400, "No usage buckets provided")
 		return
 	}
