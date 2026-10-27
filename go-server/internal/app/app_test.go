@@ -291,3 +291,173 @@ func TestDeviceIssueIsRepeatableForSameDevice(t *testing.T) {
 		t.Fatalf("account-devices 聚合异常：%s", w.Body.String())
 	}
 }
+
+// ---------- 官方客户端（tokentracker CLI v1.4.x）兼容性 ----------
+
+// 客户端会校验 verification_uri 必须与它自己的 dashboardUrl 同源、路径为 /device，
+// 否则 device-login 直接报「Device authorization returned a different dashboard」。
+// 自托管没配 TT_DASHBOARD_URL 时，必须用请求自身的 Host/scheme 推导。
+func TestDeviceAuthorizeAnchorsVerificationURIToRequestHost(t *testing.T) {
+	s, _ := testServer(t)
+	s.dashboard = "" // 模拟「没配 TT_DASHBOARD_URL」
+	h := s.Handler()
+
+	for _, tc := range []struct {
+		host, proto, want string
+	}{
+		{"192.168.1.10:8080", "", "http://192.168.1.10:8080/device"},
+		{"tt.example.lan", "https", "https://tt.example.lan/device"},
+	} {
+		r := httptest.NewRequest("POST", "/functions/tokentracker-device-flow-authorize", strings.NewReader(`{}`))
+		r.Host = tc.host
+		if tc.proto != "" {
+			r.Header.Set("X-Forwarded-Proto", tc.proto)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Fatalf("authorize status=%d body=%s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			VerificationURI         string `json:"verification_uri"`
+			VerificationURIComplete string `json:"verification_uri_complete"`
+			UserCode                string `json:"user_code"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		if resp.VerificationURI != tc.want {
+			t.Fatalf("host=%s proto=%s verification_uri=%q want %q", tc.host, tc.proto, resp.VerificationURI, tc.want)
+		}
+		if !strings.HasPrefix(resp.VerificationURIComplete, tc.want+"?user_code=") {
+			t.Fatalf("verification_uri_complete=%q", resp.VerificationURIComplete)
+		}
+	}
+
+	// 显式配置时以配置为准（契约测试依赖这个锚定语义）
+	s.dashboard = "https://private.example.test"
+	w := requestJSON(t, h, "POST", "/functions/tokentracker-device-flow-authorize", "", nil)
+	var resp struct {
+		VerificationURI string `json:"verification_uri"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.VerificationURI != "https://private.example.test/device" {
+		t.Fatalf("configured dashboard ignored: %q", resp.VerificationURI)
+	}
+}
+
+// TT_DEVICE_APPROVE=auto：authorize 即批准，客户端第一轮 poll 就拿到可用的 device token
+// —— 这正是「官方客户端 + 局域网自用、没有网页可点」的场景。
+func TestDeviceAutoApproveGivesUsableToken(t *testing.T) {
+	s, _ := testServer(t)
+	s.deviceApprove = "auto"
+	s.defaultSub = "22222222-2222-4222-8222-222222222222"
+	h := s.Handler()
+
+	w := requestJSON(t, h, "POST", "/functions/tokentracker-device-flow-authorize", "",
+		map[string]any{"client_info": "linux-x64 nas", "machine_id": "machine-auto"})
+	if w.Code != 200 {
+		t.Fatalf("authorize status=%d body=%s", w.Code, w.Body.String())
+	}
+	var auth struct {
+		DeviceCode string `json:"device_code"`
+		UserCode   string `json:"user_code"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &auth)
+
+	p := requestJSON(t, h, "POST", "/functions/tokentracker-device-flow-poll", "",
+		map[string]any{"device_code": auth.DeviceCode})
+	var poll struct {
+		Status      string `json:"status"`
+		UserID      string `json:"user_id"`
+		DeviceToken string `json:"device_token"`
+	}
+	_ = json.Unmarshal(p.Body.Bytes(), &poll)
+	if poll.Status != "approved" || poll.UserID != s.defaultSub || poll.DeviceToken == "" {
+		t.Fatalf("poll=%s (status=%q user=%q token=%q)", p.Body.String(), poll.Status, poll.UserID, poll.DeviceToken)
+	}
+
+	// 拿到的 token 必须真的能上传（客户端下一步就是 ingest）
+	row := map[string]any{"hour_start": "2026-10-26T09:00:00Z", "source": "claude", "model": "sonnet-4.5",
+		"input_tokens": 11, "total_tokens": 11, "billable_total_tokens": 11, "conversation_count": 1}
+	u := requestJSON(t, h, "POST", "/functions/tokentracker-ingest", poll.DeviceToken, map[string]any{"hourly": []any{row}})
+	if u.Code != 200 {
+		t.Fatalf("ingest status=%d body=%s", u.Code, u.Body.String())
+	}
+	if !strings.Contains(u.Body.String(), `"inserted":1`) {
+		t.Fatalf("ingest body=%s", u.Body.String())
+	}
+}
+
+// TT_DEVICE_APPROVE=page：/device 页面 + 表单批准（无 JWT），默认配置下该端点必须 403。
+func TestDeviceApprovalPage(t *testing.T) {
+	s, _ := testServer(t)
+	s.deviceApprove = "page"
+	s.defaultSub = "33333333-3333-4333-8333-333333333333"
+	h := s.Handler()
+
+	authRes := requestJSON(t, h, "POST", "/functions/tokentracker-device-flow-authorize", "", map[string]any{"machine_id": "m-page"})
+	var auth struct {
+		DeviceCode string `json:"device_code"`
+		UserCode   string `json:"user_code"`
+	}
+	_ = json.Unmarshal(authRes.Body.Bytes(), &auth)
+
+	g := httptest.NewRequest("GET", "/device?user_code="+auth.UserCode, nil)
+	gw := httptest.NewRecorder()
+	h.ServeHTTP(gw, g)
+	if gw.Code != 200 || !strings.Contains(gw.Body.String(), auth.UserCode) {
+		t.Fatalf("device page status=%d body=%s", gw.Code, gw.Body.String())
+	}
+
+	form := "user_code=" + auth.UserCode
+	p := httptest.NewRequest("POST", "/device/approve", strings.NewReader(form))
+	p.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	pw := httptest.NewRecorder()
+	h.ServeHTTP(pw, p)
+	if pw.Code != 200 {
+		t.Fatalf("approve status=%d body=%s", pw.Code, pw.Body.String())
+	}
+
+	poll := requestJSON(t, h, "POST", "/functions/tokentracker-device-flow-poll", "", map[string]any{"device_code": auth.DeviceCode})
+	if !strings.Contains(poll.Body.String(), `"status":"approved"`) {
+		t.Fatalf("poll after page approval: %s", poll.Body.String())
+	}
+
+	// 默认模式（jwt）下不允许匿名批准
+	s.deviceApprove = "jwt"
+	pw2 := httptest.NewRecorder()
+	h.ServeHTTP(pw2, p)
+	if pw2.Code != http.StatusForbidden {
+		t.Fatalf("jwt mode approve status=%d want 403", pw2.Code)
+	}
+}
+
+// 重复批准同一个 user_code 不能换 token（客户端/浏览器重试是常态）。
+func TestApproveDeviceCodeIsIdempotent(t *testing.T) {
+	s, _ := testServer(t)
+	h := s.Handler()
+	authRes := requestJSON(t, h, "POST", "/functions/tokentracker-device-flow-authorize", "", map[string]any{"machine_id": "m-idem"})
+	var auth struct {
+		DeviceCode string `json:"device_code"`
+		UserCode   string `json:"user_code"`
+	}
+	_ = json.Unmarshal(authRes.Body.Bytes(), &auth)
+
+	uid := "44444444-4444-4444-8444-444444444444"
+	first := requestJSON(t, h, "POST", "/functions/tokentracker-device-flow-grant", s.signJWT(uid, "authenticated", s.now.Unix()+3600),
+		map[string]any{"user_code": auth.UserCode})
+	if first.Code != 200 {
+		t.Fatalf("grant status=%d body=%s", first.Code, first.Body.String())
+	}
+	second := requestJSON(t, h, "POST", "/functions/tokentracker-device-flow-grant", s.signJWT(uid, "authenticated", s.now.Unix()+3600),
+		map[string]any{"user_code": auth.UserCode})
+	if second.Code != 200 {
+		t.Fatalf("re-grant status=%d body=%s", second.Code, second.Body.String())
+	}
+	var n int
+	if err := s.db.QueryRow(`SELECT count(*) FROM device_tokens WHERE user_id=?`, uid).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("device_tokens=%d want 1（重复批准不应再签发）", n)
+	}
+}

@@ -2,6 +2,46 @@
 
 本文件记录**本运维仓库自身**的变更，不记录上游发布（上游版本见 `tracking/upstream.md`）。
 
+## 2026-10-27 — 官方客户端接入（native-client E2E）
+
+用户澄清：「真实数据」= **继续用官方客户端，只把后端换成本服务**（官方云要收费了）。
+所以这一轮做的是客户端兼容，而不是导入脚本。
+
+### 实测通过（上游 xiufengsun/TokenTracker v1.4.12，未改客户端一行）
+
+| 客户端命令 | 结果 |
+|---|---|
+| `tracker init --base-url …` | ✅ |
+| `tracker device-login` | ✅ 拿到 device token（`auto` 模式零交互；`page`/`jwt` 也可） |
+| `tracker sync` | ✅ `Uploaded: 2 inserted`，重传后总量不变（7500） |
+| `tracker doctor` | ✅ `ok 12 / fail 0` |
+
+两条链路都验过：`http://localhost`（单机）与 `https://…` + 私有 CA（局域网，`NODE_EXTRA_CA_CERTS`）。
+
+### 服务端改动
+
+- `TT_DASHBOARD_URL` 默认改为**空 → 按请求推导**（`X-Forwarded-Proto` + `Host`）。
+  客户端会校验 `verification_uri` 与自己的 `base_url` 同源、路径 `/device`，写死默认值会让
+  局域网部署直接报 `Device authorization returned a different dashboard`。
+- `TT_DEVICE_APPROVE` 三模式：`jwt`（默认，需 JWT 批准）/ `page`（`/device` 网页点批准，无认证）/
+  `auto`（申请即批准到 `TT_DEFAULT_ACCOUNT`）。抽公共函数 `approveDeviceCode()`，重复批准幂等。
+- 新增 `GET /device` 批准页与 `POST /device/approve`（仅 `page` 模式启用，其他模式 403）。
+- 新增 `scripts/approve-device.sh`（`jwt` 模式的命令行批准）。
+- 新增 4 个测试：origin 推导、auto 模式签发可用 token、`/device` 页面批准 + 默认 403、重复批准不重复签发。
+
+### 文档
+
+- 新增 **`docs/official-client.md`**：客户端硬性限制（`base_url` 只能 HTTPS 或 localhost，附源码位置与
+  原始报错）、三条部署路线、anon key 为什么必须、设备批准三模式、跨设备视图缺口、验收清单、排错表。
+- `go-server/README.md` §3.6 + §2 环境变量表；`docs/go-postgres.md` 指向新文档。
+
+### 已知缺口（明确记录）
+
+`/api/auth/refresh`（InsForge OAuth）未实现 → 客户端「跨设备 account 视图」在自托管下退回本机视图；
+上传/留存/本机视图全部正常。补齐它是纯服务端工作，客户端无需改动。
+
+---
+
 ## 2026-10-27 — 接入真实数据：导入脚本 + 设备重复签发修复
 
 用户要"真实使用 go+postgres 版本、把真实数据接进去"。为此补上「数据怎么进来」这一段。

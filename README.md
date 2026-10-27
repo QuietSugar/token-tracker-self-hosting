@@ -33,7 +33,8 @@
 - [ ] **VPS 验收**：按 [`docs/runbook.md`](docs/runbook.md) 逐项打勾
 - [x] 建立 Go 实验后端（SQLite）：33 行为 PASS / 2 PG 专属 SKIP；尚不作生产替代
 - [x] Go 后端支持 PostgreSQL：同一份代码/镜像，PG 上同样 33 PASS（CI 覆盖 PG 15/16）
-- [ ] 完成 Go 后端剩余数据模型、安全、运维、native-client E2E 后再评估 GA
+- [x] **官方客户端接入实测**（v1.4.12 CLI：`device-login` / `sync` / `doctor` 全通，见 [`docs/official-client.md`](docs/official-client.md)）
+- [ ] 完成 Go 后端剩余数据模型、安全、运维（含 `/api/auth/refresh`）后再评估 GA
 - [ ] 决定是否保留 SQLite（成本分析见 [`docs/go-postgres.md`](docs/go-postgres.md) §5）
 
 ---
