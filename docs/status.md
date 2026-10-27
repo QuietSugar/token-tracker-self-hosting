@@ -1,6 +1,6 @@
 # 当前状态
 
-> 结论型文档：这里只放**现在成立的事实**。设计推理见 `design/`，操作步骤见 `users/`。
+> 结论型文档：这里只放**现在成立的事实**。设计推理见 `design/`（[索引](README.md#design--为什么这么做)），操作步骤见 `users/`（[索引](README.md#users--怎么用)）。
 > 最后核对：2026-10-27（上游 v1.4.12 / `8d32a956`）
 
 ## 一句话
@@ -24,7 +24,7 @@
 **测试基线**：`go test -race ./...` 全绿，`go vet` 干净，契约 **33 PASS / 0 FAIL / 2 SKIP**。
 
 两个 SKIP 不是"没做到"，是**实现边界不同**：我们不伪造成 "PostgreSQL 15 步迁移账本"，用自己
-的 `schema_migrations(version=1, checksum=sha256(core DDL))` 做 drift gate。详见 `maintainers/contract.md`（迁移中）。
+的 `schema_migrations(version=1, checksum=sha256(core DDL))` 做 drift gate。详见 [`maintainers/contract.md`](maintainers/contract.md)。
 
 ## 未验证
 
@@ -45,7 +45,7 @@
 
 ## 已知偏差（与官方行为有意不同，或暂时不同）
 
-细节与理由见 `design/parity.md`（迁移中）。会影响用户观感的两条先写在这：
+细节与理由见 [`design/parity.md`](design/parity.md)。会影响用户观感的两条先写在这：
 
 - **看板不隐藏 0 用量设备**：官方 dashboard 会把当前周期没有用量的设备从下拉里藏掉，我们照列并标「无用量」，否则看起来像设备丢了。
 - **`streak_days` 恒为 0**、heatmap 的星期对齐按上游实现原样跟随（上游自己这两处就不一致，我们不做"修正"）。
@@ -60,4 +60,4 @@
 
 ## 与「标准」的关系
 
-本仓库同时维护**上游工件线**（`releases/`、`contract/`）：它定义"官方行为长什么样"，Go 后端照着它实现。上游发布 → 重新生成工件 → diff → 同步实现 → 跑契约 → 发镜像。这条循环写在 `maintainers/upstream.md`（迁移中）。
+本仓库同时维护**上游工件线**（`releases/`、`contract/`）：它定义"官方行为长什么样"，Go 后端照着它实现。上游发布 → 重新生成工件 → diff → 同步实现 → 跑契约 → 发镜像。这条循环写在 [`maintainers/upstream.md`](maintainers/upstream.md)。
