@@ -20,6 +20,7 @@
 | 内建看板（`GET /`），用量只读 | 单测 + 实跑（无外部请求、CSP 白名单） |
 | 看板内重命名设备（同步 `devices` 与 `cloud_machines`） | 单测 + 实跑（重名 409、空名 400）+ jsdom 交互验证 |
 | device token 长期有效（无 TTL，只有撤销能失效） | 单测：七年前签发的 token 仍可上传；并断言 `device_tokens` 表里不存在过期列 |
+| 设备归属：不同机器各自成行、不串用量 | 单测 5 例（两台不同 `machine_id`/`client_info` 必须两行、同机重登复用、同名不同机加后缀、老行认领、`client_info` 取名规则）+ 实跑（两台机器各报一条，`hourly.device_id` 各自正确）|
 | 看板「最后同步」列（`last_seen_at`） | `GET /api/selfhost/devices` 单测覆盖四种形态（有值 / 从未同步 / 已撤销不返回 / 重复机器行去重）+ 实跑 + jsdom 渲染验证 |
 | 镜像 `ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental` | CI 推送前强制执行真实 PG 冒烟测试 |
 | PostgreSQL 15 / 16 | CI 矩阵均跑单测 + 契约 |
@@ -50,7 +51,10 @@
 7. **暂停不是"硬"状态**：`ingest` 不检查机器 `status`，客户端重新 `device-login` 之后仍能上传。
    本项目按「设备长期在线」使用、不在看板暴露暂停，因此不受影响；依赖「暂停必须拦死上传」的场景
    需要先补这项判断。（`machineFor` 的判重已改为不看 `status`，所以重新接入不会再产生重复机器行。）
-8. **暂停 / 恢复仅在 device token 层生效**：暂停会撤销 token，恢复会将其还原；已登录的 `auth_sessions`
+8. **存量数据的归属错误不会自动修正**：2026-10-28 之前通过 `device-login` 接入的第二台及以后的机器，
+   其用量可能记在别的设备行上（账户总量正确）。修复需要手工搬库，工具与步骤见
+   [`users/devices.md` §6](users/devices.md#6-用量记错了设备怎么办老数据修复)。升级本身不改任何历史用量。
+9. **暂停 / 恢复仅在 device token 层生效**：暂停会撤销 token，恢复会将其还原；已登录的 `auth_sessions`
    （dashboard 登录态）不受影响 —— 设备暂停不等于使登录会话失效。
 
 ## 已知偏差（与官方行为有意不同，或暂时不同）

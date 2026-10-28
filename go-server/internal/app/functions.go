@@ -153,29 +153,161 @@ func (s *Server) ensureAccount(sub string) error {
 	return err
 }
 
-// deviceFor 返回可用的设备 id：**已存在同名或同机的 active 设备时复用**，否则新建。
+// deviceFor 返回这台机器该用的设备行：**优先按 machine_id 复用**，否则新建。
+// 第二个返回值是最终落到库里的 device_name——重名时会被自动加后缀（见下）。
 //
-// 为什么需要：devices 上有两个 partial unique index
+// 为什么需要复用：devices 上有两个 partial unique index
 // (user_id,machine_id) 与 (user_id,platform,device_name)（均限定 revoked_at IS NULL）。
-// 自托管没有注册流程，客户端重装 / 重新登录 / 导入脚本重跑都会再次调
-// device-token-issue；若直接 INSERT 会撞唯一约束并返回 500，表现为「重装后登录不了」。
+// 自托管没有注册流程，客户端重装 / 重新登录 / 导入脚本重跑都会再次调 device-token-issue；
+// 若直接 INSERT 会撞唯一约束并返回 500，表现为「重装后登录不了」。
 // 复用设备行 + 新签一个 token 才符合「同一台设备重新登录」的语义。
-func (s *Server) deviceFor(sub, name, platform, machineID, newDeviceID string) (string, error) {
+//
+// 为什么判重**不能**用 `machine_id=? OR (platform=? AND device_name=?)`：
+// 官方客户端每次 device-login 都会带 machine_id，而 `OR` 的第二个分支会让一台新机器
+// 命中「另一台机器的同名设备行」——于是新机器签发到的 device token 指向了旧设备行，
+// 它上传的用量全部记在旧设备名下（跨设备汇总里旧设备虚高、新设备偏少，总量无损）。
+// 这个坑真实发生过：hp 首次 device-login 借用了 vm128 的设备行，136 个桶记到了 vm128 名下。
+//
+// 因此身份规则是：
+//   - 有 machine_id：只按 machine_id 找，找到就复用（同一台机器重登）；
+//   - 有 machine_id 但只找到「同 (platform,name) 且尚未绑定 machine_id」的历史行 → 认领它
+//     （老库升级路径，避免为同一台机器多建一行）；
+//   - 没有 machine_id（老脚本 / 手工接入）：按 (platform, device_name) 找，这是唯一可用的身份；
+//   - 都不中 → 新建；新名字若被**另一台机器**占用，就把名字改成 "hp #1a2b3c4d" 再建，
+//     **绝不顶替别人的设备行**（顶替就是归属错乱的根源）。
+//
+// 为什么重名时改名字而不是报错：设备名默认取自 hostname，重装系统 / 清掉 machine_id 文件后
+// 同一台机器会以新 machine_id + 老 hostname 回来，报错会让用户「再也登录不上」；
+// 加后缀既不丢用量，也能在设备列表里看出是两次接入（用户可以改名合并）。
+func (s *Server) deviceFor(sub, name, platform, machineID, newDeviceID string) (id, finalName string, err error) {
 	var existing string
-	err := s.db.QueryRow(`SELECT id FROM devices
-		WHERE user_id=? AND revoked_at IS NULL AND (machine_id=? OR (platform=? AND device_name=?))
-		ORDER BY created_at DESC LIMIT 1`, sub, machineID, platform, name).Scan(&existing)
-	if err == nil {
-		return existing, nil
+	if machineID != "" {
+		err = s.db.QueryRow(`SELECT id FROM devices
+			WHERE user_id=? AND revoked_at IS NULL AND machine_id=?
+			ORDER BY created_at DESC LIMIT 1`, sub, machineID).Scan(&existing)
+		if err == nil {
+			return existing, name, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return "", "", err
+		}
+		// 老库兼容：早于 machine_id 落库的设备行（machine_id 为空）可以被这台机器认领。
+		var legacyID string
+		var legacyMid sql.NullString
+		lerr := s.db.QueryRow(`SELECT id, machine_id FROM devices
+			WHERE user_id=? AND revoked_at IS NULL AND platform=? AND device_name=?
+			ORDER BY created_at DESC LIMIT 1`, sub, platform, name).Scan(&legacyID, &legacyMid)
+		if lerr == nil {
+			if !legacyMid.Valid || legacyMid.String == "" {
+				if _, uerr := s.db.Exec(`UPDATE devices SET machine_id=? WHERE id=? AND user_id=?`,
+					machineID, legacyID, sub); uerr != nil {
+					return "", "", uerr
+				}
+				return legacyID, name, nil
+			}
+			// 同名同平台但属于另一台机器：不顶替，走下面的「加后缀新建」。
+		} else if !errors.Is(lerr, sql.ErrNoRows) {
+			return "", "", lerr
+		}
+	} else {
+		err = s.db.QueryRow(`SELECT id FROM devices
+			WHERE user_id=? AND revoked_at IS NULL AND platform=? AND device_name=?
+			ORDER BY created_at DESC LIMIT 1`, sub, platform, name).Scan(&existing)
+		if err == nil {
+			return existing, name, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return "", "", err
+		}
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return "", err
+	for attempt := 0; attempt < 8; attempt++ {
+		_, ierr := s.db.Exec(`INSERT INTO devices(id,user_id,device_name,platform,machine_id,created_at) VALUES(?,?,?,?,?,?)`,
+			newDeviceID, sub, name, platform, machineID, s.nowISO())
+		if ierr == nil {
+			return newDeviceID, name, nil
+		}
+		if !isUniqueViolation(ierr) {
+			return "", "", ierr
+		}
+		// 并发下可能是另一路请求刚用同一个 machine_id 建好了行：先回查，插不进去不代表失败。
+		if machineID != "" {
+			var raced string
+			if qerr := s.db.QueryRow(`SELECT id FROM devices
+				WHERE user_id=? AND revoked_at IS NULL AND machine_id=?`, sub, machineID).Scan(&raced); qerr == nil {
+				return raced, name, nil
+			}
+		}
+		name = disambiguateName(name, machineID, attempt)
 	}
-	if _, err := s.db.Exec(`INSERT INTO devices(id,user_id,device_name,platform,machine_id,created_at) VALUES(?,?,?,?,?,?)`,
-		newDeviceID, sub, name, platform, machineID, s.nowISO()); err != nil {
-		return "", err
+	return "", "", errors.New("could not allocate a unique device name")
+}
+
+// disambiguateName 给重名的设备加一个稳定后缀："nas" → "nas #1a2b3c4d"（取 machine_id 前 8 位），
+// machine_id 缺失时退回序号。总长度按字符截到 128（devices.device_name 是人读字段，不设上限但不易太长）。
+func disambiguateName(name, machineID string, attempt int) string {
+	suffix := ""
+	if tail := shortMachineTag(machineID); tail != "" {
+		suffix = " #" + tail
 	}
-	return newDeviceID, nil
+	if attempt > 0 {
+		suffix += "-" + strconv.Itoa(attempt)
+	}
+	if suffix == "" {
+		suffix = " #" + strconv.Itoa(attempt+2)
+	}
+	return truncateRunes(name, 128-len([]rune(suffix))) + suffix
+}
+
+// shortMachineTag 取 machine_id 前 8 个字符做后缀；顺手去掉结尾的 '-'/'_'，
+// 否则 "machine-aaaa" 会变成 "…#machine-" 这种看着像截断坏了的名字。
+func shortMachineTag(machineID string) string {
+	tail := machineID
+	if len(tail) > 8 {
+		tail = tail[:8]
+	}
+	return strings.TrimRight(strings.TrimSpace(tail), "-_ ")
+}
+
+// deviceFlowIdentity 由 client_info 推导设备名与平台，与官方 device flow 一致：
+// 官方客户端发来的 client_info 是 `${os.platform()}-${os.arch()} ${os.hostname()}`
+// （如 "linux-x64 hp"），官方取其中的 hostname 当设备名、平台固定 "cli-device-flow"。
+//
+// 为什么要跟：以前这里写死成 ("Device Flow", "cli")，于是**所有**通过 device-login
+// 接入的机器在设备列表里都叫 "Device Flow"、平台都叫 "cli"——既看不出是哪台机器，
+// 又让 (platform, device_name) 这个身份对全部机器都相同（上一条注释里的归属事故就由此而来）。
+func deviceFlowIdentity(clientInfo, machineID string) (name, platform string) {
+	platform = "cli-device-flow"
+	info := strings.TrimSpace(clientInfo)
+	if m := deviceFlowHostRe.FindStringSubmatch(info); m != nil {
+		if host := strings.TrimSpace(m[1]); host != "" {
+			return truncateRunes(host, 128), platform
+		}
+	}
+	// 没有 hostname（或 client_info 为空）时退回官方的 legacy 名字，带上 machine_id 前缀尾巴，
+	// 保证同一台机器的多次登录仍然落在同一行、不同机器之间不会撞名。
+	bare := "TokenTracker CLI"
+	if info != "" {
+		bare += " (" + info + ")"
+	}
+	if machineID != "" {
+		tail := machineID
+		if len(tail) > 8 {
+			tail = tail[:8]
+		}
+		return truncateRunes(bare+" #"+tail, 128), platform
+	}
+	return truncateRunes(bare, 128), platform
+}
+
+var deviceFlowHostRe = regexp.MustCompile(`^\S+\s+(.+)$`)
+
+// truncateRunes 按字符（不是字节）截断，避免把中文/emoji 名字切坏。
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
 }
 
 // machineFor 确保 cloud_machines 里有这台机器的记录（同一 machine_id 不重复插入）。
@@ -247,11 +379,12 @@ func (s *Server) approveDeviceCode(sub, userCode string) (clientInfo string, err
 	if actualMid == "" {
 		actualMid = newID()
 	}
-	did, err := s.deviceFor(sub, "Device Flow", "cli", actualMid, newID())
+	name, platform := deviceFlowIdentity(ci.String, actualMid)
+	did, devName, err := s.deviceFor(sub, name, platform, actualMid, newID())
 	if err != nil {
 		return "", err
 	}
-	if err := s.machineFor(sub, "Device Flow", actualMid, "cli"); err != nil {
+	if err := s.machineFor(sub, devName, actualMid, platform); err != nil {
 		return "", err
 	}
 	if _, err = s.db.Exec(`INSERT INTO device_tokens(id,user_id,device_id,token_hash,created_at) VALUES(?,?,?,?,?)`,
@@ -292,7 +425,7 @@ func (s *Server) deviceIssue(w http.ResponseWriter, r *http.Request, sub string)
 		fail(w, 500, err.Error())
 		return
 	}
-	id, err := s.deviceFor(sub, b.DeviceName, platform, mid, id)
+	id, _, err := s.deviceFor(sub, b.DeviceName, platform, mid, id)
 	if err != nil {
 		fail(w, 500, err.Error())
 		return

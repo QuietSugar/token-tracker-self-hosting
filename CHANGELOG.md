@@ -3,6 +3,22 @@
 记录**本仓库自身**的变化（上游版本见 [`docs/maintainers/upstream.md`](docs/maintainers/upstream.md)）。
 只写使用者能感知的东西；内部重构与文档搬家不在此列。当前处于实验通道，未发正式版。
 
+## 2026-10-28 — 修复「用量记到别的设备名下」
+
+- **修复归属错误**：`device-login` 过去按 `machine_id OR (platform, device_name)` 判重，而所有通过
+  device flow 接入的设备行都固定叫 `Device Flow` / `cli` —— 于是**第二台机器的登录会复用第一台的设备行**，
+  它上传的用量全部记在第一台名下（账户总量没错，但跨设备汇总里一台虚高、一台偏少）。
+  现在判重只看 `machine_id`，不同机器各自建行。
+- **设备名改为 hostname**：客户端 `client_info` 是 `${os.platform()}-${os.arch()} ${os.hostname()}`，
+  服务端取 hostname 当设备名、`platform` 用官方的 `cli-device-flow`。设备列表里不再是一排同名 `Device Flow`。
+- **重名不再顶替**：两台机器 hostname 相同时，后接入的那台自动改名 `hp #1a2b3c4d` 并照常接入——
+  报错会让人「再也登录不上」，顶替会造成归属错乱，加后缀是唯一不牺牲可用性的做法。
+- **老库兼容**：没有 `machine_id` 的历史设备行会被同名机器认领并回填，不会为同一台机器多建一行。
+- **新增老数据修复工具**（已经写错的用量不会自己搬家）：
+  `go-server/scripts/device-report.sql`（只读诊断：设备用量、可疑登录、汇总对账）与
+  `go-server/scripts/device-move-usage.sh`（把用量从一台设备搬到另一台，支持时间范围、冲突时默认中止、
+  `--merge=sum` 合并、搬完打印全库总计对账）。用法见 [`docs/users/devices.md`](docs/users/devices.md#6-用量记错了设备怎么办老数据修复)。
+
 ## 2026-10-28 — 看板显示「最后同步」
 
 - 设备列表每行新增**最后同步**：`3 分钟前` / `2026-09-30` / `从未同步` 三种形态，超过 7 天淡化显示。
