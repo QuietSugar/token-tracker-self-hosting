@@ -212,6 +212,22 @@ jobs:
           cache-from: type=gha,scope=tokentracker-go
           cache-to: type=gha,mode=max,scope=tokentracker-go
 
+      # 校验"真的推上去了"的那份镜像能启动。注意：这里必须连真 PG ——
+      # SQLite 支持已移除，任何 TT_DATABASE_PATH 都会让容器直接退出。
+      - name: Validate multi-arch manifest
+        if: steps.meta.outputs.should_push == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE='${{ steps.meta.outputs.image }}'
+          TAG="$IMAGE:experimental-${{ steps.meta.outputs.short }}"
+          echo "Inspecting $TAG"
+          docker buildx imagetools inspect "$TAG" | tee /tmp/manifest.txt
+          for want in linux/amd64 linux/arm64; do
+            grep -qE "Platform:[[:space:]]+$want" /tmp/manifest.txt || { echo "::error::manifest 缺少 $want"; exit 1; }
+            echo "✓ manifest 含 $want"
+          done
+
       - name: Verify pushed image is runnable
         if: steps.meta.outputs.should_push == 'true'
         shell: bash
@@ -220,16 +236,56 @@ jobs:
           IMAGE='${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}'
           echo "Running: $IMAGE"
           docker pull "$IMAGE" >/dev/null
-          docker run -d --name tt-pushed -e TT_JWT_SECRET=smoke-secret-at-least-32-bytes-long!! \
-            -e TT_DATABASE_PATH=/tmp/tt.db -p 18082:8080 "$IMAGE" >/dev/null
+          # host 网络 → 容器里的 127.0.0.1:5432 就是 runner 上已发布的 postgres service
+          docker run -d --name tt-pushed --network host \
+            -e TT_JWT_SECRET=smoke-secret-at-least-32-bytes-long!! \
+            -e TT_DATABASE_URL='postgres://tokentracker:smoke-only-password@127.0.0.1:5432/tokentracker?sslmode=disable' \
+            -e TT_POSTGRES_SCHEMA=pushed \
+            -e TT_LISTEN_ADDR=127.0.0.1:18082 \
+            "$IMAGE" >/dev/null
           trap 'docker rm -f tt-pushed >/dev/null 2>&1 || true' EXIT
           for i in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:18082/health >/dev/null 2>&1; then break; fi
+            if [ "$(docker inspect -f '{{.State.Running}}' tt-pushed 2>/dev/null || echo false)" != "true" ]; then
+              echo "::error::容器提前退出"; docker logs tt-pushed 2>&1 | tail -40; exit 1
+            fi
             sleep 1
           done
           curl -fsS http://127.0.0.1:18082/health
           echo
-          echo "✓ 已推送镜像可正常启动"
+          docker logs tt-pushed 2>&1 | grep -q 'engine=postgres'
+          echo "✓ 已推送镜像（amd64）连真 PG 可正常启动"
+
+      # arm64 是给 NAS / 小主机的默认形态，必须证明它能启动。
+      # 在 amd64 runner 上靠 binfmt/QEMU 跑；环境不支持时只告警，不阻断发布。
+      - name: Set up QEMU (arm64 runtime check)
+        if: steps.meta.outputs.should_push == 'true'
+        continue-on-error: true
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Verify pushed image is runnable (arm64, via QEMU)
+        if: steps.meta.outputs.should_push == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull --platform linux/arm64 '${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}' >/dev/null
+          docker run -d --name tt-pushed-arm64 --platform linux/arm64 --network host \
+            -e TT_JWT_SECRET=smoke-secret-at-least-32-bytes-long!! \
+            -e TT_DATABASE_URL='postgres://tokentracker:smoke-only-password@127.0.0.1:5432/tokentracker?sslmode=disable' \
+            -e TT_POSTGRES_SCHEMA=pushed_arm64 \
+            -e TT_LISTEN_ADDR=127.0.0.1:18083 \
+            '${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}' >/dev/null
+          trap 'docker rm -f tt-pushed-arm64 >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:18083/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18083/health
+          echo
+          echo "✓ arm64 镜像在 QEMU 下可启动（真机 arm64 仍需一次人工 smoke）"
 
       - name: Attest build provenance
         if: steps.meta.outputs.should_push == 'true' && steps.build.outputs.digest != ''
