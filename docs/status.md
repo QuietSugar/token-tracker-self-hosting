@@ -28,7 +28,8 @@
 
 ## 未验证
 
-- **arm64**：CI 构建了镜像，没在真机上跑过（验收记录只有 linux/amd64）。
+- **arm64**：CI 现在会在 QEMU 下真启动一次（arm64 镜像 + 真 PG → `/health` 200），manifest 也断言了双架构；
+  但**没有在真机 arm64 上跑过**（验收记录只有 linux/amd64）。首次在 NAS / 小主机上部署时请自己 smoke 一次。
 - **大基数/长历史**：几个月的真实数据没有压测；heatmap / model-breakdown 没有分页，靠一次性全取。
 - **托管 PG**（RDS/Neon/Cloud SQL）：只在本地 PG 上验证过，`sslmode=verify-full` 的链路没跑过。
 - **Windows / macOS 服务端**：二进制是静态 CGO=0，理论上能跑，没验收。
