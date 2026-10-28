@@ -180,6 +180,38 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18081/_test/sql)" = "404"
           echo "✓ /_test/sql → 404"
 
+      # compose 示例用的是加固组合（read_only / cap_drop ALL / no-new-privileges /
+      # tmpfs /tmp / 非 root）。这几条从没被验证过，单独跑一次：任何一条不兼容
+      # 都会让真机上的 `docker compose up` 直接起不来。
+      - name: Smoke test — hardened container flags (compose parity)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name tt-hardened --network host \
+            --read-only --cap-drop=ALL --security-opt no-new-privileges:true \
+            --tmpfs /tmp:size=16m,noexec,nosuid \
+            -e TT_JWT_SECRET=smoke-secret-at-least-32-bytes-long!! \
+            -e TT_DATABASE_URL='postgres://tokentracker:smoke-only-password@127.0.0.1:5432/tokentracker?sslmode=disable' \
+            -e TT_POSTGRES_SCHEMA=hardened \
+            -e TT_LISTEN_ADDR=0.0.0.0:18084 \
+            "$SMOKE_IMAGE" >/dev/null
+          trap 'docker rm -f tt-hardened >/dev/null 2>&1 || true' EXIT
+          test "$(docker inspect -f '{{.Config.User}}' tt-hardened)" = "10001:10001"
+          echo "✓ 以非 root（10001）运行"
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18084/health >/dev/null 2>&1; then break; fi
+            if [ "$(docker inspect -f '{{.State.Running}}' tt-hardened 2>/dev/null || echo false)" != "true" ]; then
+              echo "::error::加固参数下容器提前退出"; docker logs tt-hardened 2>&1 | tail -40; exit 1
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18084/health
+          echo
+          docker logs tt-hardened 2>&1 | grep -q 'engine=postgres'
+          echo "✓ read_only + cap_drop ALL + 非 root 下能连真 PG 并服务请求"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18084/)" = "200"
+          echo "✓ 看板可访问"
+
       - name: Docker metadata summary
         shell: bash
         run: |
