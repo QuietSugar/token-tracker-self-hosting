@@ -214,8 +214,16 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/
 
 设备归属曾经出过一次问题：`device-login` 的判重条件里带了一条「同名同平台也算同一台设备」，
 于是**新机器会借用已有设备行**——它上传的用量全部记在旧机器名下（账户总量没错，只是跨设备汇总里
-旧机器虚高、新机器偏少）。当前版本已修复（见 [`CHANGELOG`](../../CHANGELOG.md)），但**已经写错的历史行不会自己搬家**，
-需要按下面两步处理。
+旧机器虚高、新机器偏少）。当前版本已修复（见 [`CHANGELOG`](../../CHANGELOG.md)），但**已经写错的历史行不会自己搬家**。
+
+修历史数据有两条路，**先看客户端本地还有没有队列**：
+
+| 情况 | 走哪条路 | 为什么 |
+|---|---|---|
+| `~/.tokentracker/tracker/queue.jsonl` 还在（几乎总是如此） | **§6.2 删掉重放**（推荐） | 队列是 append-only 的全量小时桶，重放一遍就是原样重建，归属精确、无猜测 |
+| 队列丢了 / 换了机器没带过来 | §6.3 按范围搬迁 | 只能按时间窗近似搬，可能带上一点别台机器的量 |
+
+两条路都先做 §6.1 的诊断，记下**全库总计**，事后对账用。
 
 ### 6.1 先诊断（只读）
 
@@ -225,15 +233,88 @@ psql "$TT_DATABASE_URL" -f go-server/scripts/device-report.sql
 
 四段输出，按需看：
 
-1. 每台设备的 token 数、桶数、总量、时间范围 —— 数量明显不合理的那台就是受害者/受益者。
+1. 每台设备的 token 数、桶数、总量、时间范围 —— 数量明显不合理的那台就是受害者 / 受益者。
 2. **可疑登录**：`device_codes` 里「批准的 `machine_id`」与「落到的设备行的 `machine_id`」不一致的记录。
-   有输出 = 这台机器的 token 指向了别人的设备行，就是本节的场景。
-3. 同一 `(hour_start, source, model)` 同时出现在多台设备下 —— 搬迁时会撞主键，见 6.2 的 `--merge`。
-4. 全库总计 —— 记下这个数字，搬迁前后对比，确认没丢。
+   有输出 = 那台机器的 token 指向了别人的设备行，就是本节的场景。
+3. 同一 `(hour_start, source, model)` 同时出现在多台设备下 —— 只用 §6.3 时才关心（搬迁会撞主键）。
+4. 全库总计 —— **记下这个数字**。
 
 非默认 schema 时加 `PGOPTIONS='-c search_path=<schema>'`，或先 `SET search_path`。
 
-### 6.2 再搬迁
+### 6.2 路径 A：删掉重放（推荐）
+
+思路：被污染的那一行里混着多台机器的量，单看数据库分不开；但每台机器**自己**的
+`queue.jsonl` 里有完整答案。所以不猜、不搬，直接把那一行的量删掉，让每台机器把自己的队列重放回来。
+
+**第 1 步：升级服务端并让每台机器重新 `device-login`。**
+新版本会按 `machine_id` 判重、用 hostname 命名，所以：
+- 机器 **A**（原设备行的 `machine_id` 就是它）**继续复用原行**，只是名字还叫 `Device Flow`；
+- 机器 **B** 拿到一个**全新设备行**（名字就是它的 hostname，如 `hp`）。
+
+```sh
+# 在每台机器上各跑一次
+tracker device-login --base-url https://tt.lan:8443 --anon-key "$ANON"
+```
+
+注意：机器 B 在旧行上还留着一个**上次登录签发的** device token（仍然有效）。重新登录后客户端
+`config.json` 里的 `deviceToken` 已换成新行的那一个，正常使用不会碰旧 token；第 3 步重放时务必用
+**新** token，否则又写回旧行了。
+
+**第 2 步：删掉原设备行的用量。**（默认只预览；`--apply` 才会写入，并且**先建备份表**）
+
+```sh
+# 预览：这条设备行上有多少桶 / 多少量，删完全库应剩多少
+./go-server/scripts/device-purge-usage.sh --dsn "$TT_DATABASE_URL" --device "Device Flow"
+
+# 备份 + 删除（备份表 hourly_backup_<时间戳>，确认重放无误后再 DROP）
+./go-server/scripts/device-purge-usage.sh --dsn "$TT_DATABASE_URL" --device "Device Flow" --apply
+```
+
+删的是**那一整行设备**的用量，不是某段时间——因为两台机器都会重放自己的队列，等于原样重建。
+脚本同时会清空 `usage_cache`（聚合缓存按 user 缓存，服务端 60 秒内会重建）。
+
+手动等价物（不想用脚本时）：
+
+```sql
+BEGIN;
+CREATE TABLE hourly_backup_20261028 AS
+  SELECT h.* FROM hourly h JOIN devices d ON d.id = h.device_id WHERE d.device_name = 'Device Flow';
+DELETE FROM hourly h USING devices d WHERE h.device_id = d.id AND d.device_name = 'Device Flow';
+DELETE FROM usage_cache;
+COMMIT;
+```
+
+**第 3 步：每台机器把自己的队列重放回来。**
+
+原生做法（客户端自己重传，最省事）：重新 `init` 一次，客户端会检测到实例变化、把
+`queue.state.json` 的 `offset` 归零（上游 `src/commands/init.js` → `resetInstanceState`），
+下一次 `sync` 就从文件头重传。
+
+```sh
+# 在每台机器上
+tracker init --base-url https://tt.lan:8443 --anon-key "$ANON"
+tracker sync
+```
+
+不想重跑 `init` 的话，把进度文件移走效果一样（`mv ~/.tokentracker/tracker/queue.state.json{,.bak}` 后再 `sync`）。
+
+`queue.state.json` 不在预期位置、或客户端已卸载，就用仓库里的脚本代劳（它可以指定队列文件与设备 token）：
+
+```sh
+# DTOK = 这台机器重新 device-login 后 config.json 里的 deviceToken（或 --jwt 自动签一个）
+./scripts/replay-queue.py --base https://tt.lan:8443 --device-token "$DTOK" --dry-run
+./scripts/replay-queue.py --base https://tt.lan:8443 --device-token "$DTOK"
+```
+
+**第 4 步：核对。**
+- 看板每台设备的量应等于「那台机器的真实用量」，全库总计应与 §6.1 记下的数字**完全一致**；
+- 再跑一次 §6.1 的第二段「可疑登录」：**历史**那几条误批准的记录仍然会列出来（那是发生过的事实，
+  不要为了好看去删），但应该是「最老的那一条」，且不再有新记录挂到别人的设备行上；
+- 最后在看板把老行改成机器 A 的真名（`Device Flow` → `vm128`）。
+
+> 重放是幂等的：同一批桶再传一次是整行替换，不会翻倍。所以第 3 步可以放心重跑。
+
+### 6.3 路径 B：按范围搬迁（本地队列已丢失时）
 
 ```sh
 # 试运行：只统计，不写库
@@ -246,12 +327,11 @@ psql "$TT_DATABASE_URL" -f go-server/scripts/device-report.sql
 
 - `--from` / `--to` 用**设备名**（唯一时）或**设备 id**；重名时必须用 id，脚本会列出来让你选。
 - 只搬 `hourly`（用量）。设备行、token、机器名都不动 —— 那些用 `device-login` 重签或看板改名处理。
+- **它按时间窗搬，不认机器**：那段时间内别的机器若也在上传，会一起被搬走。挑一个「只有目标机器在跑」的窗口。
 - 目标设备已有同一 `(hour_start, source, model)` 时默认**中止并退出码 2**，先让你人工核对；
   确认是「同一批数据的上报」才用 `--merge=sum`（数值相加后合并）。
 - 搬完会打印全库总计。**与搬前一致**即说明没有丢数据。
-- 改完库后聚合缓存的失效是按用户清理的，脚本里已包含；若看板仍显示旧数字，刷新页面即可（服务端有 60 秒缓存）。
-
-设备名不用手改：确认哪台是哪台之后，在看板里点「改名」（见 [`dashboard.md`](dashboard.md)）即可。
+- 聚合缓存按用户清理，脚本里已包含；若看板仍显示旧数字，刷新页面即可。
 
 ---
 
@@ -263,5 +343,6 @@ psql "$TT_DATABASE_URL" -f go-server/scripts/device-report.sql
 ./scripts/approve-device.sh FQYG-CFWL     # jwt 模式下批准设备
 ./scripts/check-oauth.sh                  # 自检：登录 → 轮换 → 旧 token 拒绝 → 撤销 → 读 account
 ./scripts/device-report.sql               # 只读诊断：设备用量 / 可疑登录 / 汇总对账
-./scripts/device-move-usage.sh            # 把误归属的用量从一个设备搬到另一个设备
+./scripts/device-purge-usage.sh           # 删掉一条设备行的用量（带备份），配合「删掉重放」
+./scripts/device-move-usage.sh            # 把误归属的用量从一个设备搬到另一个设备（队列丢失时）
 ```
