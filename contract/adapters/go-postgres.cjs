@@ -18,6 +18,7 @@
  */
 "use strict";
 const { spawn } = require("node:child_process");
+const net = require("node:net");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -143,11 +144,42 @@ class GoPostgresAdapter {
   }
 }
 
+// 取一个**当前空闲**的端口。
+//
+// 以前是 `32000 + random(15000)`：随机但不探测占用。CI 用 CONTRACT_CONCURRENCY=2
+// 并发跑两个 case，两个 Go 进程有可能撞到同一个端口 —— 第二个 bind 失败直接退出，
+// 本 case 变成 runnerError，verify 以退出码 2 收场（看起来像"契约挂了"，其实是端口撞了）。
+// 改成让内核分配（listen(0)）再关掉：虽然关掉到 Go 进程 bind 之间仍有极小窗口，
+// 但碰撞概率从 1/15000 降到接近 0，且 start() 里还有重试兜底。
 function freePort() {
-  return 32000 + Math.floor(Math.random() * 15000);
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.unref();
+    srv.on("error", reject);
+    srv.listen(0, "127.0.0.1", () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
 }
 
 async function start(opts = {}) {
+  // 端口偶发被占（或 CI 机器慢导致 20s 内没就绪）时重试，不要把一个环境抖动
+  // 变成"契约失败"。真正的实现错误会连续失败 3 次，重试不会掩盖它。
+  let lastErr;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return await startOnce(opts);
+    } catch (e) {
+      lastErr = e;
+      if (!/提前退出|未就绪/.test(e.message)) throw e;      // 编译缺失/无 PG 等不重试
+      if (attempt < 3) await new Promise(r => setTimeout(r, 250));
+    }
+  }
+  throw lastErr;
+}
+
+async function startOnce(opts = {}) {
   if (!fs.existsSync(GO_BIN)) {
     throw Error(`Go 服务未编译: ${GO_BIN}\n运行: cd go-server && go build -o bin/tokentracker-server ./cmd/server`);
   }
@@ -157,7 +189,7 @@ async function start(opts = {}) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tt-go-postgres-"));
   // 每个 case 一个独立 schema：用例之间互不污染，退出时 DROP SCHEMA CASCADE。
   const schema = "tt_case_" + crypto.randomBytes(6).toString("hex");
-  const port = freePort();
+  const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
 
   const proc = spawn(GO_BIN, [], {
@@ -178,7 +210,8 @@ async function start(opts = {}) {
   let stderr = "";
   proc.stderr.on("data", d => { stderr += d; });
 
-  const deadline = Date.now() + 20000;
+  // 45s：CI 上同时有两个 Go 进程 + 各自建 schema（含 15 步安装），慢机器 20s 会不够。
+  const deadline = Date.now() + 45000;
   let ready = false;
   while (Date.now() < deadline) {
     try {
@@ -192,7 +225,7 @@ async function start(opts = {}) {
   }
   if (!ready) {
     proc.kill("SIGKILL");
-    throw Error(`Go 服务 20s 内未就绪: ${stderr.slice(-600)}`);
+    throw Error(`Go 服务 45s 内未就绪: ${stderr.slice(-600)}`);
   }
   return new GoPostgresAdapter(base, proc, tmpDir, opts.seed, schema);
 }
