@@ -65,8 +65,13 @@ popover     →  GET  /functions/tokentracker-account-*  Authorization: Bearer <
 只实现最后一层是不够的：第 ② 步没有 `/api/auth/*` 就直接失败，客户端会**静默降级**成"仅本机"，
 响应头里是 `X-TokenTracker-Account-View: 0`。这是补上这一层的唯一理由 —— 不是要做一个认证系统。
 
-实现的端点：`users`（注册）、`sessions`（登录）、`refresh`、`logout`、`sessions/current`、`sessions`（列表）、
-`profiles/current`、`public-config`、`owner`。**没有**第三方 OAuth、邮件验证、找回密码。
+实现的端点：`users`（注册）、`sessions`（登录）、`refresh`（轮换）、`logout`、`sessions/current`、
+`sessions`（列表）、`profiles/current`、`public-config`、`owner`。**没有**第三方 OAuth、邮件验证、找回密码。
+
+轮换的记账方式：`auth_sessions` 每签发一份 token 一行；轮换时旧行写 `revoked_at` + `rotated_at`，
+新行用 `parent_id` 指回旧行。`rotated_at` 是宽限期的唯一依据（`revoked_at` 也可能来自登出或
+泄露处置，那些必须立即失效）；`parent_id` 让「拿已被换掉的旧 token 登出」能顺着链撤掉全部接替者。
+代价：并发 mint 会多签几行会话（各自的 90 天有效期），`/api/auth/sessions` 列表里能看到。
 
 ### 3.1 cookie 约定（必须和客户端逐字段一致）
 
@@ -84,7 +89,7 @@ popover     →  GET  /functions/tokentracker-account-*  Authorization: Bearer <
 |---|---|---|
 | 密码 | PBKDF2-HMAC-SHA256，12 万轮，16 字节随机盐，`pbkdf2_sha256$120000$salt$hash` | 标准库就够，不引第三方依赖 |
 | refresh token | 只存 SHA-256；轮换时旧的立即 `revoked_at` | 库被读走也拿不到可用 token |
-| 重放旧 refresh token | 401 `REFRESH_TOKEN_REUSED`，**默认不牵连其他会话** | 并发刷新（popover 与 dashboard 各持一份 relay token）比泄露常见得多，一刀切会让人莫名登出；要严格就 `TT_AUTH_REVOKE_ON_REUSE=true` |
+| 重放旧 refresh token | **轮换后 60 秒内**再用仍可换一份新会话（`X-TokenTracker-Refresh: grace`）；超过宽限期 → 401 `REFRESH_TOKEN_REUSED` + `X-TokenTracker-Auth-Error: refresh_token_reused`，**不牵连其他会话** | 客户端对 refresh 没有 single-flight，webview 里多个组件并发 mint 时后到的会命中已失效的旧 token（issue #38 的真实故障：页面卡在「登录状态需要刷新」）。宽限窗口覆盖并发抖动与 relay 每 60s 的节拍；登出与被判泄露的撤销**不走**宽限。要零宽限就 `TT_AUTH_REVOKE_ON_REUSE=true` |
 | CSRF | browser 模式必须带 `X-CSRF-Token` 且与该会话匹配（常量时间比较） | cookie 会随跨站请求自动带上；mobile 模式没有 cookie，免 CSRF |
 | 账号枚举 | 登录失败统一 `Invalid email or password` | 不区分"不存在"与"密码错" |
 | 注册 | 有 owner 后默认关闭（`TT_AUTH_ALLOW_SIGNUP=false`） | 定位是"自己部署自己用" |

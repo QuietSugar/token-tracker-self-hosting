@@ -211,7 +211,7 @@ func (s *Server) authSignUp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.respondWithSession(w, r, uid, "browser")
+	s.respondWithSession(w, r, uid, "browser", "")
 }
 
 func (s *Server) authSignIn(w http.ResponseWriter, r *http.Request) {
@@ -231,12 +231,13 @@ func (s *Server) authSignIn(w http.ResponseWriter, r *http.Request) {
 		authFail(w, 401, "INVALID_CREDENTIALS", "Invalid email or password")
 		return
 	}
-	s.respondWithSession(w, r, uid, "browser")
+	s.respondWithSession(w, r, uid, "browser", "")
 }
 
 // respondWithSession 签发一对 token 并回写 cookie（browser 模式）。
-func (s *Server) respondWithSession(w http.ResponseWriter, r *http.Request, uid, client string) {
-	refresh, csrf, err := s.newSession(uid, client)
+// parent 是「这一份换掉的是哪一行」，登入时为 ""，轮换/宽限期为被换掉行的 id。
+func (s *Server) respondWithSession(w http.ResponseWriter, r *http.Request, uid, client, parent string) {
+	refresh, csrf, err := s.newSession(uid, client, parent)
 	if err != nil {
 		authFail(w, 500, "INTERNAL", err.Error())
 		return
@@ -282,9 +283,9 @@ func (s *Server) authRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var id, uid, csrfHash, expiresAt string
-	var revoked sql.NullString
-	err := s.db.QueryRow(`SELECT id,user_id,csrf_hash,expires_at,revoked_at FROM auth_sessions WHERE token_hash=?`,
-		tokenHash(token)).Scan(&id, &uid, &csrfHash, &expiresAt, &revoked)
+	var revoked, rotatedAt sql.NullString
+	err := s.db.QueryRow(`SELECT id,user_id,csrf_hash,expires_at,revoked_at,rotated_at FROM auth_sessions WHERE token_hash=?`,
+		tokenHash(token)).Scan(&id, &uid, &csrfHash, &expiresAt, &revoked, &rotatedAt)
 	if err != nil {
 		authFail(w, 401, "AUTH_UNAUTHORIZED", "Invalid refresh token")
 		return
@@ -299,7 +300,38 @@ func (s *Server) authRefresh(w http.ResponseWriter, r *http.Request) {
 		if s.authCfg.revokeOnReuse {
 			_, _ = s.db.Exec(`UPDATE auth_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL`,
 				s.nowISO(), uid)
+			authFail(w, 401, "REFRESH_TOKEN_REUSED", "Refresh token was already rotated or revoked")
+			return
 		}
+		// 宽限期：因**轮换**而失效的 token，在 refreshGrace 之内再用一次不算重放。
+		//
+		// 为什么需要（真实故障，issue #38 后续实测）：桌面 GUI 的 webview 里多个组件
+		// 并发拿同一份 refresh token 去 mint，轮换是"旧的立刻失效、发新的"，先到的那个
+		// 成功、后到的命中 revoked_at → 401 → 前端当成鉴权失效 → 重试 → 再撞，页面卡在
+		// 「登录状态需要刷新」并循环。客户端没有做 single-flight，这一点我们改不了。
+		//
+		// 三种失效必须区分开，所以只看 rotated_at 而不看 revoked_at：
+		//   - 轮换（这里）：宽限期内再签一份新会话，等价于"两个组件各拿一份"；
+		//   - 登出：立即失效，不给宽限；
+		//   - 泄露处置（revokeOnReuse=true）：走上面的硬拒绝。
+		//
+		// 代价：这段时间内一份被偷走的旧 token 仍可换到新会话。定位是局域网单实例自用，
+		// 且只要 rotate 时不留原文（本服务只存 SHA-256）就够；要零宽限请开严格模式。
+		if rotatedAt.Valid && s.withinRefreshGrace(rotatedAt.String) {
+			if client == "browser" {
+				got := r.Header.Get("X-CSRF-Token")
+				if got == "" || subtle.ConstantTimeCompare([]byte(tokenHash(got)), []byte(csrfHash)) != 1 {
+					authFail(w, 403, "INVALID_CSRF_TOKEN", "Missing or invalid CSRF token")
+					return
+				}
+			}
+			w.Header().Set("X-TokenTracker-Refresh", "grace")
+			s.respondWithSession(w, r, uid, client, id)
+			return
+		}
+		// 过期太久的旧 token：明确告诉调用方"重试没用"。
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-TokenTracker-Auth-Error", "refresh_token_reused")
 		authFail(w, 401, "REFRESH_TOKEN_REUSED", "Refresh token was already rotated or revoked")
 		return
 	}
@@ -314,12 +346,13 @@ func (s *Server) authRefresh(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// 轮换：旧的立即失效，新的接替（client 类型保持不变）。
-	if _, err := s.db.Exec(`UPDATE auth_sessions SET revoked_at=? WHERE id=? AND revoked_at IS NULL`, s.nowISO(), id); err != nil {
+	// 轮换：旧的立即失效（同时记 rotated_at，供宽限期判定），新的接替（client 类型不变）。
+	if _, err := s.db.Exec(`UPDATE auth_sessions SET revoked_at=?, rotated_at=? WHERE id=? AND revoked_at IS NULL`,
+		s.nowISO(), s.nowISO(), id); err != nil {
 		authFail(w, 500, "INTERNAL", err.Error())
 		return
 	}
-	s.respondWithSession(w, r, uid, client)
+	s.respondWithSession(w, r, uid, client, id)
 }
 
 func (s *Server) authLogout(w http.ResponseWriter, r *http.Request) {
@@ -330,8 +363,24 @@ func (s *Server) authLogout(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&b)
 	token := firstNonEmpty(b.RefreshToken, b.RefreshCamel, cookieValue(r, refreshCookieName))
 	if token != "" {
+		h := tokenHash(token)
+		// 先撤销这一行；如果它已经被轮换掉（客户端手里是旧 token，比如并发 mint 里
+		// 没抢到"先到"的那个），再顺着 parent_id 撤销接替者，否则点了登出等于没登出。
 		_, _ = s.db.Exec(`UPDATE auth_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL`,
-			s.nowISO(), tokenHash(token))
+			s.nowISO(), h)
+		// 顺着 parent_id 递归撤掉整条接替链（并发 mint 下可能不止一层）。
+		// rotated_at 一并清空：它与 revoked_at 一起表示"这是轮换留下的旧行"，
+		// 留着就会让宽限期把一次明确的登出又变回可用（见 authRefresh 的宽限期分支）。
+		const chain = `WITH RECURSIVE chain AS (
+			SELECT id FROM auth_sessions WHERE token_hash=?
+			UNION ALL
+			SELECT c.id FROM auth_sessions c JOIN chain ON c.parent_id = chain.id
+		)`
+		// 两条语句而不是一条：链上中间那些行往往已经被轮换撤销过，
+		// 一条带 revoked_at IS NULL 的 UPDATE 会跳过它们、把 rotated_at 留下。
+		_, _ = s.db.Exec(chain+` UPDATE auth_sessions SET rotated_at=NULL WHERE id IN (SELECT id FROM chain)`, h)
+		_, _ = s.db.Exec(chain+` UPDATE auth_sessions SET revoked_at=?
+			WHERE revoked_at IS NULL AND id IN (SELECT id FROM chain)`, h, s.nowISO())
 	}
 	s.clearAuthCookies(w, r)
 	writeJSON(w, 200, map[string]any{"success": true})
@@ -413,13 +462,17 @@ func (s *Server) authPublicConfig(w http.ResponseWriter, r *http.Request) {
 // ---------- 内部工具 ----------
 
 // newSession 落库一条 refresh 会话（轮换时调用方负责先撤销旧行）。
-func (s *Server) newSession(uid, client string) (refresh, csrf string, err error) {
+func (s *Server) newSession(uid, client, parent string) (refresh, csrf string, err error) {
 	refresh = randomHex(32)
 	csrf = randomHex(16)
-	_, err = s.db.Exec(`INSERT INTO auth_sessions(id,user_id,token_hash,csrf_hash,client,created_at,expires_at)
-		VALUES(?,?,?,?,?,?,?)`,
+	var parentCol any
+	if parent != "" {
+		parentCol = parent // 登录签发时留 NULL，避免写一堆无意义的空串
+	}
+	_, err = s.db.Exec(`INSERT INTO auth_sessions(id,user_id,token_hash,csrf_hash,client,created_at,expires_at,parent_id)
+		VALUES(?,?,?,?,?,?,?,?)`,
 		newID(), uid, tokenHash(refresh), tokenHash(csrf), client,
-		s.nowISO(), s.now.Add(s.authCfg.refreshTTL).UTC().Format(time.RFC3339))
+		s.nowISO(), s.now.Add(s.authCfg.refreshTTL).UTC().Format(time.RFC3339), parentCol)
 	return refresh, csrf, err
 }
 
@@ -498,6 +551,25 @@ func urlQueryUnescape(s string) (string, error) {
 }
 
 // authFail 统一错误形状：InsForge SDK 读 `error` + `code`，据此决定是否触发刷新。
+// refreshGrace 是「因轮换失效的 refresh token 仍可再换一次」的宽限窗口。
+//
+// 60 秒足够覆盖客户端里多个组件并发 mint 的抖动（它们几乎同时发出），
+// 也覆盖 relay 每 60s 轮换一次的节拍；再长就把轮换的意义稀释掉了。
+const refreshGrace = 60 * time.Second
+
+// withinRefreshGrace 判断 rotated_at 是否落在宽限期内。时间戳是服务端自己写的 RFC3339，
+// 解析失败按「不在宽限期」处理（宁可拒绝，也不要因为脏数据放行）。
+func (s *Server) withinRefreshGrace(rotatedAt string) bool {
+	t, err := time.Parse(time.RFC3339Nano, rotatedAt)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339, rotatedAt)
+		if err != nil {
+			return false
+		}
+	}
+	return s.now.Sub(t) >= 0 && s.now.Sub(t) <= refreshGrace
+}
+
 func authFail(w http.ResponseWriter, status int, code, msg string) {
 	writeJSON(w, status, map[string]any{"error": msg, "code": code, "statusCode": status, "message": msg})
 }
