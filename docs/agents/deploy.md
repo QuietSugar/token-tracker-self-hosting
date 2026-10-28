@@ -209,6 +209,9 @@ proxy_pass http://127.0.0.1:8080;
 - `TT_DASHBOARD_URL` **默认留空**，让服务端按请求的 Host + `X-Forwarded-Proto` 推导设备授权页地址。
   只有反代把 Host 改得面目全非时才显式设置成与客户端 `base_url` 完全一致。
 - nginx 的 `client_max_body_size` 至少 `2m`（上传单次 body 上限 1 MiB）。
+- **不要自己给 `OPTIONS` 返回 204**：服务端已在 `/functions/*`、`/api/selfhost/*`、`/api/auth/*`
+  的鉴权之前放行预检（2026-10-28 修复）。旧版本才需要在反代层绕（`if ($request_method = OPTIONS) { return 204; }`），
+  升级后那段配置可以删掉——留着反而会盖掉服务端按端点设置的 `Access-Control-Allow-Headers`。
 
 **验证门 C1** — 从**客户端机器**上：
 

@@ -23,6 +23,21 @@ func (s *Server) functions(w http.ResponseWriter, r *http.Request) {
 	}
 	applyCORS(w, slug)
 
+	// CORS 预检必须在鉴权之前短路。
+	//
+	// 浏览器对带 `Authorization` 头的跨域请求**一定**先发 OPTIONS 预检；预检若返回 401，
+	// 真正的 GET/POST 根本不会发出。官方桌面 GUI（Tauri/WebView2）的 webview 就是直连
+	// base_url 调 /functions/* 的，此前预检被 s.auth() 拦成 401 → GUI 表现为
+	// 「连接中断 / 机器列表不显示」。CLI 经 relay（Node，非浏览器）不受影响，
+	// 契约测试也不发预检，所以这个洞一直没被发现。
+	//
+	// 与 /api/auth/* 入口（authAPI）保持一致：返回 204 且保留上面按 slug 设好的 CORS 头。
+	// 预检不带凭据，这里不做任何鉴权——真正的请求仍然照常校验 JWT。
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	// 公开入口（无需 JWT）
 	public := slug == "tokentracker-device-flow-authorize" || slug == "tokentracker-device-flow-poll"
 	// ingest 使用 device token（SHA-256 hash），不是 JWT；由 handler 自己校验。

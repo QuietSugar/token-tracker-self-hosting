@@ -88,7 +88,8 @@ popover     →  GET  /functions/tokentracker-account-*  Authorization: Bearer <
 | CSRF | browser 模式必须带 `X-CSRF-Token` 且与该会话匹配（常量时间比较） | cookie 会随跨站请求自动带上；mobile 模式没有 cookie，免 CSRF |
 | 账号枚举 | 登录失败统一 `Invalid email or password` | 不区分"不存在"与"密码错" |
 | 注册 | 有 owner 后默认关闭（`TT_AUTH_ALLOW_SIGNUP=false`） | 定位是"自己部署自己用" |
-| CORS | `/api/auth/*` 回显 Origin + `Allow-Credentials: true`；可用 `TT_AUTH_ALLOWED_ORIGINS` 收紧 | 本地 CLI（`127.0.0.1:7680`）与自托管域名通常不同源；带 cookie 时不能用 `*` |
+| CORS | `/api/auth/*` 回显 Origin + `Allow-Credentials: true`；可用 `TT_AUTH_ALLOWED_ORIGINS` 收紧。`/functions/*` 与 `/api/selfhost/*` 固定 `*` + 各 slug 的头集合 | 本地 CLI（`127.0.0.1:7680`）与自托管域名通常不同源；带 cookie 时不能用 `*` |
+| 预检 | 所有带 CORS 的入口在鉴权**之前**对 `OPTIONS` 回 204（`/api/auth/*`、`/functions/*`、`/api/selfhost/*`） | 浏览器对带 `Authorization` 的跨域请求必发预检；预检返回 401 会让真请求永远发不出去（官方桌面 GUI 直连场景就是这样挂的） |
 
 **不做的事**：限速、爆破防护、审计日志、异地登录检测。项目定位是局域网单实例自用，
 这些在公网才有价值；真暴露到公网请在前面加一层网关。
