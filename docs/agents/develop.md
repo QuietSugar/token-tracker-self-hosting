@@ -31,7 +31,7 @@ go-server/           运行时
   internal/app/      HTTP 层：functions.go 分发表、oauth.go、owner.go、devices.go、ui.go、web/
   internal/store/    PG 层：placeholders.go / db.go / schema.go / checksums.go
   scripts/           issue-token.sh / approve-device.sh / import-usage.py / replay-queue.py / test-with-pg.sh
-                     device-report.sql / device-move-usage.sh（设备归属诊断与老数据搬迁）
+                     device-report.sql / device-purge-usage.sh / device-move-usage.sh（设备归属诊断与老数据修复）
 docker/              工件镜像 CLI（不是运行时）
 .github/workflows/   verify / build-image / contract / go-server / build-go-image
 ```
