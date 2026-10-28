@@ -160,7 +160,7 @@ server {
 | `TT_AUTH_ALLOW_SIGNUP` | `false` | 已有 owner 后是否允许 `POST /api/auth/users` 自助注册。 |
 | `TT_AUTH_ALLOWED_ORIGINS` | 空 = 回显任意 Origin | `/api/auth/*` 允许的跨域来源（逗号分隔）。 |
 | `TT_AUTH_COOKIE_SECURE` | `auto` | cookie 的 `Secure`：直连时依据 TLS，经反向代理时依据 `X-Forwarded-Proto`。 |
-| `TT_AUTH_REVOKE_ON_REUSE` | `false` | 旧 refresh token 被重放时是否撤销该用户的全部会话（默认仅拒绝该请求，避免并发刷新造成误伤）。 |
+| `TT_AUTH_REVOKE_ON_REUSE` | `false` | 已被轮换的 refresh token 再次出现时是否撤销该用户的全部会话。默认关闭：轮换后 60 秒内的再用按并发刷新处理（正常签发），超出才拒绝，避免多个客户端组件同时刷新时被误判成令牌泄露。 |
 | `TT_POSTGRES_SCHEMA` | 默认 search_path | 将表创建在指定 schema（多实例共库 / 测试隔离）。 |
 | `TT_POSTGRES_SCHEMA_EPHEMERAL` | `false` | 退出时执行 `DROP SCHEMA … CASCADE`。**仅用于测试。** |
 | `TT_ACCESS_LOG` | `false` | 每个请求输出一行访问日志：`access: GET /path 200 auth=yes origin=-`。 |

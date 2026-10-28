@@ -3,6 +3,21 @@
 记录**本仓库自身**的变化（上游版本见 [`docs/maintainers/upstream.md`](docs/maintainers/upstream.md)）。
 只写使用者能感知的东西；内部重构与文档搬家不在此列。当前处于实验通道，未发正式版。
 
+## 2026-10-28 — 并发刷新不再把界面锁进「登录状态需要刷新」
+
+- **refresh token 轮换加了 60 秒宽限期**：桌面 GUI 的 webview 里多个组件会**同时**拿同一份
+  refresh token 去换新 token；轮换是「旧的立刻失效」，先到的成功、后到的 401，前端把 401 当成
+  鉴权失效并重试，于是「云服务 / 会员状态」页卡在 `cloud.error.auth` 无限重试。
+  现在**因轮换而失效的旧 token 在 60 秒内再用仍可换到一份新会话**（响应头 `X-TokenTracker-Refresh: grace`），
+  客户端拿到哪一份都能用。
+- **登出仍然立即生效**：用一份「已经被换掉的旧 token」登出时，会顺着接替链把并发签发出来的
+  会话一并撤销（此前这种情况等于登出没生效）。登出不走宽限期。
+- **过期太久的旧 token 仍按原样拒绝**（`401 REFRESH_TOKEN_REUSED`），并带上
+  `X-TokenTracker-Auth-Error: refresh_token_reused`，让客户端能区分「重试无用，需要重新登录」。
+- **严格模式不变**：`TT_AUTH_REVOKE_ON_REUSE=true` 时一次重放即拒绝并撤销该用户全部会话，不给宽限。
+- 数据库：新增 additive step 3（`auth_sessions.rotated_at`、`auth_sessions.parent_id`）。
+  老实例升级时启动自动补列，无需手工迁移，也不影响已有会话。
+
 ## 2026-10-28 — 修复 CORS 预检被 401 拦死（官方桌面 GUI 连不上）
 
 - **`/functions/*` 的 CORS 预检（`OPTIONS`）现在返回 204 并保留该端点的 CORS 头**，

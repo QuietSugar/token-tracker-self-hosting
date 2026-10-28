@@ -44,12 +44,13 @@ go-server/internal/store/
 
 ```go
 var additiveSteps = []struct{ Version int; Name, SQL string }{
-    {1, "auth-sessions", `CREATE TABLE IF NOT EXISTS …`},
-    {2, "auth-owner",    `CREATE TABLE IF NOT EXISTS …`},
+    {1, "auth-sessions",     `CREATE TABLE IF NOT EXISTS …`},
+    {2, "auth-owner",        `CREATE TABLE IF NOT EXISTS …`},
+    {3, "auth-refresh-grace", `ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS rotated_at TEXT; …parent_id TEXT`},
 }
 ```
 
-- 每个 step 只做 `CREATE … IF NOT EXISTS` 这类**可重放**的加法，单独记一行 `schema_additions(version, name, checksum)`。
+- 每个 step 只做 `CREATE … IF NOT EXISTS` / `ALTER … ADD COLUMN IF NOT EXISTS` 这类**可重放**的加法，单独记一行 `schema_additions(version, name, checksum)`。
 - 老实例升级只跑新 step，新实例全量跑一遍，两者终态一致。
 - **step 一经发布永不修改**：改 = 新的 step。checksum 漂移视为篡改，拒绝启动。
 

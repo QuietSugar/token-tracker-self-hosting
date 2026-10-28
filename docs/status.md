@@ -18,6 +18,7 @@
 | 时区（`tz` / `tz_offset_minutes`）与 heatmap `format=compact` | 与官方模块对拍的回归用例 |
 | 设备维度：按设备汇总、`device_id` 过滤、重命名、暂停/恢复 | 同上 |
 | CORS 预检（`OPTIONS /functions/*`、`/api/selfhost/*`）返回 204 + 该端点的 CORS 头 | 单测（billing/account/ingest/device-flow 各 slug 的头集合逐一断言，且预检放行后真请求仍 401）+ 实跑 curl 复现命令 |
+| 并发刷新（多个组件同时用同一份 refresh token mint） | 单测：宽限期内 200 + `X-TokenTracker-Refresh: grace`、两份新 token 都可用、超期 401 + `X-TokenTracker-Auth-Error`；实跑 6 并发同一 token 全 200，用旧 token 登出后 6 份接替者全部 401 |
 | 内建看板（`GET /`），用量只读 | 单测 + 实跑（无外部请求、CSP 白名单） |
 | 看板内重命名设备（同步 `devices` 与 `cloud_machines`） | 单测 + 实跑（重名 409、空名 400）+ jsdom 交互验证 |
 | device token 长期有效（无 TTL，只有撤销能失效） | 单测：七年前签发的 token 仍可上传；并断言 `device_tokens` 表里不存在过期列 |

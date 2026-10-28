@@ -284,6 +284,15 @@ CREATE TABLE IF NOT EXISTS auth_owner (
   created_at TEXT NOT NULL
 );
 `},
+	{3, "auth-refresh-grace", `
+-- 轮换标记：只有「因轮换而失效」的 refresh token 才能走宽限期（见 oauth.go authRefresh）。
+-- 不能只看 revoked_at —— 登出与被判泄露的连锁撤销也写 revoked_at，那些必须立即失效。
+-- 用独立列而不是改第 1 步：additive step 一经发布永不修改（见 schema_additions 的约定）。
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS rotated_at TEXT;
+-- 接替关系：轮换/宽限期签发的新行记住它换掉的那一行。
+-- 用处只有一个 —— 拿"已经被换掉的旧 token"来登出时，连带撤掉接替者（authLogout）。
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS parent_id TEXT;
+`},
 }
 
 // SchemaLedgerVersion 是「core schema + 所有增量 step」的逻辑版本，仅用于日志与文档；
