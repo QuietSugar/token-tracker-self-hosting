@@ -1,0 +1,28 @@
+name: tmp-issue-comment
+
+# 一次性任务：把 .arena-tmp/issue-38-reply-2.md 发到 issue #38。发完即删。
+
+on:
+  push:
+    branches: ['arena/5327194b-token-tracker-self-hosting']
+    paths:
+      - '.arena-tmp/issue-38-reply-2.md'
+      - '.github/workflows/tmp-issue-comment.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Post comment to issue #38
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          wc -l .arena-tmp/issue-38-reply-2.md
+          gh issue comment 38 --repo "${{ github.repository }}" --body-file .arena-tmp/issue-38-reply-2.md
+          echo "✓ 已发布"
