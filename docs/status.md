@@ -17,7 +17,8 @@
 | `account-summary/daily/hourly/monthly/heatmap/model-breakdown/devices` | 契约 golden 对拍，33 PASS |
 | 时区（`tz` / `tz_offset_minutes`）与 heatmap `format=compact` | 与官方模块对拍的回归用例 |
 | 设备维度：按设备汇总、`device_id` 过滤、重命名、暂停/恢复 | 同上 |
-| 内建只读看板（`GET /`） | 单测 + 实跑（无外部请求、CSP 白名单） |
+| 内建看板（`GET /`），用量只读 | 单测 + 实跑（无外部请求、CSP 白名单） |
+| 看板内重命名设备（同步 `devices` 与 `cloud_machines`） | 单测 + 实跑（重名 409、空名 400）+ jsdom 交互验证 |
 | 镜像 `ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental` | CI 推送前强制执行真实 PG 冒烟测试 |
 | PostgreSQL 15 / 16 | CI 矩阵均跑单测 + 契约 |
 | 容器加固参数（`read_only` / `cap_drop: ALL` / 非 root `10001` / `no-new-privileges` / `tmpfs`） | CI 每次以与 `docker-compose.postgres-go.example.yml` 相同的参数启动容器，断言非 root、`/health` 200、看板 200 |

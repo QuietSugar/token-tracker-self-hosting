@@ -88,8 +88,9 @@ GO_POSTGRES_URL="$TT_TEST_DATABASE_URL" \
 
 只改文档或只改看板时，至少跑 `node contract/lib/verify.cjs --static-only`。
 
-**门 3 — 看板只读**：`TestDashboardIsReadOnly` 只允许页面里出现 2 处 `method:"POST"`。
-加任何写操作之前先想清楚——看板是只读视图，不是管理后台。
+**门 3 — 看板写操作白名单**：`TestDashboardWritesAreAllowlisted` 只允许页面里出现 3 处 `method:"POST"`：
+登录、续期、设备改名。加任何写操作之前先想清楚——看板是查看用量的视图，不是管理后台；
+真要加，必须同时改这条测试，等于强制一次显式决策。
 
 **门 4 — 编码/密钥**：`./scripts/check-encoding.sh`、`./scripts/check-secrets.sh` 都要过。
 

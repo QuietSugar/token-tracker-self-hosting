@@ -34,6 +34,12 @@ func seedTwoDevices(t *testing.T) (*Server, http.Handler, string, string, string
 			VALUES(?,?,?,?,?,?)`, id, owner, name, platform, "m-"+id, s.nowISO()); err != nil {
 			t.Fatal(err)
 		}
+		// device-token-issue / 设备批准都会同时建 machine 行；这里补上，
+		// 否则 billing?action=devices 与改名同步都测不到真实形态。
+		if _, err := db.Exec(`INSERT INTO cloud_machines(id,user_id,name,machine_id,platform,status,created_at)
+			VALUES(?,?,?,?,?,'active',?)`, "cm-"+id, owner, name, "m-"+id, platform, s.nowISO()); err != nil {
+			t.Fatal(err)
+		}
 		return id
 	}
 	devA := mk("aaaaaaaa-1111-4111-8111-111111111111", "MacBook", "darwin")
@@ -258,6 +264,42 @@ func TestDeviceRenameUsesOfficialFieldNames(t *testing.T) {
 	}
 	if name != "书房 MacBook" {
 		t.Fatalf("库里名字没改：%q", name)
+	}
+	// 名字落在两张表上：devices（account-devices / 看板）与 cloud_machines
+	// （billing?action=devices，官方 dashboard 的设备卡片）。只改一张会让同一台
+	// 设备在两处显示两个名字，所以这里断言两边都跟着变。
+	var mname string
+	if err := s.db.QueryRow(`SELECT m.name FROM cloud_machines m JOIN devices d
+		ON d.machine_id = m.machine_id AND d.user_id = m.user_id WHERE d.id=?`, devA).Scan(&mname); err != nil {
+		t.Fatalf("cloud_machines 没有对应机器行：%v", err)
+	}
+	if mname != "书房 MacBook" {
+		t.Fatalf("cloud_machines.name=%q，应与 devices.device_name 同步", mname)
+	}
+	// 官方 dashboard 走 billing 读到的也必须是新名字。
+	var billing struct {
+		Machines []struct {
+			Name string `json:"name"`
+		} `json:"machines"`
+	}
+	wb := requestJSON(t, h, "GET", "/functions/tokentracker-billing?action=devices", jwt, nil)
+	if wb.Code != 200 {
+		t.Fatalf("billing status=%d body=%s", wb.Code, wb.Body.String())
+	}
+	if err := json.Unmarshal(wb.Body.Bytes(), &billing); err != nil {
+		t.Fatal(err)
+	}
+	var renamed bool
+	for _, m := range billing.Machines {
+		if m.Name == "书房 MacBook" {
+			renamed = true
+		}
+		if m.Name == "MacBook" {
+			t.Fatalf("billing 里还留着旧名字：%s", wb.Body.String())
+		}
+	}
+	if !renamed {
+		t.Fatalf("billing machines 未反映新名字：%s", wb.Body.String())
 	}
 
 	// 撞另一台在用设备的平台+名字 → 409（不是 500）

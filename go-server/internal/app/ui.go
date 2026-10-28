@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// homeHTML 是 GET / 的内置只读看板。
+// homeHTML 是 GET / 的内置看板（用量只读，唯一可写的是设备名称）。
 //
 // 为什么内置而不是另起前端工程：这个项目的定位是**内网自用**，用户装完
 // 容器后最直接的动作就是浏览器打开 http://<host>:8080/。有一个页面总比
@@ -14,15 +14,16 @@ import (
 // 引 CDN 只会白屏），所以整个看板就是一个 HTML 文件——样式、脚本全内联，
 // `go:embed` 打进二进制。
 //
-// 安全性：页面只调同源的 /api/auth/sessions 与 /functions/tokentracker-account-*，
-// 不发第三方请求、不引外部字体、不写任何数据（只读）。token 放 sessionStorage，
-// 关闭标签页即失效，不落盘、不进 cookie。
+// 安全性：页面只调同源的 /api/auth/*、/functions/tokentracker-account-* 与
+// /functions/tokentracker-device-rename，不发第三方请求、不引外部字体。
+// 用量数据只读；唯一的写操作是设备改名，白名单由 TestDashboardWritesAreAllowlisted 锁定。
+// token 放 sessionStorage，关闭标签页即失效，不落盘、不进 cookie。
 //
 //go:embed web/index.html
 var homeHTML []byte
 
 // root 处理 "/"：
-//   - 精确的 "/"（或 HEAD）→ 只读看板；
+//   - 精确的 "/"（或 HEAD）→ 看板；
 //   - 其它未注册路径 → 保持原来的 404 JSON（客户端与脚本依赖这个形状）。
 func (s *Server) root(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {

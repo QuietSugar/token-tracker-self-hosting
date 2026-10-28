@@ -17,7 +17,7 @@
 |---|---|
 | [quickstart.md](users/quickstart.md) | 五分钟内完成从零到「看板中显示数据」 |
 | [deploy.md](users/deploy.md) | 长期运行的部署方式：compose / 裸机 / 反向代理 / systemd / 环境变量 / 升级 / 卸载 |
-| [dashboard.md](users/dashboard.md) | 内建只读看板的使用方式、内容与限制 |
+| [dashboard.md](users/dashboard.md) | 内建看板的使用方式、内容、设备改名与限制 |
 | [devices.md](users/devices.md) | 新设备接入流程；设备重命名、暂停、按设备查看用量、时区处理 |
 | [official-client.md](users/official-client.md) | 官方客户端接入方式；从官方云切换时的行为 |
 | [importing.md](users/importing.md) | 历史用量导入方式（两种工具的适用场景） |

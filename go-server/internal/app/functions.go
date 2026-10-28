@@ -314,6 +314,10 @@ func (s *Server) deviceIssue(w http.ResponseWriter, r *http.Request, sub string)
 //
 // （官方 dashboard 发的是 device_name；早期自托管脚本用的是 name，两种都收。）
 // 只能改自己名下**未撤销**的设备；名字与另一台在用的设备撞车时唯一索引报错 → 409。
+//
+// 名字落在两张表上：`devices.device_name`（account-devices / 内建看板的「按设备」）
+// 与 `cloud_machines.name`（`billing?action=devices`，官方 dashboard 的设备卡片读它）。
+// 只改前者会让同一个设备在两处显示两个名字，所以一次改动同时写两张表。
 func (s *Server) deviceRename(w http.ResponseWriter, r *http.Request, sub string) {
 	var b struct {
 		DeviceID   string `json:"device_id"`
@@ -329,9 +333,15 @@ func (s *Server) deviceRename(w http.ResponseWriter, r *http.Request, sub string
 		fail(w, 400, "device_id and device_name are required")
 		return
 	}
-	res, err := s.db.Exec(`UPDATE devices SET device_name=? WHERE id=? AND user_id=? AND revoked_at IS NULL`,
-		name, b.DeviceID, sub)
+	// RETURNING 一次拿到 machine_id：改名成功后还要同步 cloud_machines，避免多发一次查询。
+	var machineID sql.NullString
+	err := s.db.QueryRow(`UPDATE devices SET device_name=? WHERE id=? AND user_id=? AND revoked_at IS NULL
+		RETURNING machine_id`, name, b.DeviceID, sub).Scan(&machineID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			fail(w, 404, "Device not found")
+			return
+		}
 		// (user_id, platform, device_name) 部分唯一索引冲突：同一平台下同名设备已存在。
 		if isUniqueViolation(err) {
 			fail(w, 409, "another active device already uses that name")
@@ -340,10 +350,10 @@ func (s *Server) deviceRename(w http.ResponseWriter, r *http.Request, sub string
 		fail(w, 500, err.Error())
 		return
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		fail(w, 404, "Device not found")
-		return
+	// 机器行上没有唯一约束，改不动只影响官方 dashboard 的显示，不该让整次改名失败。
+	if machineID.Valid && machineID.String != "" {
+		_, _ = s.db.Exec(`UPDATE cloud_machines SET name=? WHERE user_id=? AND machine_id=?`,
+			name, sub, machineID.String)
 	}
 	writeJSON(w, 200, map[string]any{"ok": true, "device_id": b.DeviceID, "device_name": name})
 }
