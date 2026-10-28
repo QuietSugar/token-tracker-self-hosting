@@ -1,7 +1,7 @@
 # 当前状态
 
 > 结论型文档：这里只放**现在成立的事实**。设计推理见 `design/`（[索引](README.md#design--为什么这么做)），操作步骤见 `users/`（[索引](README.md#users--怎么用)）。
-> 最后核对：2026-10-27（上游 v1.4.12 / `8d32a956`）
+> 最后核对：2026-10-28（上游 v1.4.12 / `8d32a956`）
 
 ## 一句话
 
@@ -20,6 +20,7 @@
 | 内建只读看板（`GET /`） | 单测 + 实跑（零外联、CSP 白名单） |
 | 镜像 `ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental` | CI 推送前强制跑真实 PG 冒烟 |
 | PostgreSQL 15 / 16 | CI 矩阵均跑单测 + 契约 |
+| 容器加固参数（`read_only` / `cap_drop: ALL` / 非 root `10001` / `no-new-privileges` / `tmpfs`） | CI 每次用与 `docker-compose.postgres-go.example.yml` 相同的参数起容器，断言非 root、`/health` 200、看板 200 |
 
 **测试基线**：`go test -race ./...` 全绿，`go vet` 干净，契约 **33 PASS / 0 FAIL / 2 SKIP**。
 
