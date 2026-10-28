@@ -3,6 +3,16 @@
 记录**本仓库自身**的变化（上游版本见 [`docs/maintainers/upstream.md`](docs/maintainers/upstream.md)）。
 只写使用者能感知的东西；内部重构与文档搬家不在此列。当前处于实验通道，未发正式版。
 
+## 2026-10-28 — 未实现的接口回 404 而不是 401（不再被当成登录失效）
+
+- **`/functions/*` 里我们没实现的路由，现在返回 `404 Function not installed`，而且判断在鉴权之前**。
+  官方 GUI 把这类请求的 401 一律归类成"登录失效"，于是"这个功能没做"会显示成
+  「登录状态需要刷新」并反复重试。规则改为：**未实现 → 404**（客户端当成普通失败）、
+  **已实现但没凭据 → 401**（不变）。以后再出现新的上游端点也不会再被误判成鉴权问题。
+- 受影响的 slug（此前是 401）：`telemetry`、`leaderboard-profile`、`community-models`、
+  `public-visibility`、`profile-likes`、`sessions`、`pets` 等所有未实现的路由。
+  资料卡/徽章页现在拿到 404 后走客户端自己的"查无此人 / 只有本地徽章"空态，与官方一致。
+
 ## 2026-10-28 — 榜单页不再整页报错
 
 - **`/functions/tokentracker-leaderboard` 现在返回空态（200）而不是 404**。官方桌面 GUI 的侧边栏

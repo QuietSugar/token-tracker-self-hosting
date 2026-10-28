@@ -6,15 +6,41 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
-	"math"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// implementedSlugs 是本服务**真的实现**的 /functions/* 端点。
+//
+// 未列出的 slug（上游有、我们不做的：遥测、徽章、点赞、社区模型、public-visibility、
+// leaderboard-profile、sessions、pets……）统一在鉴权之前回 404：客户端的 401 → 鉴权失败，
+// 404 → 普通失败，后者不会被误判成"登录状态需要刷新"（issue #44）。
+//
+// 名单必须和 functions() 的 switch 一致；新增端点时两处一起改。
+var implementedSlugs = map[string]bool{
+	"tokentracker-device-flow-authorize":   true,
+	"tokentracker-device-flow-poll":        true,
+	"tokentracker-device-flow-grant":       true,
+	"tokentracker-device-token-issue":      true,
+	"tokentracker-device-rename":           true,
+	"tokentracker-ingest":                  true,
+	"tokentracker-account-summary":         true,
+	"tokentracker-account-daily":           true,
+	"tokentracker-account-hourly":          true,
+	"tokentracker-account-monthly":         true,
+	"tokentracker-account-heatmap":         true,
+	"tokentracker-account-model-breakdown": true,
+	"tokentracker-account-devices":         true,
+	"tokentracker-billing":                 true,
+	// 自托管空态端点（上游归在 excluded，但官方 GUI 会无条件请求它）
+	"tokentracker-leaderboard": true,
+}
 
 func (s *Server) functions(w http.ResponseWriter, r *http.Request) {
 	slug := strings.TrimPrefix(r.URL.Path, "/functions/")
@@ -35,6 +61,24 @@ func (s *Server) functions(w http.ResponseWriter, r *http.Request) {
 	// 预检不带凭据，这里不做任何鉴权——真正的请求仍然照常校验 JWT。
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	// 未实现的 slug 在这里就回 404，**先于鉴权**。
+	//
+	// 为什么顺序重要（issue #44）：官方 GUI 把 /functions/* 的 401 一律归类成
+	// `authentication_required`，于是"这个函数我没实现"会被前端当成"登录失效"，
+	// 页面报「登录状态需要刷新」并循环重试。leaderboard 之前就是这么中的招
+	// （未实现 → 401 → 误判为鉴权失败），修法是让它变成空态端点；
+	// 但下游还有一堆上游会打、我们永远不做的 slug（遥测、徽章、点赞、社区模型……），
+	// 逐个人工兜底既啰嗦又容易漏。所以统一规则：
+	//   未实现的 → 404 `Function not installed`（客户端只会看到一个普通的失败，
+	//   不会误判成需要重新登录）；**已实现的** → 该 401 还是 401。
+	//
+	// 副作用很小：探测者能分辨哪些函数存在——这个仓库是公开的，函数清单本来就写在
+	// releases/<ver>/functions/functions.json 里，没有可保护的信息。
+	if !implementedSlugs[slug] {
+		fail(w, http.StatusNotFound, "Function not installed")
 		return
 	}
 
