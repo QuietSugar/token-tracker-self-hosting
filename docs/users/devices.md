@@ -18,6 +18,21 @@ tracker device-login --base-url https://tt.lan:8443 --anon-key "$ANON"
 `/device` 页面会显示：设备代码、申请方的 `client_info`（客户端版本/平台）、`machine_id`、有效期。
 批准前可确认是否为本人机器 —— 仅凭用户代码即批准，等同于未做设备确认。
 
+### 设备名与平台从哪里来
+
+客户端发起 `device-login` 时会上报两样身份：
+
+| 字段 | 客户端取值 | 服务端用法 |
+|---|---|---|
+| `client_info` | `${os.platform()}-${os.arch()} ${os.hostname()}`，如 `linux-x64 hp` | 取其中**空格之后的部分当设备名**（即 hostname） |
+| `machine_id` | 首次运行生成并持久化在客户端配置里的 UUID | 设备的**真实身份**，判重只看它 |
+
+因此设备列表里看到的是 `hp`、`nas`、`vm128` 这种名字，`platform` 统一为 `cli-device-flow`（与官方实现一致）。
+`client_info` 里没有 hostname 时（自定义脚本）退回 `TokenTracker CLI (<client_info>) #<machine_id 前 8 位>`，
+仍然能区分机器。
+
+**设备名只用于展示**：判断「是不是同一台机器」始终看 `machine_id`。改名、加后缀都不会改变用量归属。
+
 ### 三种批准方式（`TT_DEVICE_APPROVE`）
 
 | 模式 | 接入动作 | 适用场景 |
@@ -30,10 +45,20 @@ tracker device-login --base-url https://tt.lan:8443 --anon-key "$ANON"
 `user_code` 仅出现在发起申请的机器终端中，是该流程唯一的凭据 —— 官方 device flow 采用同一模型，
 区别在于官方页面要求先登录 dashboard。**请勿将使用 `page` / `auto` 的实例暴露到公网**；需要真正的审批边界时使用 `jwt`。
 
-### 同一台机器重复接入
+### 同一台机器重复接入 vs 不同机器
 
-再次执行 `device-login` 会**复用同一设备记录**并签发新 token，不会新增设备
-（`devices` 上有 `(user_id, machine_id)` 与 `(user_id, platform, device_name)` 两个 partial unique index）。
+- **同一台机器**再次 `device-login`（`machine_id` 相同）：**复用同一设备记录**并签发新 token，不新增设备。
+  这是最常见的情形——重装客户端、清空配置后重新登录都不会多出一行。
+- **不同机器**接入（`machine_id` 不同）：**一定新建各自的设备记录**，即使两台机器 hostname 相同、
+  或 `client_info` 完全一样。每个 device token 都指向自己那台机器的设备行，用量不会串。
+- **重名处理**：两台机器报同一个 hostname 时，后接入的那台自动改名为 `hp #1a2b3c4d`
+  （machine_id 前 8 位），接入照常成功。想合并展示就用看板「改名」改成不同名字；
+  两台机器**不会**共用一行——共用行意味着两台的用量被混记成一台。
+- **老库升级**：早于本版本创建的设备行可能没有 `machine_id`。同名的机器重新接入时会**认领**那一行
+  （回填 `machine_id`），不会为同一台机器再造一行。
+
+`devices` 上有 `(user_id, machine_id)` 与 `(user_id, platform, device_name)` 两个 partial unique index，
+上面这些规则就是为了既能重复接入、又不撞索引、又不把两台机器的数据混在一起。
 
 ---
 
@@ -104,7 +129,9 @@ curl -s -X POST -H "Authorization: Bearer <token>" -H 'Content-Type: application
 注意事项：
 
 - **device token 不是 JWT**：为随机串，服务端仅保存其 SHA-256；丢失后无法找回，只能重新签发。
-- 同名 / 同 `machine_id` 重复调用是安全的：复用设备行并更换新 token（客户端重装、脚本重跑均属此类）。
+- 同 `machine_id` 重复调用是安全的：复用设备行并更换新 token（客户端重装、脚本重跑均属此类）。
+- 换了 `machine_id` 但沿用同名 `device_name` 时，会新建一行并把名字改成 `nas #1a2b3c4d`——
+  宁可名字难看，也不把新机器的用量记到老设备名下。
 - 账户行不存在时会自动创建（`ensureAccount`），首次使用不会因外键约束失败。
 
 上传约束：单次 ≤500 个桶、body ≤1 MiB；主键 `user_id+device_id+hour_start+source+model`，
@@ -183,11 +210,58 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/
 
 ---
 
-## 6. 相关命令
+## 6. 用量记错了设备怎么办（老数据修复）
+
+设备归属曾经出过一次问题：`device-login` 的判重条件里带了一条「同名同平台也算同一台设备」，
+于是**新机器会借用已有设备行**——它上传的用量全部记在旧机器名下（账户总量没错，只是跨设备汇总里
+旧机器虚高、新机器偏少）。当前版本已修复（见 [`CHANGELOG`](../../CHANGELOG.md)），但**已经写错的历史行不会自己搬家**，
+需要按下面两步处理。
+
+### 6.1 先诊断（只读）
+
+```sh
+psql "$TT_DATABASE_URL" -f go-server/scripts/device-report.sql
+```
+
+四段输出，按需看：
+
+1. 每台设备的 token 数、桶数、总量、时间范围 —— 数量明显不合理的那台就是受害者/受益者。
+2. **可疑登录**：`device_codes` 里「批准的 `machine_id`」与「落到的设备行的 `machine_id`」不一致的记录。
+   有输出 = 这台机器的 token 指向了别人的设备行，就是本节的场景。
+3. 同一 `(hour_start, source, model)` 同时出现在多台设备下 —— 搬迁时会撞主键，见 6.2 的 `--merge`。
+4. 全库总计 —— 记下这个数字，搬迁前后对比，确认没丢。
+
+非默认 schema 时加 `PGOPTIONS='-c search_path=<schema>'`，或先 `SET search_path`。
+
+### 6.2 再搬迁
+
+```sh
+# 试运行：只统计，不写库
+./go-server/scripts/device-move-usage.sh --dsn "$TT_DATABASE_URL" --from vm128 --to hp
+
+# 只搬一段时间（误归属发生的那几天）
+./go-server/scripts/device-move-usage.sh --dsn "$TT_DATABASE_URL" --from vm128 --to hp \
+    --since 2026-10-20 --until 2026-10-26 --apply
+```
+
+- `--from` / `--to` 用**设备名**（唯一时）或**设备 id**；重名时必须用 id，脚本会列出来让你选。
+- 只搬 `hourly`（用量）。设备行、token、机器名都不动 —— 那些用 `device-login` 重签或看板改名处理。
+- 目标设备已有同一 `(hour_start, source, model)` 时默认**中止并退出码 2**，先让你人工核对；
+  确认是「同一批数据的上报」才用 `--merge=sum`（数值相加后合并）。
+- 搬完会打印全库总计。**与搬前一致**即说明没有丢数据。
+- 改完库后聚合缓存的失效是按用户清理的，脚本里已包含；若看板仍显示旧数字，刷新页面即可（服务端有 60 秒缓存）。
+
+设备名不用手改：确认哪台是哪台之后，在看板里点「改名」（见 [`dashboard.md`](dashboard.md)）即可。
+
+---
+
+## 7. 相关命令
 
 ```sh
 ./scripts/issue-token.sh                  # 签发 JWT（默认取本机 owner）
 ./scripts/issue-token.sh --json           # 仅输出 token
 ./scripts/approve-device.sh FQYG-CFWL     # jwt 模式下批准设备
 ./scripts/check-oauth.sh                  # 自检：登录 → 轮换 → 旧 token 拒绝 → 撤销 → 读 account
+./scripts/device-report.sql               # 只读诊断：设备用量 / 可疑登录 / 汇总对账
+./scripts/device-move-usage.sh            # 把误归属的用量从一个设备搬到另一个设备
 ```
