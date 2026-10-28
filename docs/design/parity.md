@@ -36,8 +36,18 @@ account-heatmap  account-model-breakdown      account-devices
 billing
 ```
 
-公开入口只有 `authorize` 和 `poll`；其余拒绝未认证请求。未注册的 slug（例如上游客户端会打的
-`tokentracker-telemetry`）返回 404 `{"error":"Function not installed"}` —— 客户端忽略它，不影响任何流程。
+公开入口是 `authorize`、`poll`，外加一个**自托管补充端点** `tokentracker-leaderboard`（见下）；
+其余拒绝未认证请求。未注册的 slug（例如上游客户端会打的 `tokentracker-telemetry`）返回
+404 `{"error":"Function not installed"}`。
+
+**唯一例外：社区榜单**。上游把榜单归到 `functions.json` 的 `excluded: official community publishing`，
+自托管清单里没有它——但官方 GUI 的侧边栏**无条件**列出「榜单」，点进去就 GET
+`/functions/tokentracker-leaderboard`。客户端只对 `leaderboard-profile` 的 404 做了特判，
+对列表接口没有：404 → `Request failed with HTTP 404` → 页面正中一行红字。
+所以我们对这一个 slug 回 **200 + 合法空载荷**（`entries: []` / `total_entries: 0` / `self_hosted: true`），
+页面显示中性的「No data」。**不编造任何榜单条目**，这不是 mock 数据，是把"没有社区"表达成空状态而不是错误码。
+其它社区端点（`community-models`、`profile-likes`、`public-visibility`、`leaderboard-refresh`）仍 404：
+客户端要么 `catch` 掉了，要么在非官方实例上根本不发（见 §4）。
 
 数据面：主键 `(user_id, device_id, hour_start, source, model)`，重复上传**整行替换**；时区按
 `tz` / `tz_offset_minutes` 归本地日；heatmap 支持 `format=compact`。这些都由用例锁住。
@@ -53,6 +63,8 @@ billing
 | heatmap 星期对齐 | 上游自己前后不一致 | 原样跟随 | 同上 |
 | 第三方 OAuth / 邮件 / 找回密码 | 有 | 无 | 单使用者场景是负担 |
 | 遥测 | 上报 | 404 | 不收集 |
+| 社区榜单 `tokentracker-leaderboard` | 真实全站排名 | **200 + 空态**（`entries: []`、`total_entries: 0`、`self_hosted: true`） | 自托管没有"全站"；回 404 会让 GUI 榜单页整页报错（客户端没对列表接口的 404 做特判），空态才是诚实的表达 |
+| 榜单资料卡 / 徽章 | 真实数据 | 404 → 客户端显示「没有这个人」的空态 | 客户端对 `leaderboard-profile` 的 404 有特判，语义正好是"查无此人" |
 
 凡是上面没有列出的差异，跑契约就会 FAIL。**有意偏差必须登记**在 `contract/waivers.json`
 （`case` / `path` / `reason` / `approvedBy` / `date`），当前该列表为空 —— 也就是说，

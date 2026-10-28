@@ -3,6 +3,18 @@
 记录**本仓库自身**的变化（上游版本见 [`docs/maintainers/upstream.md`](docs/maintainers/upstream.md)）。
 只写使用者能感知的东西；内部重构与文档搬家不在此列。当前处于实验通道，未发正式版。
 
+## 2026-10-28 — 榜单页不再整页报错
+
+- **`/functions/tokentracker-leaderboard` 现在返回空态（200）而不是 404**。官方桌面 GUI 的侧边栏
+  无条件列出「榜单」，自托管没有社区数据，此前点进去整页是一行红字
+  `Error: Request failed with HTTP 404`（客户端对列表接口的 404 没有特判）。
+  现在返回 `entries: []` / `total_entries: 0`，页面显示中性的「No data」。
+- **不编造任何榜单内容**：没有虚构用户、没有把自己包装成排名；响应里带
+  `self_hosted: true` 与 `source: "unavailable"`，抓包一眼可辨。
+- 只做这一个 slug。其它未安装的函数（`leaderboard-profile`、`community-models`、遥测等）
+  行为不变：无凭据 401，认证后 404。榜单资料卡（`/u/<id>`）本来就是 404 → 客户端显示「没有这个人」，
+  语义正确，不动。
+
 ## 2026-10-28 — 跟进上游 v1.5.0
 
 - **锁定点升到上游 v1.5.0**（`b2c2eb85`），重新生成 `releases/1.5.0/` 并重录 `contract/golden/1.5.0/`。
