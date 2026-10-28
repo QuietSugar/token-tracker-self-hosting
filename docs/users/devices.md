@@ -145,8 +145,11 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/
 
 - body 里是 **`machine_id`**（`machines[].machine_id`，也接受这行的内部 `id`），**不是 `device_id`** —— 传 `device_id` 会 400 `machine_id is required`。
 - 两个 action 都 POST；响应是操作后的机器列表 + `ok:true`。
-- 恢复**不会**自动发新 token：那台机器要重新 `device-login`（或重新签发）才能继续上传。
-- 暂停只撤销 token、不删历史用量。`ingest` 会更新该机器的 `last_seen_at`（设备卡片上的"最后活跃"）。
+- **暂停 = 撤销这台机器的设备与 device token**（上传返回 401）；**恢复 = 把撤销的那一份还原**，
+  那台机器用**原来那个 token** 就能继续上传，不需要重新 `device-login`。
+- 如果暂停期间客户端自己又重新 `device-login` 过（新的设备行 + 新 token 已经活跃），恢复时会保留旧行的撤销状态——
+  反正机器已经有可用的新 token，不会出现两条活跃设备行。
+- 暂停不删历史用量。`ingest` 会更新该机器的 `last_seen_at`（设备卡片上的"最后活跃"）。
 
 ---
 

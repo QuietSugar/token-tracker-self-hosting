@@ -111,6 +111,11 @@ popover     →  GET  /functions/tokentracker-account-*  Authorization: Bearer <
 设备行有 `(user_id, machine_id)` 与 `(user_id, platform, device_name)` 两个 partial unique index，
 所以同一台机器重复接入是复用设备、换新 token，不会多出一台。
 
+**暂停 / 恢复**（`billing?action=remove-device|resume-device`）是这条链上唯一的撤销入口：
+暂停把该机器的设备行与 device token 一起标 `revoked_at`（上传立刻 401），恢复把同一份还原
+（原来那个 token 继续可用）。恢复时如果发现这台机器上已经有活跃设备行（暂停期间客户端重新接入过），
+就保留旧行的撤销状态——partial unique index 不允许两条活跃行，也没必要复活一个已经被替换的 token。
+
 ## 6. 相关代码
 
 `internal/app/oauth.go`（`/api/auth/*`）、`owner.go`（owner 解析）、`devices.go`（device flow 与 device token）、

@@ -3,6 +3,13 @@
 记录**本仓库自身**的变化（上游版本见 [`docs/maintainers/upstream.md`](docs/maintainers/upstream.md)）。
 只写使用者能感知的东西；内部重构与文档搬家不在此列。当前处于实验通道，未发正式版。
 
+## 2026-10-28 — 设备暂停/恢复
+
+- **恢复后可以直接继续上传**：`resume-device` 现在会把暂停时撤销的设备与 device token 还原，
+  那台机器用原来的 token 就能接着上报，不必重新 `device-login`（之前恢复只改状态，上传仍 401）。
+- 暂停期间客户端如果自己重新接入过，恢复会保留旧行的撤销状态——不会出现两条活跃设备行，也不会复活被替换的 token。
+- 暂停/恢复只影响 device token，不影响已登录的 dashboard 会话。
+
 ## 2026-10-27 — 文档重构
 
 - 文档按读者分层：`docs/users/`（怎么用）、`docs/agents/`（AI 剧本）、`docs/design/`（为什么）、`docs/maintainers/`（怎么维护）。
