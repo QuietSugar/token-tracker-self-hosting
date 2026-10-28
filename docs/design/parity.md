@@ -37,8 +37,13 @@ billing
 ```
 
 公开入口是 `authorize`、`poll`，外加一个**自托管补充端点** `tokentracker-leaderboard`（见下）；
-其余拒绝未认证请求。未注册的 slug（例如上游客户端会打的 `tokentracker-telemetry`）返回
-404 `{"error":"Function not installed"}`。
+其余**已实现**的端点拒绝未认证请求（401）。
+
+**未实现的 slug 一律 404，且先于鉴权**（`{"error":"Function not installed"}`）。
+这个顺序不是随手定的：官方 GUI 把 `/functions/*` 的 401 归类成 `authentication_required`，
+如果"这个函数我们没做"也回 401，前端会把它显示成「登录状态需要刷新」并循环重试（issue #44 就是这么中的招）。
+所以规则是：**未实现 → 404（客户端只当作普通失败）；已实现但没凭据 → 401**。
+这样新出现任何上游端点都不会再被误判成鉴权问题，不必逐个手工兜底。
 
 **唯一例外：社区榜单**。上游把榜单归到 `functions.json` 的 `excluded: official community publishing`，
 自托管清单里没有它——但官方 GUI 的侧边栏**无条件**列出「榜单」，点进去就 GET

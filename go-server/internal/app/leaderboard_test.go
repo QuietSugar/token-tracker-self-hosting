@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -66,11 +67,13 @@ func TestLeaderboardEmptyState(t *testing.T) {
 	}
 }
 
-// 空态端点不能变成"什么 slug 都回 200"的兜底。
+// 未实现的 slug 必须是 404，而且**先于鉴权**（issue #44）。
 //
-// 未安装的 slug 仍按原语义走：先鉴权（无凭据 401），认证后 404 `Function not installed`。
-// 两道都不放过 200，否则等于把所有未实现的函数都伪装成"可用但没数据"。
-func TestUnknownFunctionStillNotFound(t *testing.T) {
+// 客户端把 /functions/* 的 401 归类成 authentication_required；如果未实现的函数回 401，
+// 前端会把"没做这个功能"显示成"登录状态需要刷新"并循环重试。所以：
+//   - 未实现：带不带凭据都是 404 `Function not installed`；
+//   - 已实现：该 401 还是 401（不能因为这条规则放开鉴权）。
+func TestUnimplementedFunctionIs404BeforeAuth(t *testing.T) {
 	s, _ := testServer(t)
 	h := s.Handler()
 	mustSignUp(t, h, "lb-unknown@example.com", "correct horse battery")
@@ -84,22 +87,44 @@ func TestUnknownFunctionStillNotFound(t *testing.T) {
 	}
 	_ = json.Unmarshal(wLogin.Body.Bytes(), &sess)
 
+	// 上游客户端会打、我们永远不做的那些 —— 全都要 404，不能是 401
 	for _, slug := range []string{
 		"tokentracker-community-models",
 		"tokentracker-leaderboard-profile",
 		"tokentracker-telemetry",
+		"tokentracker-public-visibility",
+		"tokentracker-profile-likes",
+		"tokentracker-sessions",
 		"tokentracker-nope",
 	} {
-		// 无凭据：这些 slug 不是公开入口，仍是 401（顺带确认 leaderboard 的公开规则没有扩散）
-		wAnon, _ := httpDo(t, h, "GET", "/functions/"+slug, nil, nil, nil)
-		if wAnon.Code != 401 {
-			t.Fatalf("%s 无凭据应 401，得到 %d（body=%s）", slug, wAnon.Code, wAnon.Body.String())
+		for _, tok := range []string{"", "Bearer " + sess.AccessToken} {
+			var hdr map[string]string
+			if tok != "" {
+				hdr = map[string]string{"Authorization": tok}
+			}
+			w, _ := httpDo(t, h, "GET", "/functions/"+slug, nil, hdr, nil)
+			if w.Code != 404 {
+				t.Fatalf("%s（带凭据=%t）应 404，得到 %d（body=%s）", slug, tok != "", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), "Function not installed") {
+				t.Fatalf("%s 的 404 文案变了：%s", slug, w.Body.String())
+			}
+			// CORS 头仍要在：未实现也要让浏览器能读到 404，而不是变成一个 CORS 错误
+			if w.Header().Get("Access-Control-Allow-Origin") != "*" {
+				t.Fatalf("%s 的 404 缺 Allow-Origin", slug)
+			}
 		}
-		// 带凭据：404 `Function not installed`，不是 200 空态
-		wAuth, _ := httpDo(t, h, "GET", "/functions/"+slug, nil,
-			map[string]string{"Authorization": "Bearer " + sess.AccessToken}, nil)
-		if wAuth.Code != 404 {
-			t.Fatalf("%s 认证后应 404，得到 %d（body=%s）", slug, wAuth.Code, wAuth.Body.String())
+	}
+
+	// 已实现的端点不受影响：无凭据仍 401
+	for _, slug := range []string{
+		"tokentracker-account-summary",
+		"tokentracker-account-daily",
+		"tokentracker-billing",
+	} {
+		w, _ := httpDo(t, h, "GET", "/functions/"+slug, nil, nil, nil)
+		if w.Code != 401 {
+			t.Fatalf("%s 无凭据应 401，得到 %d（body=%s）", slug, w.Code, w.Body.String())
 		}
 	}
 }

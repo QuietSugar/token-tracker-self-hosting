@@ -19,6 +19,7 @@
 | 设备维度：按设备汇总、`device_id` 过滤、重命名、暂停/恢复 | 同上 |
 | CORS 预检（`OPTIONS /functions/*`、`/api/selfhost/*`）返回 204 + 该端点的 CORS 头 | 单测（billing/account/ingest/device-flow 各 slug 的头集合逐一断言，且预检放行后真请求仍 401）+ 实跑 curl 复现命令 |
 | 并发刷新（多个组件同时用同一份 refresh token mint） | 单测：宽限期内 200 + `X-TokenTracker-Refresh: grace`、两份新 token 都可用、超期 401 + `X-TokenTracker-Auth-Error`；实跑 6 并发同一 token 全 200，用旧 token 登出后 6 份接替者全部 401 |
+| 未实现的接口返回 404 而非 401（先于鉴权） | 单测：7 个未实现 slug × 带/不带凭据全部 404 且保留 CORS 头；同用例断言已实现端点无凭据仍 401 + 实跑 curl |
 | 社区榜单空态（`GET /functions/tokentracker-leaderboard`，公开） | 单测：三个 tab + 非法 period 均 200、`entries` 恒空、带 `self_hosted`/`source` 标记；同一用例断言其它未安装 slug 仍 401/404 + 实跑 curl |
 | 内建看板（`GET /`），用量只读 | 单测 + 实跑（无外部请求、CSP 白名单） |
 | 看板内重命名设备（同步 `devices` 与 `cloud_machines`） | 单测 + 实跑（重名 409、空名 400）+ jsdom 交互验证 |
