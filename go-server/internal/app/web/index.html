@@ -113,6 +113,9 @@
   .dev:last-child{border-bottom:0}
   .dev .dn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
   .dev .dt{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+  /* 「最后同步」：只在很久没同步时淡化，不报警（内网自用没必要制造紧张感） */
+  .dev .ls{color:var(--muted);font-size:11px;flex:none;font-variant-numeric:tabular-nums}
+  .dev .ls.stale{opacity:.55}
   .dev .dot{width:7px;height:7px;border-radius:50%;background:var(--accent2);flex:none}
   .dev .dot.zero{background:var(--line)}
   /* 设备改名：行内编辑，不加弹窗（内网看板不引任何 UI 库） */
@@ -227,8 +230,9 @@
   <p class="foot">
     页面零外部请求；token 存在 sessionStorage，关闭标签页即失效。
     同源 API：<code>/functions/tokentracker-account-*</code>、<code>/api/auth/sessions</code>、
-    <code>/functions/tokentracker-device-rename</code>。
+    <code>/api/selfhost/devices</code>、<code>/functions/tokentracker-device-rename</code>。
     用量数据只读；可修改的只有设备名称。暂停 / 恢复设备请用 CLI 或官方客户端。
+    「最后同步」指最后一次有新用量上传的时间。
   </p>
 </div>
 
@@ -239,7 +243,7 @@
   var TOKEN_KEY = "tt.dash.token";
   var REFRESH_KEY = "tt.dash.refresh";
   var PERIODS = { day: "day", week: "week", month: "month", total: "total" };
-  var state = { token: "", refresh: "", period: "month", device: "", busy: false, devices: [], refreshing: null };
+  var state = { token: "", refresh: "", period: "month", device: "", busy: false, devices: [], refreshing: null, meta: {} };
 
   var $ = function (id) { return document.getElementById(id); };
   var app = $("app"), gate = $("gate");
@@ -260,6 +264,28 @@
     if (n === 0) return "$0";
     if (n < 0.01) return "<$0.01";
     return "$" + n.toFixed(2);
+  }
+  // 「最后同步」的相对时间。last_seen_at 只在**确实有用量写入**时刷新，
+  // 所以这里的说法是「多久前有过上传」，不是「多久前有过一次 HTTP 通信」。
+  function fmtAgo(iso) {
+    if (!iso) return "从未同步";
+    var t = Date.parse(iso);
+    if (!isFinite(t)) return "—";
+    var diff = Date.now() - t;
+    if (diff < 0) diff = 0;
+    var mins = Math.floor(diff / 60000);
+    if (mins < 1) return "刚刚";
+    if (mins < 60) return mins + " 分钟前";
+    var hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + " 小时前";
+    var days = Math.floor(hours / 24);
+    if (days <= 7) return days + " 天前";
+    return localDayKey(new Date(t));
+  }
+  function isStale(iso) {
+    if (!iso) return false;
+    var t = Date.parse(iso);
+    return isFinite(t) && Date.now() - t > 7 * 864e5;
   }
   function pad2(n) { return String(n).padStart(2, "0"); }
   function localDayKey(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
@@ -528,12 +554,17 @@
     }
     list.forEach(function (d) {
       var tokens = Number(d.total_tokens) || 0;
+      var meta = state.meta[d.id] || {};
+      var seen = meta.last_seen_at || null;
       var row = document.createElement("div");
       row.className = "dev";
       row.innerHTML =
         '<span class="dot' + (tokens > 0 ? "" : " zero") + '"></span>' +
         '<span class="dn">' + esc(d.device_name || d.id || "未命名") +
         (d.platform ? '<span class="badge">' + esc(d.platform) + "</span>" : "") + "</span>" +
+        '<span class="ls' + (isStale(seen) ? " stale" : "") + '" title="' +
+        esc(seen ? "最后同步：" + seen : "这台设备还没有上传过用量") + '">' +
+        esc(fmtAgo(seen)) + "</span>" +
         '<span class="dt">' + (tokens > 0 ? fmtTokens(tokens) : "无用量") + "</span>" +
         '<button class="ren" type="button" title="重命名这台设备">改名</button>';
       row.querySelector(".ren").addEventListener("click", function () { startRename(row, d); });
@@ -661,10 +692,15 @@
       api("/functions/tokentracker-account-daily", q),
       api("/functions/tokentracker-account-model-breakdown", q),
       api("/functions/tokentracker-account-devices", { from: q.from, to: q.to }),
-      api("/functions/tokentracker-account-heatmap", heatQ)
+      api("/functions/tokentracker-account-heatmap", heatQ),
+      // 「最后同步」来自自托管自己的端点（官方端点不带 last_seen_at）。
+      // 它失败不该让整页报错：老版本服务端没有这个端点时，这一列显示「从未同步」。
+      api("/api/selfhost/devices", {}).catch(function () { return { devices: [] }; })
     ]).then(function (res) {
-      var summary = res[0], daily = res[1], models = res[2], devices = res[3], heat = res[4];
+      var summary = res[0], daily = res[1], models = res[2], devices = res[3], heat = res[4], meta = res[5];
       state.devices = (devices && devices.devices) || [];
+      state.meta = {};
+      ((meta && meta.devices) || []).forEach(function (m) { state.meta[m.id] = m; });
       renderSummary(summary);
       renderModels(models);
       renderDaily(daily);

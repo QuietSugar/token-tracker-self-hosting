@@ -178,12 +178,17 @@ func (s *Server) deviceFor(sub, name, platform, machineID, newDeviceID string) (
 	return newDeviceID, nil
 }
 
-// machineFor 确保 cloud_machines 里有一台 active 的机器记录（同一 machine_id 不重复插入）。
+// machineFor 确保 cloud_machines 里有这台机器的记录（同一 machine_id 不重复插入）。
 // 设备配额/machine 列表都读这张表，重复行会让 /devices 响应里出现同名多台。
+//
+// 判重条件**不能**带 status：曾经写成 `status='active'`，于是被暂停的机器在
+// 客户端重新接入时会命中 0 行、再插一条新的，同一个 machine_id 出现
+// 「一 paused 一 active」两行，`billing?action=devices` 里就成了两台同名设备
+// （machine_count 也跟着翻倍）。状态是 listMachines / ingest 的事，不是判重的事。
 func (s *Server) machineFor(sub, name, machineID, platform string) error {
 	var n int
 	if err := s.db.QueryRow(`SELECT count(*) FROM cloud_machines
-		WHERE user_id=? AND machine_id=? AND status='active'`, sub, machineID).Scan(&n); err != nil {
+		WHERE user_id=? AND machine_id=? AND status<>'merged'`, sub, machineID).Scan(&n); err != nil {
 		return err
 	}
 	if n > 0 {
