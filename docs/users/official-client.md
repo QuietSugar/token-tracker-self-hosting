@@ -107,7 +107,50 @@ tracker sync
 
 ---
 
-## 4. 跨设备汇总视图（dashboard / 菜单栏）
+## 4. 升级客户端
+
+自建服务是**按上游契约实现**的，所以客户端可以一直跟着上游升级；升级客户端**不需要**动服务端，
+也不需要重新 `device-login`（`base_url`、`--anon-key`、device token 都留在
+`~/.tokentracker/tracker/config.json` 里，升级不会清）。
+
+### CLI
+
+```sh
+npx tokentracker-cli -v          # 临时用最新版，不落地
+npm i -g tokentracker-cli@latest # 全局安装的场景
+brew upgrade xiufengsun/tokentracker/tokentracker   # Homebrew（CLI）
+```
+
+### 桌面 App
+
+- **macOS / Windows 有内置更新检查**：App 会周期性查 GitHub 的最新 release，可在设置里关掉
+  （`UpdateChecker.autoUpdateEnabled`）。没等到提示就直接装覆盖即可。
+- **Linux** 没有内置更新：重新下 AppImage（`chmod +x` 覆盖）或用发行版包。
+- 所有平台都可以直接下载最新一版：[releases/latest](https://github.com/xiufengsun/TokenTracker/releases/latest)
+  （`TokenTrackerBar.dmg` / `TokenTracker-Setup.exe` / `TokenTracker-linux-x86_64.AppImage`）。
+
+> 桌面 App 自带一份客户端代码，与全局安装的 CLI 是两条线；只升级其中一个时版本号可能不一致，
+> `tracker -v` 看的是 CLI。
+
+### 升级后自检
+
+```sh
+tracker -v                       # 版本号
+tracker doctor                   # Summary: ok 12 | fail 0
+```
+
+`doctor` 里若只有遥测（`tokentracker-telemetry`）报 404，可以忽略——自托管不做遥测，
+且从本版本起**所有未实现的接口都回 404**（不会再被客户端误判成"登录失效"）。
+
+### 服务端与客户端版本的关系
+
+服务端不需要跟客户端版本号一致：契约基线（`contract/golden/<ver>`）锁的是**接口行为**。
+上游升级时维护者跑 `./scripts/upstream.sh review`，只有 `steps()` / `privateFunctions` 变了才需要动服务端
+（见 [`../maintainers/upstream.md`](../maintainers/upstream.md)）。当前后端在 1.5.0 基线上 33 PASS / 2 SKIP。
+
+---
+
+## 5. 跨设备汇总视图（dashboard / 菜单栏）
 
 该视图不通过 `/functions/*`，而是先获取 access token：
 
@@ -129,7 +172,7 @@ popover / 页面  →  GET  /functions/tokentracker-account-*       Authorizatio
 
 ---
 
-## 5. 从官方云切换到自建：首次 sync 的行为
+## 6. 从官方云切换到自建：首次 sync 的行为
 
 **客户端会将本地队列中的历史全部重放，但重放范围仅为「本地队列中仍然存在的记录」，不包含云端历史。**
 
@@ -201,7 +244,7 @@ stat -c %s ~/.tokentracker/tracker/queue.jsonl      # macOS: stat -f %z
 
 ---
 
-## 6. 验收清单
+## 7. 验收清单
 
 ```sh
 tracker init --base-url https://tt.lan:8443 --anon-key "$ANON"
@@ -219,7 +262,7 @@ curl -s -H "Authorization: Bearer $(./scripts/issue-token.sh --json)" \
 
 ---
 
-## 7. 故障处理
+## 8. 故障处理
 
 参见 [`troubleshooting.md`](troubleshooting.md)。客户端侧常见问题如下：
 
