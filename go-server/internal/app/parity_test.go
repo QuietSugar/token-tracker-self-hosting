@@ -297,6 +297,13 @@ func TestBillingDevicesActionAndResume(t *testing.T) {
 	if revoked != 1 {
 		t.Fatalf("暂停后设备 token 应被撤销：%d", revoked)
 	}
+	// 暂停期间不能再上传
+	if r := requestJSON(t, h, "POST", "/functions/tokentracker-ingest", "devtok", map[string]any{
+		"hourly": []any{map[string]any{"hour_start": "2026-10-20T11:00:00Z", "source": "claude",
+			"model": "sonnet-4.5", "total_tokens": 7, "billable_total_tokens": 7}},
+	}); r.Code != 401 {
+		t.Fatalf("暂停后 ingest 应 401，实际 %d %s", r.Code, r.Body.String())
+	}
 
 	w = requestJSON(t, h, "POST", "/functions/tokentracker-billing?action=resume-device", jwt,
 		map[string]any{"machine_id": "m-a"})
@@ -306,6 +313,25 @@ func TestBillingDevicesActionAndResume(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &after)
 	if len(after.Machines) != 1 || after.Machines[0].Status != "active" {
 		t.Fatalf("恢复失败：%s", w.Body.String())
+	}
+	// 恢复后必须能继续上传，而且不需要重新签发 token
+	if u := requestJSON(t, h, "POST", "/functions/tokentracker-ingest", "devtok", map[string]any{
+		"hourly": []any{map[string]any{"hour_start": "2026-10-20T11:00:00Z", "source": "claude",
+			"model": "sonnet-4.5", "total_tokens": 7, "billable_total_tokens": 7}},
+	}); u.Code != 200 {
+		t.Fatalf("恢复后 ingest 应 200，实际 %d %s", u.Code, u.Body.String())
+	}
+	var stillRevoked int
+	if err := s.db.QueryRow(`SELECT count(*) FROM device_tokens WHERE revoked_at IS NOT NULL`).Scan(&stillRevoked); err != nil {
+		t.Fatal(err)
+	}
+	if stillRevoked != 0 {
+		t.Fatalf("恢复后不应还有撤销的 token：%d", stillRevoked)
+	}
+	// 恢复是可重复的（幂等），不会因为第二次调用出 500
+	if r := requestJSON(t, h, "POST", "/functions/tokentracker-billing?action=resume-device", jwt,
+		map[string]any{"machine_id": "m-a"}); r.Code != 200 {
+		t.Fatalf("重复 resume 应 200，实际 %d %s", r.Code, r.Body.String())
 	}
 
 	// 不存在的机器 → 404；缺 machine_id → 400
@@ -357,4 +383,70 @@ func (s *Server) rpcCall(name string, args map[string]any) []byte {
 	rec := httptest.NewRecorder()
 	s.rpc(rec, r)
 	return rec.Body.Bytes()
+}
+
+// 暂停期间客户端又跑了一次 device-login（旧设备行是撤销状态，会插入一条新的活跃行），
+// 之后恢复不能撞 devices 上的两个 partial unique index（那会让 resume 直接 500）。
+// 此时旧行保持撤销、旧 token 保持撤销是对的：机器已经有新 token 可用。
+func TestResumeAfterReloginWhilePaused(t *testing.T) {
+	s, db := testServer(t)
+	owner, err := s.ensureOwner("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	jwt := s.signJWT(owner, "authenticated", s.now.Unix()+3600)
+
+	if _, err := db.Exec(`INSERT INTO devices(id,user_id,device_name,platform,machine_id,created_at)
+		VALUES(?,?,?,?,?,?)`, "aaaaaaaa-1111-4111-8111-111111111111", owner, "nas", "linux", "m-x", s.nowISO()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO device_tokens(id,user_id,device_id,token_hash,created_at)
+		VALUES(?,?,?,?,?)`, "tok-old", owner, "aaaaaaaa-1111-4111-8111-111111111111", tokenHash("oldtok"), s.nowISO()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO cloud_machines(id,user_id,name,machine_id,platform,status,created_at)
+		VALUES(?,?,?,?,?,'active',?)`, "bbbbbbbb-2222-4222-8222-222222222222", owner, "nas", "m-x", "linux", s.nowISO()); err != nil {
+		t.Fatal(err)
+	}
+
+	// 暂停
+	if r := requestJSON(t, h, "POST", "/functions/tokentracker-billing?action=remove-device", jwt,
+		map[string]any{"machine_id": "m-x"}); r.Code != 200 {
+		t.Fatalf("remove-device status=%d body=%s", r.Code, r.Body.String())
+	}
+	// 暂停期间重新接入：deviceFor 找不到活跃行 → 插入新的设备行 + 新 token
+	w := requestJSON(t, h, "POST", "/functions/tokentracker-device-token-issue", jwt,
+		map[string]any{"device_name": "nas", "platform": "linux", "machine_id": "m-x"})
+	if w.Code != 200 {
+		t.Fatalf("device-token-issue status=%d body=%s", w.Code, w.Body.String())
+	}
+	var issued struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &issued)
+	if issued.Token == "" {
+		t.Fatalf("签发失败：%s", w.Body.String())
+	}
+
+	// 恢复：不能 500（唯一索引冲突），且新 token 立刻可用
+	if r := requestJSON(t, h, "POST", "/functions/tokentracker-billing?action=resume-device", jwt,
+		map[string]any{"machine_id": "m-x"}); r.Code != 200 {
+		t.Fatalf("resume-device status=%d body=%s", r.Code, r.Body.String())
+	}
+	if u := requestJSON(t, h, "POST", "/functions/tokentracker-ingest", issued.Token, map[string]any{
+		"hourly": []any{map[string]any{"hour_start": "2026-10-20T12:00:00Z", "source": "claude",
+			"model": "sonnet-4.5", "total_tokens": 9, "billable_total_tokens": 9}},
+	}); u.Code != 200 {
+		t.Fatalf("恢复后 ingest 应 200，实际 %d %s", u.Code, u.Body.String())
+	}
+	// 同一台机器只应该有一条活跃设备行
+	var active int
+	if err := db.QueryRow(`SELECT count(*) FROM devices WHERE user_id=? AND machine_id=? AND revoked_at IS NULL`,
+		owner, "m-x").Scan(&active); err != nil {
+		t.Fatal(err)
+	}
+	if active != 1 {
+		t.Fatalf("同一机器应有且只有一条活跃设备行，实际 %d", active)
+	}
 }

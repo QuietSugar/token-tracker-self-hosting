@@ -1120,13 +1120,23 @@ func (s *Server) billing(w http.ResponseWriter, r *http.Request, sub, role strin
 			return
 		}
 		if status == "paused" {
-			// 暂停 = 这台机器不能再上报：撤销它的设备与设备 token（官方语义）。
+			// 暂停 = 这台机器不能再上报：撤销它的设备与 device token。
 			_, _ = s.db.Exec(`UPDATE device_tokens SET revoked_at=? WHERE token_hash IN
 				(SELECT token_hash FROM device_tokens dt JOIN devices d ON d.id=dt.device_id
 				 WHERE d.user_id=? AND d.machine_id=? AND d.revoked_at IS NULL)`,
 				s.nowISO(), sub, machineKey)
 			_, _ = s.db.Exec(`UPDATE devices SET revoked_at=? WHERE user_id=? AND machine_id=? AND revoked_at IS NULL`,
 				s.nowISO(), sub, machineKey)
+		} else {
+			// 恢复 = 暂停的反操作：把暂停时撤销的设备与 device token 复原。
+			// 这样那台机器用原来的 token 就能继续上传，不必重新 device-login。
+			s.mu.Lock()
+			restoreErr := s.restoreMachine(sub, machineKey)
+			s.mu.Unlock()
+			if restoreErr != nil {
+				fail(w, 500, restoreErr.Error())
+				return
+			}
 		}
 		// 官方在状态变更后返回的列表里 current_machine_id 传 null（全部 is_current=false），
 		// 客户端判断"是不是本机"用的是 devices GET 那次的响应，所以这里跟官方保持一致。
@@ -1143,4 +1153,72 @@ func (s *Server) billing(w http.ResponseWriter, r *http.Request, sub, role strin
 			"gifts": []any{}, "redemption_restriction": nil, "gift_redemption_available": false,
 		})
 	}
+}
+
+// restoreMachine 撤销「暂停」对一台机器造成的破坏：把暂停时被撤销的设备行与
+// device token 复原，让那台机器恢复后能用原来的 token 继续上传。
+//
+// 为什么不是一句 `UPDATE devices SET revoked_at=NULL`：devices 上有两个 partial
+// unique index（(user_id,machine_id) 与 (user_id,platform,device_name)，都带
+// revoked_at IS NULL）。暂停期间客户端完全可能再跑一次 device-login —— 那时旧行
+// 是撤销状态、不占索引位，于是会插入一条**新的**活跃设备行。此时无脑复原旧行会撞
+// 唯一索引，直接 500。所以逐行判断：只有一个活跃行都不占位时才复原。
+//
+// token 只复原「设备行已经是活跃的」那些，避免留下"活跃 token 指向已撤销设备"
+// 的状态（那样能上传，但设备不会出现在 account-devices 里）。
+func (s *Server) restoreMachine(userID, machineID string) error {
+	if userID == "" || machineID == "" {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.Query(`SELECT id, COALESCE(platform,''), device_name FROM devices
+		WHERE user_id=? AND machine_id=? AND revoked_at IS NOT NULL
+		ORDER BY created_at, id`, userID, machineID)
+	if err != nil {
+		return err
+	}
+	type revokedDevice struct{ id, platform, name string }
+	var list []revokedDevice
+	for rows.Next() {
+		var d revokedDevice
+		if err := rows.Scan(&d.id, &d.platform, &d.name); err != nil {
+			rows.Close()
+			return err
+		}
+		list = append(list, d)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, d := range list {
+		var taken int
+		// 同机器已有活跃行，或同平台同名已有活跃行 → 保留撤销，避免撞唯一索引。
+		if err := tx.QueryRow(`SELECT count(*) FROM devices
+			WHERE user_id=? AND revoked_at IS NULL
+			  AND (machine_id=? OR (COALESCE(platform,'')=? AND device_name=?))`,
+			userID, machineID, d.platform, d.name).Scan(&taken); err != nil {
+			return err
+		}
+		if taken > 0 {
+			continue
+		}
+		if _, err := tx.Exec(`UPDATE devices SET revoked_at=NULL WHERE id=? AND user_id=?`, d.id, userID); err != nil {
+			return err
+		}
+	}
+
+	if _, err := tx.Exec(`UPDATE device_tokens SET revoked_at=NULL
+		WHERE user_id=? AND revoked_at IS NOT NULL AND device_id IN
+		(SELECT id FROM devices WHERE user_id=? AND machine_id=? AND revoked_at IS NULL)`,
+		userID, userID, machineID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
