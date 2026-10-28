@@ -1,0 +1,149 @@
+{
+  "id": "ingest/whole-row-correction",
+  "tags": [
+    "ingest",
+    "correction"
+  ],
+  "group": "ingest",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "ingest",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey, x-tokentracker-device-token-hash",
+          "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "inserted": 1,
+          "membership": {
+            "access_source": "none",
+            "can_read_cloud": true,
+            "can_upload_cloud": true,
+            "daily_history_months": null,
+            "environment": "live",
+            "expires_at": null,
+            "gift_expires_at": null,
+            "has_gift": false,
+            "hosting_mode": "self_hosted",
+            "hourly_history_days": null,
+            "machine_limit": null,
+            "phase": "active",
+            "read_only_until": null,
+            "status": "self_hosted",
+            "sync_interval_seconds": 0,
+            "transition_ends_at": null,
+            "trial_available": false,
+            "trial_ends_at": null
+          },
+          "next_allowed_at": "@ts:1",
+          "ok": true,
+          "skipped": 0,
+          "sync_interval_seconds": 0,
+          "upload_scope": "cloud"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 1,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "query",
+      "call": "SELECT sum(total_tokens)::int AS total FROM public.tokentrac",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "rows": [
+            {
+              "total": 100
+            }
+          ]
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "ingest",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey, x-tokentracker-device-token-hash",
+          "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "inserted": 1,
+          "membership": {
+            "access_source": "none",
+            "can_read_cloud": true,
+            "can_upload_cloud": true,
+            "daily_history_months": null,
+            "environment": "live",
+            "expires_at": null,
+            "gift_expires_at": null,
+            "has_gift": false,
+            "hosting_mode": "self_hosted",
+            "hourly_history_days": null,
+            "machine_limit": null,
+            "phase": "active",
+            "read_only_until": null,
+            "status": "self_hosted",
+            "sync_interval_seconds": 0,
+            "transition_ends_at": null,
+            "trial_available": false,
+            "trial_ends_at": null
+          },
+          "next_allowed_at": "@ts:1",
+          "ok": true,
+          "skipped": 0,
+          "sync_interval_seconds": 0,
+          "upload_scope": "cloud"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 1,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "query",
+      "call": "SELECT sum(total_tokens)::int AS total FROM public.tokentrac",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "rows": [
+            {
+              "total": 60
+            }
+          ]
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

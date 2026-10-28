@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # 校验一个 release 目录：SHA-256 完整性、UTF-8 无 BOM、函数清单与文件数。
-# 用法: ./scripts/verify.sh releases/1.4.12
+# 用法: ./scripts/verify.sh releases/1.4.15
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET="${1:-}"
-[ -n "$TARGET" ] || { echo "用法: verify.sh <release-dir>  例如 verify.sh releases/1.4.12"; exit 1; }
+[ -n "$TARGET" ] || { echo "用法: verify.sh <release-dir>  例如 verify.sh releases/1.4.15"; exit 1; }
 [ -d "$TARGET" ] || { echo "目录不存在: $TARGET"; exit 1; }
 cd "$TARGET" || exit 1
 

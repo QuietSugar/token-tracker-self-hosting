@@ -1,0 +1,140 @@
+{
+  "id": "aggregation/utc-vs-offset",
+  "tags": [
+    "aggregation",
+    "timezone"
+  ],
+  "group": "aggregation",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "ingest",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey, x-tokentracker-device-token-hash",
+          "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "inserted": 1,
+          "membership": {
+            "access_source": "none",
+            "can_read_cloud": true,
+            "can_upload_cloud": true,
+            "daily_history_months": null,
+            "environment": "live",
+            "expires_at": null,
+            "gift_expires_at": null,
+            "has_gift": false,
+            "hosting_mode": "self_hosted",
+            "hourly_history_days": null,
+            "machine_limit": null,
+            "phase": "active",
+            "read_only_until": null,
+            "status": "self_hosted",
+            "sync_interval_seconds": 0,
+            "transition_ends_at": null,
+            "trial_available": false,
+            "trial_ends_at": null
+          },
+          "next_allowed_at": "@ts:1",
+          "ok": true,
+          "skipped": 0,
+          "sync_interval_seconds": 0,
+          "upload_scope": "cloud"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 1,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-daily",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "data": [
+            {
+              "billable_total_tokens": 100,
+              "cache_creation_input_tokens": 0,
+              "cached_input_tokens": 0,
+              "conversation_count": 1,
+              "day": "@relday-25",
+              "input_tokens": 100,
+              "models": {
+                "gpt-6": 100
+              },
+              "output_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_cost_usd": 0,
+              "total_tokens": 100
+            }
+          ],
+          "from": "@relday-25",
+          "to": "@relday-23"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-daily",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "data": [
+            {
+              "billable_total_tokens": 100,
+              "cache_creation_input_tokens": 0,
+              "cached_input_tokens": 0,
+              "conversation_count": 1,
+              "day": "@relday-24",
+              "input_tokens": 100,
+              "models": {
+                "gpt-6": 100
+              },
+              "output_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_cost_usd": 0,
+              "total_tokens": 100
+            }
+          ],
+          "from": "@relday-25",
+          "to": "@relday-23"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

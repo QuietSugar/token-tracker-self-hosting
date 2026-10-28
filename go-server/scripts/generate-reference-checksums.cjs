@@ -13,6 +13,8 @@ const lines=[
   "// PostgreSQL reference migration checksums are an audit crosswalk only.",
   "package store","",
   "// PostgreSQLReferenceSteps contains the upstream PG migration step IDs/checksums.",
+  "// 它们只作为审计对照（audit crosswalk），不会被本服务执行——本服务用自己的",
+  "// schema_migrations / schema_additions 账本，不伪造上游的 15-step 安装记录。",
   "var PostgreSQLReferenceSteps = []struct{ ID, Checksum string }{",
 ];
 for(const s of data.steps.items) lines.push(`\t{${JSON.stringify(s.id)}, ${JSON.stringify(s.checksum)}},`);

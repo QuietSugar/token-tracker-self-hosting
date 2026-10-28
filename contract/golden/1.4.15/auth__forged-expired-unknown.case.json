@@ -1,0 +1,81 @@
+{
+  "id": "auth/forged-expired-unknown",
+  "tags": [
+    "auth",
+    "error",
+    "security"
+  ],
+  "group": "auth",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "request",
+      "call": "tokentracker-account-summary",
+      "response": {
+        "status": 401,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": "Unauthorized"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-summary",
+      "response": {
+        "status": 401,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": "Unauthorized"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-summary",
+      "response": {
+        "status": 401,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": "Unauthorized"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

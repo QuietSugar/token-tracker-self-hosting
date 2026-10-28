@@ -9,7 +9,7 @@
 #     `node -e '...'` 会被 parser 误判为 Dockerfile 指令（已踩过坑）。
 #
 # 构建（由 .github/workflows/build-image.yml 调用）：
-#   docker build --build-arg VERSION=1.4.12 --build-arg UPSTREAM_COMMIT=<sha> \
+#   docker build --build-arg VERSION=1.4.15 --build-arg UPSTREAM_COMMIT=<sha> \
 #     --build-arg SOURCE_DATE_EPOCH=<epoch> --build-arg VCS_REF=<sha> -t <image> .
 
 ARG NODE_VERSION=20

@@ -3,6 +3,19 @@
 记录**本仓库自身**的变化（上游版本见 [`docs/maintainers/upstream.md`](docs/maintainers/upstream.md)）。
 只写使用者能感知的东西；内部重构与文档搬家不在此列。当前处于实验通道，未发正式版。
 
+## 2026-10-28 — 跟进上游 v1.4.15
+
+- **锁定点升到上游 v1.4.15**（`4cf3e212`），重新生成 `releases/1.4.15/` 并重录 `contract/golden/1.4.15/`。
+- **后端无需改动**：安装 SQL / 迁移 SQL / 15 步清单 / 14 个函数签名与 1.4.12 逐字节相同；
+  唯一变化是 3 个 `account-*` 函数内嵌的定价表新增 `gpt-6.1-terra`（本后端的定价状态本就是
+  `unpriced`、成本取客户端上传值，因此不跟随）。35 个行为用例新旧 golden **逐字节相同**。
+- **契约基线换成 1.4.15**：Go 后端在 1.4.15 golden 上重跑 33 PASS / 0 FAIL / 2 SKIP。
+- **修掉评审脚本的盲区**：`./scripts/upstream.sh review` 原先只盯 `dashboard/edge-patches/cloud`，
+  漏掉了 `edge-patches/tokentracker-account-*.ts`（定价表所在），1.4.15 这次就被误报成「契约 diff 空」。
+  现在收整个 `dashboard/edge-patches`。
+- 客户端建议升级到 v1.4.15（Qoder 追踪恢复、GPT-6.1 Terra 定价、sessions 页与 macOS 菜单栏改进）。
+- 部署工件镜像默认 tag 随之升到 `1.4.15`（`docker-compose.example.yml`）。
+
 ## 2026-10-28 — 修复「用量记到别的设备名下」
 
 - **修复归属错误**：`device-login` 过去按 `machine_id OR (platform, device_name)` 判重，而所有通过
