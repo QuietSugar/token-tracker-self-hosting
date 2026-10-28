@@ -110,9 +110,30 @@ curl -s -X POST -H "Authorization: Bearer <token>" -H 'Content-Type: application
 上传约束：单次 ≤500 个桶、body ≤1 MiB；主键 `user_id+device_id+hour_start+source+model`，
 **同键重复上传为整行替换**，因此重传安全。
 
+### 凭据有效期：device token 永不过期
+
+`device_tokens` 表只有 `token_hash` 与 `revoked_at`，**没有任何过期列**，客户端侧也不存有效期
+（`device-login` 只写 `deviceToken` 与 `deviceTokenBaseUrl`）。因此：
+
+- 签发十年后的 token 依然可以上传；**不存在「到期后要重新 `device-login`」这回事**。
+- 唯一能让 token 失效的操作是**撤销**（暂停设备 / 删除设备），没有第二个途径。
+- 每次成功上传都会刷新该机器的 `last_seen_at`（设备清单上的「最后活跃」），
+  所以持续 `sync` 的机器在清单上一直是活的——不需要任何额外的「续期」动作。
+
+真正有时间限制的是另外三样，都不影响 `sync`：
+
+| 有期限的东西 | 时限 | 影响 |
+|---|---|---|
+| `user_code`（设备授权码） | 15 分钟 | 只约束「批准」这一步，过期重新 `device-login` 即可 |
+| 看板 access token | 1 小时 | 看板自动用 refresh token 续期 |
+| 看板 refresh token | 90 天 | 每次刷新都轮换并重新计时；只影响看板登录，不影响上传 |
+
 ---
 
 ## 5. 重命名 / 暂停 / 恢复
+
+本项目的工作模式是**设备长期在线**：接一次、之后一直 `sync`。下面的「暂停 / 恢复」只是为与官方
+dashboard 保持一致而保留的能力，日常不需要用；看板也不提供（见 [`dashboard.md`](dashboard.md)）。
 
 **重命名**：内建看板（`GET /`）的设备列表里有「改名」按钮，行内改完即生效，见
 [`dashboard.md`](dashboard.md)。下面是等价的 HTTP 调用（脚本 / 官方 dashboard 用）：
