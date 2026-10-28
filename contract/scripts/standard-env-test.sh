@@ -52,8 +52,11 @@ echo "[T3] 并发后 checksum 与 golden 一致"
 CK1=$($PGCONN -tAc "SELECT checksum FROM public.tokentracker_self_host_installations WHERE step='01-private-baseline';")
 CK_GOLDEN=$(cd "$ROOT/releases/$(sed -n 's/^VERSION=//p' "$ROOT/tracking/REF" | head -1)" && sha256sum <(sed -n 's/^| 1 | `01-private-baseline` | `\([a-f0-9]\{64\}\)`.*/\1/p' manifest-report.md) 2>/dev/null | cut -d' ' -f1 || true)
 echo "  实际:   $CK1"
-echo "  golden: $(grep -m1 '01-private-baseline' "$ROOT/releases/1.4.12/manifest-report.md" | grep -oE '[a-f0-9]{64}' | head -1)"
-CK_EXPECT=$(grep -m1 '01-private-baseline' "$ROOT/releases/1.4.12/manifest-report.md" | grep -oE '[a-f0-9]{64}' | head -1)
+REL_VERSION="$(sed -n 's/^VERSION=//p' "$ROOT/tracking/REF" | head -1)"
+REPORT="$ROOT/releases/$REL_VERSION/manifest-report.md"
+[ -f "$REPORT" ] || { echo "ERROR: 缺少 $REPORT（先跑 ./scripts/build.sh）" >&2; exit 1; }
+echo "  golden: $(grep -m1 '01-private-baseline' "$REPORT" | grep -oE '[a-f0-9]{64}' | head -1)"
+CK_EXPECT=$(grep -m1 '01-private-baseline' "$REPORT" | grep -oE '[a-f0-9]{64}' | head -1)
 T3_PASS=false; [ "$CK1" = "$CK_EXPECT" ] && T3_PASS=true
 
 # --- T4: RLS 权限矩阵（真实角色） ---

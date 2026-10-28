@@ -18,7 +18,12 @@ COMMIT="$(ref COMMIT)"
 [ -n "$REPO_URL" ] && [ -n "$COMMIT" ] || die "tracking/REF 内容不完整"
 
 # 契约路径（判定规则见 docs/maintainers/upstream.md）
-CONTRACT_PATHS=(scripts/self-host 'docs/self-hosting*' dashboard/edge-patches/cloud scripts/build-cloud-functions.cjs migrations)
+#
+# 注意 `dashboard/edge-patches` 要整目录收：account-* 这些函数的定价表不在 `cloud/` 下，
+# 而在 `edge-patches/tokentracker-account-*.ts` 里。只盯 `cloud/` 会漏掉「仅定价变更」
+# 这类真会改变产物字节的提交（1.4.12 → 1.4.15 就踩过一次：review 报“契约 diff 空”，
+# 实际 3 个函数的 bundle 变了）。
+CONTRACT_PATHS=(scripts/self-host 'docs/self-hosting*' dashboard/edge-patches scripts/build-cloud-functions.cjs migrations)
 
 need_upstream() {
   [ -d "$UPSTREAM_DIR/.git" ] || die "找不到上游 checkout: $UPSTREAM_DIR（可设环境变量 UPSTREAM_DIR 覆盖）"
@@ -138,7 +143,7 @@ usage() {
 
 示例:
   ./scripts/upstream.sh review
-  ./scripts/upstream.sh pin 8d32a956181bf52fae449c89b8f6520253566283 1.4.12
+  ./scripts/upstream.sh pin 4cf3e2125b8e274d03b7210c2fd0e1124e23f987 1.4.15
 EOF
 }
 
