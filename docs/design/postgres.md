@@ -3,7 +3,7 @@
 > 结论：`TT_DATABASE_URL` 是必填项，引擎只有 PostgreSQL。没有"零依赖默认引擎"，也不打算再支持第二个。
 > 操作步骤见 [`../users/deploy.md`](../users/deploy.md)；现状见 [`../status.md`](../status.md)。
 
-## 1. 为什么不是"加个适配层"就行
+## 1. 为什么不采用"增加适配层"的方案
 
 上游那套自托管后端（InsForge + TypeScript edge functions）是**语义级**绑在 PostgreSQL 上的。
 在 v1.4.12 的安装 SQL（4,712 行）里：`jsonb` 338 处、`timestamptz` 217 处、PL/pgSQL 82 处、
