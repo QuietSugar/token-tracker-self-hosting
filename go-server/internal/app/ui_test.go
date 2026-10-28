@@ -36,6 +36,8 @@ func TestRootServesReadOnlyDashboard(t *testing.T) {
 		"/functions/tokentracker-account-summary",
 		"/functions/tokentracker-account-devices",
 		"/functions/tokentracker-account-heatmap",
+		// 「最后同步」列来自自托管自己的端点，页面与它脱节就只会显示「从未同步」。
+		"/api/selfhost/devices",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("看板缺少 %q（页面与端点约定脱节）", want)
@@ -207,6 +209,12 @@ func TestDashboardWritesAreAllowlisted(t *testing.T) {
 	}
 	if calls := regexp.MustCompile(`postJSON\("/functions/`).FindAllString(body, -1); len(calls) != 1 {
 		t.Fatalf("看板有 %d 处 postJSON 调用，预期只允许设备改名这 1 处", len(calls))
+	}
+	// 非 /functions 的读取端点只有自托管的设备视图这一个：
+	// 官方的 account-devices 不带 last_seen_at，本页用它补「最后同步」。
+	nonFunc := regexp.MustCompile(`api\("/api/([a-z0-9/_\-]+)"`).FindAllStringSubmatch(body, -1)
+	if len(nonFunc) != 1 || nonFunc[0][1] != "selfhost/devices" {
+		t.Fatalf("看板调用了计划外的 /api 端点：%v", nonFunc)
 	}
 }
 

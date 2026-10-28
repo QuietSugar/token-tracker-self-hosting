@@ -3,6 +3,16 @@
 记录**本仓库自身**的变化（上游版本见 [`docs/maintainers/upstream.md`](docs/maintainers/upstream.md)）。
 只写使用者能感知的东西；内部重构与文档搬家不在此列。当前处于实验通道，未发正式版。
 
+## 2026-10-28 — 看板显示「最后同步」
+
+- 设备列表每行新增**最后同步**：`3 分钟前` / `2026-09-30` / `从未同步` 三种形态，超过 7 天淡化显示。
+  语义是「最后一次有新用量上传」，不是「最后一次 HTTP 通信」——文档里写清了，避免误读成掉线。
+- 新增只读端点 `GET /api/selfhost/devices`（需 JWT）：返回设备的
+  `machine_id / status / created_at / last_seen_at / active_tokens`。放在自托管命名空间下，
+  不给官方 `account-devices` 加字段，契约零变更。
+- **修复**：`machineFor` 判重不再只看 `status='active'`。此前被暂停的机器在客户端重新接入时会再插一行，
+  同一个 `machine_id` 出现两行、`billing?action=devices` 里变成两台同名设备；现在复用原行。
+
 ## 2026-10-28 — 设备凭据长期有效（无需续期）
 
 - **明确并锁定**：device token **没有有效期**（服务端无过期列，客户端也不存），签发多年后仍可上传；
