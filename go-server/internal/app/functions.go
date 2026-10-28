@@ -39,7 +39,13 @@ func (s *Server) functions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 公开入口（无需 JWT）
-	public := slug == "tokentracker-device-flow-authorize" || slug == "tokentracker-device-flow-poll"
+	//
+	// tokentracker-leaderboard 也在列：客户端打榜单时**故意不带** Authorization
+	// （api.ts 里 getLeaderboard 的注释：InsForge 网关对任何 JWT 问题都回 500，
+	// 会把公开读一起打挂）。它是自托管的空态端点，见 leaderboard.go。
+	public := slug == "tokentracker-device-flow-authorize" ||
+		slug == "tokentracker-device-flow-poll" ||
+		slug == "tokentracker-leaderboard"
 	// ingest 使用 device token（SHA-256 hash），不是 JWT；由 handler 自己校验。
 	// 参考实现也是这个语义：未认证时返回 "Missing bearer token" / "Unauthorized"。
 	deviceTokenAuth := slug == "tokentracker-ingest"
@@ -82,6 +88,10 @@ func (s *Server) functions(w http.ResponseWriter, r *http.Request) {
 		s.accountDevices(w, r, sub)
 	case "tokentracker-billing":
 		s.billing(w, r, sub, role)
+	case "tokentracker-leaderboard":
+		// 上游自托管清单里没有榜单（excluded: official community publishing），
+		// 但官方 GUI 会请求它。这里回空态而不是 404，避免页面顶一行红字。
+		s.leaderboard(w, r)
 	default:
 		writeJSON(w, 404, map[string]any{"error": "Function not installed"})
 	}
