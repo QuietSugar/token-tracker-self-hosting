@@ -10,19 +10,19 @@
 
 services:
   info:
-    image: ghcr.io/quietsugar/token-tracker-self-hosting:${TT_IMAGE_TAG:-1.4.15}
+    image: ghcr.io/quietsugar/token-tracker-self-hosting:${TT_IMAGE_TAG:-1.5.0}
     command: ["info"]
     read_only: true
     security_opt: ["no-new-privileges:true"]
 
   verify:
-    image: ghcr.io/quietsugar/token-tracker-self-hosting:${TT_IMAGE_TAG:-1.4.15}
+    image: ghcr.io/quietsugar/token-tracker-self-hosting:${TT_IMAGE_TAG:-1.5.0}
     command: ["verify"]
     read_only: true
     security_opt: ["no-new-privileges:true"]
 
   commands:
-    image: ghcr.io/quietsugar/token-tracker-self-hosting:${TT_IMAGE_TAG:-1.4.15}
+    image: ghcr.io/quietsugar/token-tracker-self-hosting:${TT_IMAGE_TAG:-1.5.0}
     command: ["commands"]
     read_only: true
     security_opt: ["no-new-privileges:true"]
@@ -30,7 +30,7 @@ services:
   # 一次性导出：把全部产物写到 ./out，供 psql 与 InsForge 管理界面使用。
   # 非 root (uid 10001) 写入，宿主机目录需可写：mkdir -p out && chmod 777 out
   export:
-    image: ghcr.io/quietsugar/token-tracker-self-hosting:${TT_IMAGE_TAG:-1.4.15}
+    image: ghcr.io/quietsugar/token-tracker-self-hosting:${TT_IMAGE_TAG:-1.5.0}
     command: ["export", "/out"]
     volumes:
       - ./out:/out

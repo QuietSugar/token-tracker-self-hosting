@@ -10,10 +10,10 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | **1.4.15** |
-| commit | `4cf3e2125b8e274d03b7210c2fd0e1124e23f987` |
+| 版本 | **1.5.0** |
+| commit | `b2c2eb8545cee15d517f4fd6e783191c2ba30117` |
 | 自托管清单 | 15 步安装 + 14 个私有函数（与 1.4.12 相同） |
-| 1.4.12 → 1.4.15 | 安装 / 迁移 SQL 逐字节相同；3 个 `account-*` 函数内嵌定价表新增 `gpt-6.1-terra`；**35 个行为用例逐字节相同** → **后端无需动作**，客户端建议升级 |
+| 1.4.15 → 1.5.0 | 安装 / 迁移 SQL、14 个函数 bundle、`functions.json` **全部逐字节相同**；唯一落在契约路径下的变更是 `edge-patches/tokentracker-leaderboard-profile.ts`（我们没实现该函数）；**35 个行为用例 + `static.json` 依赖版本逐字节相同** → **后端无需动作** |
 
 ## 2. 版本追踪表（跟着 REF 走）
 
@@ -26,6 +26,10 @@
 | 1.4.13 | `2f19cd46` | 15 步 | Qoder 解析器修复（客户端侧） | 后端无需动作 |
 | 1.4.14 | `9dc925d8` | 15 步 | macOS 菜单栏、sessions 页 UI；本地 API 后台读取 | 后端无需动作 |
 | **1.4.15** | `4cf3e212` | 15 步 | 定价表新增 `gpt-6.1-terra`（3 个 `account-*` bundle 变，行为用例不变）；Grok 配额、sessions 效率列 | **后端无需动作**；行为契约已在 1.4.15 golden 上重跑（33 PASS / 2 SKIP） |
+| **1.5.0** | `b2c2eb85` | 15 步 | 契约路径下仅 `leaderboard-profile`（榜单资料卡 `totals` 改用 lifetime snapshot，新增 `source` 字段）——**不在我们的 14 个函数内**；其余为客户端侧（sessions 页支持 DeepSeek Harness、zcode 重置卡倒计时、限额面板） | **后端无需动作**：产物与 1.4.15 逐字节相同；重录的 1.5.0 golden 与 1.4.15 golden 逐字节相同（仅版本号与时间戳不同）；Go 契约 33 PASS / 2 SKIP |
+
+> 1.5.0 的安装 SQL 与 1.4.12 / 1.4.15 逐字节相同，所以 [`contract/L3-RESULTS.md`](../../contract/L3-RESULTS.md)
+> 里那次真实四容器栈的并发结果（1.4.15 基线）对 1.5.0 同样成立，不必重跑。
 
 > 关于"14 步"：上游文档与早期归档写"14 application steps"，那是 2026-10-09 的快照
 > （缺 `13-machine-alias-cascade`）。以 `require('./scripts/self-host/manifest.cjs').steps()` 的实际输出为准 —— **15 步**。

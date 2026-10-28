@@ -1,6 +1,6 @@
 // Package app 实现 TokenTracker 自托管后端的 HTTP 层（Go + PostgreSQL）。
 //
-// 覆盖范围（对齐 contract/golden/1.4.15 的行为快照）：
+// 覆盖范围（对齐 contract/golden/1.5.0 的行为快照）：
 //   - JWT HS256 认证（anon / authenticated / project_admin）
 //   - 设备授权流程 authorize / poll / grant / token-issue
 //   - 用量上传 ingest（SHA-256 token hash、整行修正、幂等、限长）
@@ -362,7 +362,7 @@ func (s *Server) testSQL(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) testManifest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-TT-NoCORS", "1")
-	// 与 releases/1.4.15/functions/functions.json 一致
+	// 与 releases/1.5.0/functions/functions.json 一致
 	slugs := []string{
 		"tokentracker-device-flow-authorize", "tokentracker-device-flow-grant",
 		"tokentracker-device-flow-poll", "tokentracker-device-token-issue",
