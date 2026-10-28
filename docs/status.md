@@ -19,6 +19,7 @@
 | 设备维度：按设备汇总、`device_id` 过滤、重命名、暂停/恢复 | 同上 |
 | 内建看板（`GET /`），用量只读 | 单测 + 实跑（无外部请求、CSP 白名单） |
 | 看板内重命名设备（同步 `devices` 与 `cloud_machines`） | 单测 + 实跑（重名 409、空名 400）+ jsdom 交互验证 |
+| device token 长期有效（无 TTL，只有撤销能失效） | 单测：七年前签发的 token 仍可上传；并断言 `device_tokens` 表里不存在过期列 |
 | 镜像 `ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental` | CI 推送前强制执行真实 PG 冒烟测试 |
 | PostgreSQL 15 / 16 | CI 矩阵均跑单测 + 契约 |
 | 容器加固参数（`read_only` / `cap_drop: ALL` / 非 root `10001` / `no-new-privileges` / `tmpfs`） | CI 每次以与 `docker-compose.postgres-go.example.yml` 相同的参数启动容器，断言非 root、`/health` 200、看板 200 |
@@ -45,7 +46,10 @@
 4. **schema 仅有 version 1 与增量 additions**：升级无需重建库，但不支持自动回滚；升级前请自备数据库备份（备份不在本仓库范围内）。
 5. **`/_test/*` 端点**（含可执行任意 SQL 的 `/_test/sql`）仅在 `TT_ENABLE_TEST_ENDPOINTS=true` 时挂载，**生产环境必须保持关闭**（仅 `/_test/health` 无条件存在，且不接触数据）。
 6. **契约覆盖之外的行为未知**：契约仅锁定 33 个场景，边界语义（极端时区、超大 batch、异常时间戳）未穷举。
-7. **暂停 / 恢复仅在 device token 层生效**：暂停会撤销 token，恢复会将其还原；已登录的 `auth_sessions`
+7. **暂停不是"硬"状态**：`ingest` 不检查机器 `status`，客户端重新 `device-login` 之后仍能上传，
+   而且同一个 `machine_id` 可能出现「一 paused 一 active」两行机器记录。本项目按「设备长期在线」使用、
+   不在看板暴露暂停，因此不受影响；依赖「暂停必须拦死上传」的场景需要先补这项判断。
+8. **暂停 / 恢复仅在 device token 层生效**：暂停会撤销 token，恢复会将其还原；已登录的 `auth_sessions`
    （dashboard 登录态）不受影响 —— 设备暂停不等于使登录会话失效。
 
 ## 已知偏差（与官方行为有意不同，或暂时不同）

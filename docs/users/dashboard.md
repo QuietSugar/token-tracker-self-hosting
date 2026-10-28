@@ -5,6 +5,8 @@
 - 如需官方 dashboard / 菜单栏的完整视图，请参见 [`official-client.md`](official-client.md)，两者可同时使用。
 - 本页面面向「快速查看当日用量」的场景，不需要 npm，也不需要公网访问。
   **用量数据只读**；页面上唯一能改的是设备名称（见下节）。
+- 设备管理只做**改名**：本项目按「设备长期在线」使用，看板**不提供**暂停 / 恢复 / 删除；
+  这些能力仍由官方 dashboard 与 CLI 提供（[`devices.md`](devices.md) §5）。
 
 ## 登录
 
@@ -41,7 +43,8 @@ access token 在 1 小时后过期时，页面会使用登录取得的 refresh t
   （`billing?action=devices`，官方 dashboard 的设备卡片），两处名字一致。
 - 客户端重新执行 `device-login` 或重签 token **不会覆盖**服务端改好的名字：设备行按 `machine_id`
   复用，不会被当成新设备。手写脚本若不带 `machine_id`，才会按 `platform + device_name` 匹配失败而新建一台。
-- 暂停 / 恢复设备**不在本页**（见 [`devices.md`](devices.md)）。
+- 暂停 / 恢复设备**不在本页**（见 [`devices.md`](devices.md)）。设备凭据长期有效，
+  不需要定期重新登录或续期，见 [`devices.md`](devices.md) §4「凭据有效期」。
 
 ## 两项有意的设计选择
 
