@@ -19,6 +19,15 @@ import (
 
 // selfHostAPI 挂在 /api/selfhost/ 下（不是官方接口，页面专用）。
 func (s *Server) selfHostAPI(w http.ResponseWriter, r *http.Request) {
+	// CORS 预检在鉴权之前短路，理由同 functions()：浏览器对带 Authorization 的跨域请求
+	// 一定先发 OPTIONS，预检若 401，真请求根本不发。看板通常同源调用，但从别处打开
+	// （或反代加了独立域名）时就会踩到同一个坑。
+	applyCORS(w, "account")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	// 先鉴权再路由：未认证时任何方法/路径一律 401，不暴露"这个端点存在哪些方法"。
 	sub, _, _, ok := s.auth(r)
 	if !ok {
