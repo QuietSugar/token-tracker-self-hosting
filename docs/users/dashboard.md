@@ -1,9 +1,10 @@
 # 内建看板
 
-服务端内置一个只读页面，**无需安装任何前端**：浏览器打开 `http://<你的地址>:8080/` 就是它。
+服务端内置一个用量看板，**无需安装任何前端**：浏览器打开 `http://<你的地址>:8080/` 就是它。
 
 - 如需官方 dashboard / 菜单栏的完整视图，请参见 [`official-client.md`](official-client.md)，两者可同时使用。
 - 本页面面向「快速查看当日用量」的场景，不需要 npm，也不需要公网访问。
+  **用量数据只读**；页面上唯一能改的是设备名称（见下节）。
 
 ## 登录
 
@@ -28,11 +29,27 @@ access token 在 1 小时后过期时，页面会使用登录取得的 refresh t
 - **周期切换**：今日 / 近 7 天 / 本月 / 全部（= 近 24 个月）
 - **设备下拉**：只统计选中的那台
 
+## 重命名设备
+
+「按设备」列表每行的「改名」按钮打开行内输入框，回车或「保存」提交，Esc 或「取消」放弃。
+
+- 走的是官方端点 `/functions/tokentracker-device-rename`（请求体 `{device_id, device_name}`），
+  与官方 dashboard 的请求体一致。
+- **同一平台下重名会被拒绝**（409）：两台设备都叫 `nas` 时，页面会提示换一个名字。
+  这条约束来自数据库上的部分唯一索引 `(user_id, platform, device_name)`。
+- 改名同时写入 `devices.device_name`（本页与 `account-devices`）和 `cloud_machines.name`
+  （`billing?action=devices`，官方 dashboard 的设备卡片），两处名字一致。
+- 客户端重新执行 `device-login` 或重签 token **不会覆盖**服务端改好的名字：设备行按 `machine_id`
+  复用，不会被当成新设备。手写脚本若不带 `machine_id`，才会按 `platform + device_name` 匹配失败而新建一台。
+- 暂停 / 恢复设备**不在本页**（见 [`devices.md`](devices.md)）。
+
 ## 两项有意的设计选择
 
 1. **列出全部设备，包括 0 用量的**（标注「无用量」）。官方 dashboard 会将当前周期无用量的设备从下拉列表中隐藏，易被误解为设备丢失。
-2. **只读**：页面仅发出 GET 请求，全程只有两个 POST —— 登录（`/api/auth/sessions`）与续期（`/api/auth/refresh`）。
-   重命名、暂停设备、删除数据均不在此进行（见 [`devices.md`](devices.md)）；`TestDashboardIsReadOnly` 会拦截任何新增的写端点。
+2. **用量只读，写操作走白名单**：页面读取用量全部是 GET；POST 只有三个 —— 登录（`/api/auth/sessions`）、
+   续期（`/api/auth/refresh`）、设备改名（`/functions/tokentracker-device-rename`）。
+   暂停、恢复、删除数据均不在此进行（见 [`devices.md`](devices.md)）；
+   `TestDashboardWritesAreAllowlisted` 把这三条写死在测试里，多出任何写端点都会让它失败。
 
 ## 保证与限制
 

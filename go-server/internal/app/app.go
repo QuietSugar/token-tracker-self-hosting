@@ -249,7 +249,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/auth/", s.authAPI)
 	mux.HandleFunc("/functions/", s.functions)
 	mux.HandleFunc("/api/database/rpc/", s.rpc)
-	// "/" 是内置只读看板（零依赖单文件）；其它未注册路径仍是 404 JSON。
+	// "/" 是内置看板（零依赖单文件，用量只读 + 设备改名）；其它未注册路径仍是 404 JSON。
 	mux.HandleFunc("/", s.root)
 	return s.withAccessLog(mux)
 }

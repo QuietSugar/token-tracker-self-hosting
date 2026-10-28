@@ -114,7 +114,10 @@ curl -s -X POST -H "Authorization: Bearer <token>" -H 'Content-Type: application
 
 ## 5. 重命名 / 暂停 / 恢复
 
-**重命名**（冲突时返回 409）：
+**重命名**：内建看板（`GET /`）的设备列表里有「改名」按钮，行内改完即生效，见
+[`dashboard.md`](dashboard.md)。下面是等价的 HTTP 调用（脚本 / 官方 dashboard 用）：
+
+冲突时返回 409：
 
 ```sh
 curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
@@ -150,6 +153,12 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/
 - 若暂停期间客户端已重新执行 `device-login`（新的设备行与新 token 已处于活跃状态），恢复时保留旧行的撤销状态 ——
   该机器已有可用新 token，不会出现两条活跃设备行。
 - 暂停不会删除历史用量。`ingest` 会更新该机器的 `last_seen_at`（即设备卡片上的「最后活跃」）。
+
+改名相关的两个要点：
+
+- 名字存在两张表上（`devices.device_name` 与 `cloud_machines.name`），改名会同时写；只改一张会让
+  本服务的设备列表与官方 dashboard 的设备卡片显示两个名字。
+- 客户端再次 `device-login` 不会覆盖改好的名字（按 `machine_id` 复用设备行），但**同一平台下不能重名**。
 
 ---
 

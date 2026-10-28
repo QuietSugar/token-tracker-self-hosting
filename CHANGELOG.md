@@ -3,6 +3,15 @@
 记录**本仓库自身**的变化（上游版本见 [`docs/maintainers/upstream.md`](docs/maintainers/upstream.md)）。
 只写使用者能感知的东西；内部重构与文档搬家不在此列。当前处于实验通道，未发正式版。
 
+## 2026-10-28 — 看板内改设备名
+
+- **内建看板可以重命名设备**：设备列表每行多一个「改名」，行内编辑后回车 / 保存即写入，
+  走官方的 `tokentracker-device-rename`（同一平台重名返回 409 并在页面提示）。
+- **改名会同时更新官方 dashboard 看到的机器名**：名字落在 `devices.device_name` 与
+  `cloud_machines.name` 两张表上，此前只改前者，导致 `billing?action=devices` 仍显示旧名。
+- 客户端重新 `device-login` 或重签 token 不会把服务端改好的名字覆盖回去（按 `machine_id` 复用设备行）。
+- 看板仍然是「用量只读」：`TestDashboardWritesAreAllowlisted` 把可写端点锁在白名单里（登录 / 续期 / 改名）。
+
 ## 2026-10-28 — 设备暂停/恢复
 
 - **恢复后可以直接继续上传**：`resume-device` 现在会把暂停时撤销的设备与 device token 还原，

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// GET / 是内置只读看板：必须是 HTML、必须自带 CSP、必须不发外部请求。
+// GET / 是内置看板：必须是 HTML、必须自带 CSP、必须不发外部请求。
 func TestRootServesReadOnlyDashboard(t *testing.T) {
 	s, _ := testServer(t)
 	h := s.Handler()
@@ -155,25 +155,35 @@ func TestAccountDailySumsCost(t *testing.T) {
 	}
 }
 
-// 看板是只读的：页面里只允许两种"写"以外的调用——GET 用量端点，
-// 以及唯一一个 POST（拿登录 session）。多出任何写端点都意味着页面越权。
-func TestDashboardIsReadOnly(t *testing.T) {
+// 看板的写操作采用白名单：用量数据只读，唯一允许的改写是**设备名称**
+// （官方 tokentracker-device-rename）。多出任何其它写端点都意味着页面越权。
+//
+// 白名单是穷举的：新增一个写端点就必须同时改这里，逼着改的人想清楚
+// "看板到底该不该能写这个"。
+func TestDashboardWritesAreAllowlisted(t *testing.T) {
 	body := string(homeHTML)
-	// 只允许两个 POST，且都必须是 /api/auth/ 下的会话端点（登录 / 续期）。
-	if n := strings.Count(body, `method: "POST"`); n != 2 {
-		t.Fatalf("看板里有 %d 处 POST，只允许登录与续期这两处", n)
+	// 三个 POST：登录、续期、设备改名。多一个少一个都说明与约定脱节。
+	if n := strings.Count(body, `method: "POST"`); n != 3 {
+		t.Fatalf("看板里有 %d 处 POST，只允许登录、续期、设备改名这三处", n)
 	}
-	for _, ep := range []string{"/api/auth/sessions", "/api/auth/refresh"} {
+	for _, ep := range []string{"/api/auth/sessions", "/api/auth/refresh", "/functions/tokentracker-device-rename"} {
 		if !strings.Contains(body, ep) {
-			t.Fatalf("缺少会话端点 %q", ep)
+			t.Fatalf("缺少端点 %q", ep)
 		}
 	}
+	// 改名必须发官方字段名（device_id / device_name），否则官方 dashboard 的请求体会与看板不一致。
+	for _, field := range []string{"device_id", "device_name"} {
+		if !strings.Contains(body, field) {
+			t.Fatalf("改名请求体缺少官方字段 %q", field)
+		}
+	}
+	// 用量数据仍然只读：这些写端点一个都不许出现。
 	for _, banned := range []string{
 		"tokentracker-ingest", "device-token-issue", "remove-device",
-		"resume-device", "device-rename", "cloud-billing",
+		"resume-device", "cloud-billing", "/_test/",
 	} {
 		if strings.Contains(body, banned) {
-			t.Fatalf("只读看板不应该引用写端点 %q", banned)
+			t.Fatalf("看板不应该引用写端点 %q", banned)
 		}
 	}
 	// 页面用的每个 /functions/* 都必须能在服务器的已注册端点里找到，
@@ -184,15 +194,19 @@ func TestDashboardIsReadOnly(t *testing.T) {
 		"tokentracker-account-heatmap":         true,
 		"tokentracker-account-model-breakdown": true,
 		"tokentracker-account-devices":         true,
+		"tokentracker-device-rename":           true,
 	}
-	for _, m := range regexp.MustCompile(`api\("/functions/([a-z0-9-]+)"`).FindAllStringSubmatch(body, -1) {
+	for _, m := range regexp.MustCompile(`(?:api|postJSON)\("/functions/([a-z0-9-]+)"`).FindAllStringSubmatch(body, -1) {
 		if !registered[m[1]] {
-			t.Fatalf("看板调用了未注册/非只读端点 %q", m[1])
+			t.Fatalf("看板调用了未注册端点 %q", m[1])
 		}
 	}
-	calls := regexp.MustCompile(`api\("/functions/`).FindAllString(body, -1)
-	if len(calls) != 5 {
-		t.Fatalf("看板只调了 %d 个用量端点，预期 5 个（页面与后端契约不一致）", len(calls))
+	// 5 个 GET 用量端点 + 1 个改名 POST。
+	if calls := regexp.MustCompile(`api\("/functions/`).FindAllString(body, -1); len(calls) != 5 {
+		t.Fatalf("看板调了 %d 个用量端点，预期 5 个（页面与后端契约不一致）", len(calls))
+	}
+	if calls := regexp.MustCompile(`postJSON\("/functions/`).FindAllString(body, -1); len(calls) != 1 {
+		t.Fatalf("看板有 %d 处 postJSON 调用，预期只允许设备改名这 1 处", len(calls))
 	}
 }
 

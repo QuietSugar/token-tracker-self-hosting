@@ -115,6 +115,13 @@
   .dev .dt{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
   .dev .dot{width:7px;height:7px;border-radius:50%;background:var(--accent2);flex:none}
   .dev .dot.zero{background:var(--line)}
+  /* 设备改名：行内编辑，不加弹窗（内网看板不引任何 UI 库） */
+  .dev .ren{border:0;background:transparent;color:var(--muted);font-size:11px;padding:2px 6px;flex:none}
+  .dev .ren:hover{color:var(--accent);border:0}
+  .dev input.rn{flex:1;min-width:0;font-size:13px;font-family:inherit;padding:3px 7px;
+    border:1px solid var(--accent);border-radius:7px;background:var(--bg);color:var(--fg)}
+  .dev .acts{display:flex;gap:6px;flex:none}
+  .dev .acts button{font-size:11px;padding:3px 9px}
 
   .empty{color:var(--muted);font-size:12px;padding:10px 0}
   .banner{border:1px solid var(--warn);color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,transparent);
@@ -147,7 +154,7 @@
     <div class="err" id="gateErr"></div>
     <p class="hint">
       没有账户？在服务端用 <code>TT_AUTH_EMAIL</code> / <code>TT_AUTH_PASSWORD</code> 启动一次即可创建 owner，
-      或直接用脚本签一个 JWT。这个页面只读，不会修改任何用量数据。
+      或直接用脚本签一个 JWT。页面只读取用量数据，唯一可修改的是设备名称。
     </p>
   </div>
 </div>
@@ -218,9 +225,10 @@
   </div>
 
   <p class="foot">
-    只读页面，零外部请求；token 存在 sessionStorage，关闭标签页即失效。
-    同源 API：<code>/functions/tokentracker-account-*</code>、<code>/api/auth/sessions</code>。
-    设备管理（暂停 / 重命名）请用 CLI 或官方客户端；此处只看不改。
+    页面零外部请求；token 存在 sessionStorage，关闭标签页即失效。
+    同源 API：<code>/functions/tokentracker-account-*</code>、<code>/api/auth/sessions</code>、
+    <code>/functions/tokentracker-device-rename</code>。
+    用量数据只读；可修改的只有设备名称。暂停 / 恢复设备请用 CLI 或官方客户端。
   </p>
 </div>
 
@@ -348,6 +356,39 @@
       return refreshSession().then(function () {
         return requestOnce(path, params, state.token);
       });
+    });
+  }
+
+  // 页面里唯一的写操作（设备改名）。与 api() 的区别只是 body 走 POST；
+  // 401 同样先换一次 access token 再重试，不把用户踢回登录页。
+  function postJSON(path, body) {
+    function send() {
+      return fetch(path, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + state.token,
+          "X-TokenTracker-Token": "Bearer " + state.token
+        },
+        credentials: "same-origin",
+        body: JSON.stringify(body || {})
+      }).then(function (res) {
+        if (res.status === 401) {
+          return res.text().then(function (t) { throw unauth(path, res.status, t.slice(0, 120)); });
+        }
+        if (!res.ok) {
+          return res.text().then(function (t) {
+            var e = new Error("HTTP " + res.status + " " + t.slice(0, 160));
+            e.status = res.status;
+            throw e;
+          });
+        }
+        return res.json();
+      });
+    }
+    return send().catch(function (err) {
+      if (!err || !err.unauthorized) throw err;
+      return refreshSession().then(send);
     });
   }
 
@@ -493,8 +534,84 @@
         '<span class="dot' + (tokens > 0 ? "" : " zero") + '"></span>' +
         '<span class="dn">' + esc(d.device_name || d.id || "未命名") +
         (d.platform ? '<span class="badge">' + esc(d.platform) + "</span>" : "") + "</span>" +
-        '<span class="dt">' + (tokens > 0 ? fmtTokens(tokens) : "无用量") + "</span>";
+        '<span class="dt">' + (tokens > 0 ? fmtTokens(tokens) : "无用量") + "</span>" +
+        '<button class="ren" type="button" title="重命名这台设备">改名</button>';
+      row.querySelector(".ren").addEventListener("click", function () { startRename(row, d); });
       host.appendChild(row);
+    });
+  }
+
+  // 行内把设备名换成输入框。只改名字，不动用量；服务端走官方的
+  // /functions/tokentracker-device-rename（同一平台重名会返回 409）。
+  function startRename(row, d) {
+    if (row.classList.contains("editing")) return;
+    row.classList.add("editing");
+    var nameEl = row.querySelector(".dn");
+    var oldName = d.device_name || d.id || "";
+    var input = document.createElement("input");
+    input.className = "rn";
+    input.type = "text";
+    input.maxLength = 80;
+    input.value = oldName;
+    input.setAttribute("aria-label", "设备名称");
+    var acts = document.createElement("span");
+    acts.className = "acts";
+    var save = document.createElement("button");
+    save.type = "button";
+    save.className = "primary";
+    save.textContent = "保存";
+    var cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "取消";
+    acts.appendChild(save);
+    acts.appendChild(cancel);
+
+    nameEl.hidden = true;
+    var meta = row.querySelector(".dt");
+    var ren = row.querySelector(".ren");
+    meta.hidden = true;
+    ren.hidden = true;
+    row.insertBefore(input, meta);
+    row.appendChild(acts);
+    input.focus();
+    input.select();
+
+    function close() {
+      row.classList.remove("editing");
+      nameEl.hidden = false;
+      meta.hidden = false;
+      ren.hidden = false;
+      input.remove();
+      acts.remove();
+    }
+    function commit() {
+      var next = input.value.trim();
+      if (!next) { banner("设备名称不能为空。"); input.focus(); return; }
+      if (next === oldName) { close(); return; }
+      save.disabled = true;
+      cancel.disabled = true;
+      save.textContent = "保存中…";
+      postJSON("/functions/tokentracker-device-rename", { device_id: d.id, device_name: next })
+        .then(function () {
+          banner("");
+          close();
+          load();
+        }, function (err) {
+          save.disabled = false;
+          cancel.disabled = false;
+          save.textContent = "保存";
+          var msg = err && err.status === 409
+            ? "同一平台上已有一台叫「" + next + "」的设备，请换一个名字。"
+            : "改名失败：" + (err && err.message ? err.message : String(err));
+          banner(msg);
+          input.focus();
+        });
+    }
+    save.addEventListener("click", commit);
+    cancel.addEventListener("click", close);
+    input.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") { ev.preventDefault(); commit(); }
+      else if (ev.key === "Escape") { ev.preventDefault(); close(); }
     });
   }
 
