@@ -1,7 +1,7 @@
 # 当前状态
 
 > 结论型文档：这里只放**现在成立的事实**。设计推理见 `design/`（[索引](README.md#design--为什么这么做)），操作步骤见 `users/`（[索引](README.md#users--怎么用)）。
-> 最后核对：2026-10-28（上游 v1.4.15 / `4cf3e212`）
+> 最后核对：2026-10-28（上游 v1.5.0 / `b2c2eb85`）
 
 ## 概览
 
@@ -11,10 +11,10 @@
 
 | 能力 | 证据 |
 |---|---|
-| 官方客户端 v1.4.15：`init` / `device-login` / `sync` / `doctor` | 手工实测，见 [`users/official-client.md`](users/official-client.md) |
+| 官方客户端：`init` / `device-login` / `sync` / `doctor`（1.4.15 实测；1.5.0 契约逐字节相同） | 手工实测，见 [`users/official-client.md`](users/official-client.md) |
 | 跨设备汇总视图（`/api/auth/*` → `account-*`） | 实测 7500 tokens；`scripts/check-oauth.sh` 一键自检 |
 | 用量上传：整行修正、幂等重传、多设备隔离 | 契约用例 + `-race` 单测 |
-| `account-summary/daily/hourly/monthly/heatmap/model-breakdown/devices` | 契约 golden 对拍（基线 1.4.15），33 PASS / 2 SKIP |
+| `account-summary/daily/hourly/monthly/heatmap/model-breakdown/devices` | 契约 golden 对拍（基线 1.5.0），33 PASS / 2 SKIP |
 | 时区（`tz` / `tz_offset_minutes`）与 heatmap `format=compact` | 与官方模块对拍的回归用例 |
 | 设备维度：按设备汇总、`device_id` 过滤、重命名、暂停/恢复 | 同上 |
 | CORS 预检（`OPTIONS /functions/*`、`/api/selfhost/*`）返回 204 + 该端点的 CORS 头 | 单测（billing/account/ingest/device-flow 各 slug 的头集合逐一断言，且预检放行后真请求仍 401）+ 实跑 curl 复现命令 |

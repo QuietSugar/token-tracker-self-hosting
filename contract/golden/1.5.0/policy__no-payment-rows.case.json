@@ -1,0 +1,55 @@
+{
+  "id": "policy/no-payment-rows",
+  "tags": [
+    "policy",
+    "L1"
+  ],
+  "group": "policy",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "query",
+      "call": "SELECT count(*)::int AS n FROM public.tokentracker_cloud_pay",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "rows": [
+            {
+              "n": 0
+            }
+          ]
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "query",
+      "call": "SELECT count(*)::int AS n FROM public.tokentracker_cloud_ord",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "rows": [
+            {
+              "n": 0
+            }
+          ]
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

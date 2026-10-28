@@ -3,7 +3,7 @@
 # 修改此文件请用：./scripts/upstream.sh pin <commit> <version>
 REPO_URL=https://github.com/xiufengsun/TokenTracker.git
 BRANCH=main
-VERSION=1.4.15
-COMMIT=4cf3e2125b8e274d03b7210c2fd0e1124e23f987
+VERSION=1.5.0
+COMMIT=b2c2eb8545cee15d517f4fd6e783191c2ba30117
 PINNED_AT=2026-10-28
 PINNED_BY=upstream.sh pin

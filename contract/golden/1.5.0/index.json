@@ -1,0 +1,343 @@
+{
+  "version": "1.5.0",
+  "commit": "b2c2eb8545cee15d517f4fd6e783191c2ba30117",
+  "seed": "tokentracker-contract-v1",
+  "cases": [
+    {
+      "id": "install/ledger-15-steps",
+      "group": "install",
+      "tags": [
+        "L1",
+        "install",
+        "postgres-specific"
+      ],
+      "steps": 1
+    },
+    {
+      "id": "install/policy-self-hosted",
+      "group": "install",
+      "tags": [
+        "L1",
+        "install"
+      ],
+      "steps": 1
+    },
+    {
+      "id": "install/rerun-preserves-data",
+      "group": "install",
+      "tags": [
+        "install",
+        "idempotency"
+      ],
+      "steps": 3
+    },
+    {
+      "id": "install/checksum-drift-refused",
+      "group": "install",
+      "tags": [
+        "install",
+        "error",
+        "postgres-specific"
+      ],
+      "steps": 3
+    },
+    {
+      "id": "install/manifest-exclusions",
+      "group": "install",
+      "tags": [
+        "L1",
+        "install"
+      ],
+      "steps": 1
+    },
+    {
+      "id": "device-flow/happy-path",
+      "group": "device-flow",
+      "tags": [
+        "auth",
+        "device",
+        "public"
+      ],
+      "steps": 5
+    },
+    {
+      "id": "device-flow/dashboard-url-anchor",
+      "group": "device-flow",
+      "tags": [
+        "auth",
+        "device",
+        "config"
+      ],
+      "steps": 2
+    },
+    {
+      "id": "device-flow/poll-unknown-code",
+      "group": "device-flow",
+      "tags": [
+        "auth",
+        "error"
+      ],
+      "steps": 1
+    },
+    {
+      "id": "ingest/basic-and-idempotent",
+      "group": "ingest",
+      "tags": [
+        "ingest",
+        "idempotency"
+      ],
+      "steps": 3
+    },
+    {
+      "id": "ingest/whole-row-correction",
+      "group": "ingest",
+      "tags": [
+        "ingest",
+        "correction"
+      ],
+      "steps": 4
+    },
+    {
+      "id": "ingest/two-devices-same-account",
+      "group": "ingest",
+      "tags": [
+        "ingest",
+        "multi-device"
+      ],
+      "steps": 3
+    },
+    {
+      "id": "ingest/unauthenticated-rejected",
+      "group": "ingest",
+      "tags": [
+        "ingest",
+        "auth",
+        "error"
+      ],
+      "steps": 3
+    },
+    {
+      "id": "ingest/batch-80-models",
+      "group": "ingest",
+      "tags": [
+        "ingest",
+        "scale"
+      ],
+      "steps": 2
+    },
+    {
+      "id": "ingest/oversize-rejected",
+      "group": "ingest",
+      "tags": [
+        "ingest",
+        "error",
+        "boundary"
+      ],
+      "steps": 1
+    },
+    {
+      "id": "account-reads/empty-state",
+      "group": "account-reads",
+      "tags": [
+        "read",
+        "schema"
+      ],
+      "steps": 7
+    },
+    {
+      "id": "account-reads/populated-schema",
+      "group": "account-reads",
+      "tags": [
+        "read",
+        "schema",
+        "aggregation"
+      ],
+      "steps": 3
+    },
+    {
+      "id": "account-reads/cross-user-isolation",
+      "group": "account-reads",
+      "tags": [
+        "read",
+        "security",
+        "rls"
+      ],
+      "steps": 3
+    },
+    {
+      "id": "account-reads/missing-params",
+      "group": "account-reads",
+      "tags": [
+        "read",
+        "error",
+        "validation"
+      ],
+      "steps": 3
+    },
+    {
+      "id": "policy/self-hosted-membership",
+      "group": "policy",
+      "tags": [
+        "policy",
+        "rpc"
+      ],
+      "steps": 2
+    },
+    {
+      "id": "policy/free-device-enrollment-7",
+      "group": "policy",
+      "tags": [
+        "policy",
+        "quota"
+      ],
+      "steps": 2
+    },
+    {
+      "id": "policy/paid-order-refused",
+      "group": "policy",
+      "tags": [
+        "policy",
+        "error",
+        "rpc"
+      ],
+      "steps": 2
+    },
+    {
+      "id": "policy/unknown-account-refused",
+      "group": "policy",
+      "tags": [
+        "policy",
+        "error",
+        "rpc"
+      ],
+      "steps": 1
+    },
+    {
+      "id": "policy/no-payment-rows",
+      "group": "policy",
+      "tags": [
+        "policy",
+        "L1"
+      ],
+      "steps": 2
+    },
+    {
+      "id": "auth/forged-expired-unknown",
+      "group": "auth",
+      "tags": [
+        "auth",
+        "error",
+        "security"
+      ],
+      "steps": 3
+    },
+    {
+      "id": "auth/device-revocation",
+      "group": "auth",
+      "tags": [
+        "auth",
+        "device",
+        "billing"
+      ],
+      "steps": 2
+    },
+    {
+      "id": "auth/rls-permission-matrix",
+      "group": "auth",
+      "tags": [
+        "auth",
+        "security",
+        "owner-isolation",
+        "L2"
+      ],
+      "steps": 2
+    },
+    {
+      "id": "auth/cascade-account-deletion",
+      "group": "auth",
+      "tags": [
+        "auth",
+        "cascade"
+      ],
+      "steps": 2
+    },
+    {
+      "id": "aggregation/timezone-asia-shanghai",
+      "group": "aggregation",
+      "tags": [
+        "aggregation",
+        "timezone",
+        "rpc"
+      ],
+      "steps": 2
+    },
+    {
+      "id": "aggregation/cache-invalidated-by-correction",
+      "group": "aggregation",
+      "tags": [
+        "aggregation",
+        "cache",
+        "correction",
+        "rpc"
+      ],
+      "steps": 4
+    },
+    {
+      "id": "aggregation/weekend-offpeak-pricing",
+      "group": "aggregation",
+      "tags": [
+        "aggregation",
+        "pricing",
+        "rpc"
+      ],
+      "steps": 2
+    },
+    {
+      "id": "aggregation/utc-vs-offset",
+      "group": "aggregation",
+      "tags": [
+        "aggregation",
+        "timezone"
+      ],
+      "steps": 3
+    },
+    {
+      "id": "billing/catalog-empty",
+      "group": "billing",
+      "tags": [
+        "billing",
+        "catalog"
+      ],
+      "steps": 1
+    },
+    {
+      "id": "billing/account-default",
+      "group": "billing",
+      "tags": [
+        "billing",
+        "account"
+      ],
+      "steps": 1
+    },
+    {
+      "id": "billing/no-merchant-keys",
+      "group": "billing",
+      "tags": [
+        "billing",
+        "security",
+        "public-contract"
+      ],
+      "steps": 1
+    },
+    {
+      "id": "billing/unauthenticated",
+      "group": "billing",
+      "tags": [
+        "billing",
+        "auth",
+        "error"
+      ],
+      "steps": 1
+    }
+  ]
+}

@@ -1,0 +1,548 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "version": "1.5.0",
+    "commit": "b2c2eb8545cee15d517f4fd6e783191c2ba30117",
+    "repository": "https://github.com/xiufengsun/TokenTracker.git"
+  },
+  "artifacts": {
+    "installSql": {
+      "bytes": 270197,
+      "sha256": "e08e905ee6a1488f6ff5cdb3800695a770b50c24eb720c0f139ceb2415928ba4",
+      "startsWith": "BEGIN;\nSELECT pg_advisory_xact_lock(hashtextextended('tokent",
+      "endsWith": ";\nNOTIFY pgrst,'reload schema';\nCOMMIT;\n"
+    },
+    "migrationSql": {
+      "bytes": 270182,
+      "sha256": "e70ebc4c61ec65475f50b3513004b4f982ced29a11e7588654e433f83d40330f",
+      "startsWith": "SELECT pg_advisory_xact_lock(hashtextextended('tokentracker:"
+    },
+    "sha256sums": [
+      "86157ac8da875f135563514557aa241801a242e94d170cb170e766313733a4db  functions/functions.json",
+      "2763a4602ff95c70a28bd16dbe5766e17fb7d9ffd8ea5d58f04b229ab0a2cbd1  functions/tokentracker-account-daily.js",
+      "8e8695b45617340a880a06972bf859d5f9ff0b0a33fb575bc1fa71723f23a9c6  functions/tokentracker-account-devices.js",
+      "ab99d93a5928e9ae68ad5ba213644b218c8aa73e5ffa47ae3ccbdd473f6b1adc  functions/tokentracker-account-heatmap.js",
+      "218b5033e3ec411c693f880408f39a27e5ffcf223e007af2d342431e3596a8c6  functions/tokentracker-account-hourly.js",
+      "de11d0cdd1504854660dd8f333395cd8b90f5ea3d9baf3f25d7fad51d004d39b  functions/tokentracker-account-model-breakdown.js",
+      "9d47f55a3086ee7e729b277808e21f6cf2b684c8c359ea43f88bbdd38d673ca9  functions/tokentracker-account-monthly.js",
+      "3e684c3a4ceef8830f8ff13db33add113ee57f607bd0aa5fab99f3474eda83db  functions/tokentracker-account-summary.js",
+      "25c0c1cd24b3badcfd84be752a336a4ec2e7168bed4fc522b1aabff17174bc4c  functions/tokentracker-billing.js",
+      "d8b59b4a131555027f004aa0dfce0812cc434a2b0e64d2a55888a16d01c7f754  functions/tokentracker-device-flow-authorize.js",
+      "71b5ddafa7d032fb7e465592dff0e52f1c70b3971026aacaa1dda8df936b14c1  functions/tokentracker-device-flow-grant.js",
+      "48d86df29f7867a00dabd27536a662f11558ff28cfa4ef42e69ce30237e67c71  functions/tokentracker-device-flow-poll.js",
+      "84d395e2dce1059e917a0cae636a727e0495e2f76a86dc3ef71625b89552e66a  functions/tokentracker-device-rename.js",
+      "02448263d4ebc6c6ac019bb5381cc44a92df9b332fde2d9019d852efc9df8076  functions/tokentracker-device-token-issue.js",
+      "0629116c70fae135843d4ecb61f014e1cf8c5c87cdd47dedbdc4eb2701dba9c9  functions/tokentracker-ingest.js",
+      "30346318b65599637b8219e11872fb9a6c51db68687be795fa6202352bd08a9f  manifest-report.md",
+      "e08e905ee6a1488f6ff5cdb3800695a770b50c24eb720c0f139ceb2415928ba4  tokentracker-install.sql",
+      "e70ebc4c61ec65475f50b3513004b4f982ced29a11e7588654e433f83d40330f  tokentracker-migration.sql"
+    ]
+  },
+  "steps": {
+    "count": 15,
+    "items": [
+      {
+        "index": 1,
+        "id": "01-private-baseline",
+        "checksum": "071ca2557673de115bca98fba2ea1fd577ad056b96ef76ff4a44dcae5fff6470",
+        "bytes": 5558
+      },
+      {
+        "index": 2,
+        "id": "02-account-sessions",
+        "checksum": "980d8eeef13d68f95d4fa9c32d925b66715bd342aed9aef0872d8b416cd7eabf",
+        "bytes": 9339
+      },
+      {
+        "index": 3,
+        "id": "03-device-identity",
+        "checksum": "6967e029ddba62373f5e18b80cecbca2deae8f1dbeb8c2a1891ff15e5b4a85db",
+        "bytes": 5138
+      },
+      {
+        "index": 4,
+        "id": "04-private-aggregation",
+        "checksum": "b95a322e4c8f1a2afd038e6f3658cc9236349b8200502bd48d07d79f68204c02",
+        "bytes": 35650
+      },
+      {
+        "index": 5,
+        "id": "20261003120000_cloud-subscriptions",
+        "checksum": "d7ccbed0b936d8ff517a7932799770c944e6942cadb0c949b745ded799c19937",
+        "bytes": 29984
+      },
+      {
+        "index": 6,
+        "id": "20261004120000_cloud-machine-access",
+        "checksum": "6938d26ea6dc211db83ac6c769e9930c80b147dc2fcbe837c6902ef2dc1a394c",
+        "bytes": 29216
+      },
+      {
+        "index": 7,
+        "id": "20261007120000_cloud-waffo",
+        "checksum": "ee4303a99b3141015b68f960ad111672862ba9b2b2537c3d25c288eedaa66f5c",
+        "bytes": 28265
+      },
+      {
+        "index": 8,
+        "id": "20261007130000_cloud-waffo-retry",
+        "checksum": "ad42488cbf8279f98e269067cbfa270c692fb171bbf66d9e2350f8c6341c1a37",
+        "bytes": 20897
+      },
+      {
+        "index": 9,
+        "id": "20261007140000_cloud-waffo-attempts",
+        "checksum": "ad0986bc74bd4840247c898667783fd8153238262ecce0e27865bb7c9311b946",
+        "bytes": 33954
+      },
+      {
+        "index": 10,
+        "id": "20261007150000_cloud-waffo-authorizations",
+        "checksum": "f54e4de4009d39e1f1356a5f9fd619fddd0055bf5d836f94cee452b720a799c2",
+        "bytes": 3817
+      },
+      {
+        "index": 11,
+        "id": "20261007160000_cloud-waffo-sandbox-periods",
+        "checksum": "396bfab22c09a35a76510644e8ec002fa8ff48763104e1f86369c0c8b2af36d1",
+        "bytes": 15920
+      },
+      {
+        "index": 12,
+        "id": "10-self-hosted-policy",
+        "checksum": "3808d8964e2f987569fd6d5eb82b2fa349e2bedd6de1ad45a631ead93279cad2",
+        "bytes": 9662
+      },
+      {
+        "index": 13,
+        "id": "11-token-environment-validation",
+        "checksum": "08a7dd10fde98f8aafc25bd9f7bb719914498ef1b1ce5823d76d81c15af69d3d",
+        "bytes": 280
+      },
+      {
+        "index": 14,
+        "id": "12-pro-gifts",
+        "checksum": "d3929a662143ab38f2e8edca5bcfd9549546e711222f4a20a6ba6c202f73d777",
+        "bytes": 25902
+      },
+      {
+        "index": 15,
+        "id": "13-machine-alias-cascade",
+        "checksum": "002132f9587810337d2e9f1667ce2c33bf5be2b6689cf051fa21ababc9122f53",
+        "bytes": 445
+      }
+    ]
+  },
+  "functions": {
+    "count": 14,
+    "publicSlugs": [
+      "tokentracker-device-flow-authorize",
+      "tokentracker-device-flow-poll"
+    ],
+    "slugs": [
+      "tokentracker-device-flow-authorize",
+      "tokentracker-device-flow-grant",
+      "tokentracker-device-flow-poll",
+      "tokentracker-device-token-issue",
+      "tokentracker-device-rename",
+      "tokentracker-ingest",
+      "tokentracker-account-summary",
+      "tokentracker-account-daily",
+      "tokentracker-account-hourly",
+      "tokentracker-account-monthly",
+      "tokentracker-account-heatmap",
+      "tokentracker-account-model-breakdown",
+      "tokentracker-account-devices",
+      "tokentracker-billing"
+    ],
+    "items": [
+      {
+        "slug": "tokentracker-device-flow-authorize",
+        "file": "tokentracker-device-flow-authorize.js",
+        "public": true
+      },
+      {
+        "slug": "tokentracker-device-flow-grant",
+        "file": "tokentracker-device-flow-grant.js",
+        "public": false
+      },
+      {
+        "slug": "tokentracker-device-flow-poll",
+        "file": "tokentracker-device-flow-poll.js",
+        "public": true
+      },
+      {
+        "slug": "tokentracker-device-token-issue",
+        "file": "tokentracker-device-token-issue.js",
+        "public": false
+      },
+      {
+        "slug": "tokentracker-device-rename",
+        "file": "tokentracker-device-rename.js",
+        "public": false
+      },
+      {
+        "slug": "tokentracker-ingest",
+        "file": "tokentracker-ingest.js",
+        "public": false
+      },
+      {
+        "slug": "tokentracker-account-summary",
+        "file": "tokentracker-account-summary.js",
+        "public": false
+      },
+      {
+        "slug": "tokentracker-account-daily",
+        "file": "tokentracker-account-daily.js",
+        "public": false
+      },
+      {
+        "slug": "tokentracker-account-hourly",
+        "file": "tokentracker-account-hourly.js",
+        "public": false
+      },
+      {
+        "slug": "tokentracker-account-monthly",
+        "file": "tokentracker-account-monthly.js",
+        "public": false
+      },
+      {
+        "slug": "tokentracker-account-heatmap",
+        "file": "tokentracker-account-heatmap.js",
+        "public": false
+      },
+      {
+        "slug": "tokentracker-account-model-breakdown",
+        "file": "tokentracker-account-model-breakdown.js",
+        "public": false
+      },
+      {
+        "slug": "tokentracker-account-devices",
+        "file": "tokentracker-account-devices.js",
+        "public": false
+      },
+      {
+        "slug": "tokentracker-billing",
+        "file": "tokentracker-billing.js",
+        "public": false
+      }
+    ],
+    "serverSecrets": [
+      "INSFORGE_BASE_URL",
+      "INSFORGE_SERVICE_ROLE_KEY",
+      "ANON_KEY",
+      "JWT_SECRET or JWT_PUBLIC_KEY",
+      "TOKENTRACKER_DASHBOARD_URL"
+    ],
+    "dashboardBuildVariables": [
+      "VITE_INSFORGE_BASE_URL",
+      "VITE_INSFORGE_ANON_KEY"
+    ],
+    "excluded": [
+      "official community publishing",
+      "payment provider webhooks",
+      "billing merchant credentials"
+    ],
+    "mode": "self_hosted"
+  },
+  "sqlObjects": {
+    "tables": [
+      "tokentracker_account_session_states",
+      "tokentracker_account_usage_cache",
+      "tokentracker_cloud_accounts",
+      "tokentracker_cloud_catalog",
+      "tokentracker_cloud_events",
+      "tokentracker_cloud_gift_attempts",
+      "tokentracker_cloud_gift_batches",
+      "tokentracker_cloud_gift_codes",
+      "tokentracker_cloud_gift_grants",
+      "tokentracker_cloud_machine_aliases",
+      "tokentracker_cloud_machines",
+      "tokentracker_cloud_orders",
+      "tokentracker_cloud_payments",
+      "tokentracker_cloud_policy",
+      "tokentracker_cloud_subscriptions",
+      "tokentracker_cloud_waffo_attempts",
+      "tokentracker_cloud_waffo_authorizations",
+      "tokentracker_cloud_waffo_periods",
+      "tokentracker_device_codes",
+      "tokentracker_device_machine",
+      "tokentracker_device_tokens",
+      "tokentracker_devices",
+      "tokentracker_hourly",
+      "tokentracker_self_host_installations"
+    ],
+    "views": [],
+    "functions": [
+      {
+        "name": "account_daily_compact",
+        "args": "p_user_id uuid, p_device_id uuid, p_from timestamptz, p_to timestamptz, p_tz text, p_offset_min integer, p_range_from text, p_range_to text"
+      },
+      {
+        "name": "account_daily_wire",
+        "args": "p_user_id uuid, p_device_id uuid, p_from timestamptz, p_to timestamptz, p_tz text, p_offset_min integer, p_range_from text, p_range_to text"
+      },
+      {
+        "name": "account_heatmap_compact",
+        "args": "p_user_id uuid, p_device_id uuid, p_from timestamptz, p_to timestamptz, p_tz text, p_offset_min integer, p_range_from text, p_range_to text"
+      },
+      {
+        "name": "account_heatmap_wire",
+        "args": "p_user_id uuid, p_device_id uuid, p_from timestamptz, p_to timestamptz, p_tz text, p_offset_min integer, p_range_from text, p_range_to text"
+      },
+      {
+        "name": "account_model_breakdown_compact",
+        "args": "p_user_id uuid, p_device_id uuid, p_from timestamptz, p_to timestamptz, p_tz text, p_offset_min integer, p_range_from text, p_range_to text"
+      },
+      {
+        "name": "account_model_breakdown_wire",
+        "args": "p_user_id uuid, p_device_id uuid, p_from timestamptz, p_to timestamptz, p_tz text, p_offset_min integer, p_range_from text, p_range_to text"
+      },
+      {
+        "name": "account_summary_compact",
+        "args": "p_user_id uuid, p_device_id uuid, p_from timestamptz, p_to timestamptz, p_tz text, p_offset_min integer, p_range_from text, p_range_to text"
+      },
+      {
+        "name": "account_summary_wire",
+        "args": "p_user_id uuid, p_device_id uuid, p_from timestamptz, p_to timestamptz, p_tz text, p_offset_min integer, p_range_from text, p_range_to text"
+      },
+      {
+        "name": "account_usage_grouped",
+        "args": "p_user_id uuid, p_device_ids uuid[], p_from timestamptz, p_to timestamptz, p_trunc text, p_tz text, p_offset_min integer"
+      },
+      {
+        "name": "account_usage_grouped_cached",
+        "args": "p_user_id uuid, p_device_id uuid, p_from timestamptz, p_to timestamptz, p_trunc text, p_tz text, p_offset_min integer"
+      },
+      {
+        "name": "account_usage_grouped_v2",
+        "args": "p_user_id uuid, p_device_id uuid, p_from timestamptz, p_to timestamptz, p_trunc text, p_tz text, p_offset_min integer"
+      },
+      {
+        "name": "cloud_account_access",
+        "args": "p_user_id uuid,p_environment text,p_kind text"
+      },
+      {
+        "name": "cloud_apply_event",
+        "args": "p_provider text, p_environment text, p_event jsonb"
+      },
+      {
+        "name": "cloud_apply_events",
+        "args": "p_provider text, p_environment text, p_events jsonb"
+      },
+      {
+        "name": "cloud_apply_waffo_events",
+        "args": "p_environment text, p_events jsonb"
+      },
+      {
+        "name": "cloud_attach_checkout",
+        "args": "p_user_id uuid, p_order_id uuid, p_provider_order_id text, p_provider_price_id text, p_checkout_url text"
+      },
+      {
+        "name": "cloud_attach_waffo_checkout",
+        "args": "p_user_id uuid, p_order_id uuid, p_provider_checkout_id text, p_provider_price_id text, p_checkout_url text"
+      },
+      {
+        "name": "cloud_bind_device_slot",
+        "args": "p_user_id uuid, p_environment text, p_device_id uuid"
+      },
+      {
+        "name": "cloud_claim_checkout",
+        "args": "p_user_id uuid, p_order_id uuid"
+      },
+      {
+        "name": "cloud_claim_reconciliation",
+        "args": "p_user_id uuid,p_order_id uuid"
+      },
+      {
+        "name": "cloud_close_unpaid_order",
+        "args": "p_user_id uuid,p_order_id uuid"
+      },
+      {
+        "name": "cloud_create_gift_batch",
+        "args": "p_environment text,p_batch_id uuid,p_duration_days integer, p_redeem_before timestamptz,p_label text,p_codes jsonb"
+      },
+      {
+        "name": "cloud_create_order",
+        "args": "p_user_id uuid, p_environment text, p_provider text, p_sku text, p_request_id uuid"
+      },
+      {
+        "name": "cloud_detect_waffo_retry_payment_conflict",
+        "args": ""
+      },
+      {
+        "name": "cloud_disable_gift_batch",
+        "args": "p_environment text,p_batch_id uuid"
+      },
+      {
+        "name": "cloud_gift_account",
+        "args": "p_user_id uuid,p_environment text"
+      },
+      {
+        "name": "cloud_gift_view",
+        "args": "p_grant public.tokentracker_cloud_gift_grants"
+      },
+      {
+        "name": "cloud_grant_device_code",
+        "args": "p_user_id uuid,p_environment text,p_user_code text"
+      },
+      {
+        "name": "cloud_guard_gift_grant",
+        "args": ""
+      },
+      {
+        "name": "cloud_ingest_usage",
+        "args": "p_token_hash text,p_environment text,p_rows jsonb,p_states jsonb,p_upload_id text DEFAULT NULL"
+      },
+      {
+        "name": "cloud_issue_device_token",
+        "args": "p_user_id uuid,p_environment text,p_device_name text,p_platform text,p_machine_id text, p_legacy_names text[],p_token_id uuid,p_token_hash text,p_rotate boolean DEFAULT false,p_device_code text DEFAULT NULL"
+      },
+      {
+        "name": "cloud_list_gift_batches",
+        "args": "p_environment text,p_limit integer DEFAULT 100"
+      },
+      {
+        "name": "cloud_list_gift_codes",
+        "args": "p_environment text,p_batch_id uuid,p_limit integer DEFAULT 1000"
+      },
+      {
+        "name": "cloud_list_machines",
+        "args": "p_user_id uuid, p_environment text, p_current_machine_id text DEFAULT NULL"
+      },
+      {
+        "name": "cloud_membership",
+        "args": "p_user_id uuid, p_environment text"
+      },
+      {
+        "name": "cloud_merge_machine_slots",
+        "args": "p_user_id uuid, p_environment text, p_ids uuid[]"
+      },
+      {
+        "name": "cloud_pro_badges",
+        "args": "p_user_ids uuid[],p_environment text DEFAULT ''live''"
+      },
+      {
+        "name": "cloud_reconcile_machines",
+        "args": "p_user_id uuid, p_environment text"
+      },
+      {
+        "name": "cloud_record_waffo_authorization",
+        "args": "p_environment text,p_event jsonb"
+      },
+      {
+        "name": "cloud_record_waffo_period",
+        "args": "p_order_id uuid, p_environment text, p_waffo_order_id text, p_provider_price_id text, p_period_number integer, p_starts_at timestamptz, p_ends_at timestamptz"
+      },
+      {
+        "name": "cloud_redeem_gift",
+        "args": "p_user_id uuid,p_environment text,p_code_hash text,p_request_id uuid"
+      },
+      {
+        "name": "cloud_register_waffo_attempt",
+        "args": "p_order_id uuid,p_environment text,p_waffo_order_id text,p_provider_price_id text,p_billing_mode text"
+      },
+      {
+        "name": "cloud_remove_machine",
+        "args": "p_user_id uuid,p_environment text,p_machine_id uuid"
+      },
+      {
+        "name": "cloud_restart_waffo_attempts",
+        "args": "p_user_id uuid, p_environment text, p_order_id uuid, p_request_id uuid, p_waffo_order_ids text[]"
+      },
+      {
+        "name": "cloud_restart_waffo_order",
+        "args": "p_user_id uuid, p_environment text, p_order_id uuid, p_request_id uuid, p_waffo_order_id text"
+      },
+      {
+        "name": "cloud_resume_machine",
+        "args": "p_user_id uuid,p_environment text,p_machine_id uuid"
+      },
+      {
+        "name": "cloud_revoke_gift",
+        "args": "p_environment text,p_grant_id uuid"
+      },
+      {
+        "name": "cloud_set_machine_status",
+        "args": "p_user_id uuid,p_environment text,p_machine_id uuid,p_status text"
+      },
+      {
+        "name": "cloud_start_trial",
+        "args": "p_user_id uuid, p_environment text"
+      },
+      {
+        "name": "refresh_tokentracker_device_identity",
+        "args": "p_user_id uuid, p_device_id uuid, p_device_name text, p_platform text"
+      },
+      {
+        "name": "self_host_invalidate_usage_cache",
+        "args": ""
+      },
+      {
+        "name": "tokentracker_upsert_account_session_states",
+        "args": "p_user_id uuid, p_states jsonb"
+      }
+    ],
+    "indexes": [
+      "tokentracker_account_session_states_bucket_idx",
+      "tokentracker_account_usage_cache_owner_idx",
+      "tokentracker_cloud_events_applied_action_idx",
+      "tokentracker_cloud_gift_codes_batch_idx",
+      "tokentracker_cloud_gift_grants_user_idx",
+      "tokentracker_cloud_machine_aliases_slot_idx",
+      "tokentracker_cloud_orders_user_created_idx",
+      "tokentracker_cloud_orders_waffo_checkout_idx",
+      "tokentracker_cloud_orders_waffo_order_idx",
+      "tokentracker_cloud_payments_user_period_idx",
+      "tokentracker_cloud_subscriptions_user_idx",
+      "tokentracker_cloud_waffo_attempts_order_idx",
+      "tokentracker_devices_active_unique",
+      "tokentracker_devices_machine_unique",
+      "tokentracker_hourly_user_time_idx"
+    ],
+    "triggers": [
+      "cloud_gift_grant_immutable",
+      "cloud_waffo_retry_payment_conflict",
+      "self_host_hourly_delete_cache",
+      "self_host_hourly_insert_cache",
+      "self_host_hourly_update_cache",
+      "self_host_sessions_delete_cache",
+      "self_host_sessions_insert_cache",
+      "self_host_sessions_update_cache"
+    ],
+    "policies": [
+      "cloud_accounts_owner_read",
+      "cloud_orders_owner_read",
+      "cloud_payments_owner_read",
+      "cloud_subscriptions_owner_read"
+    ],
+    "grants": 31
+  },
+  "pgFeatureCounts": {
+    "jsonb": 160,
+    "timestamptz": 199,
+    "plpgsqlFunctions": 74,
+    "triggers": 8,
+    "rlsPolicies": 4,
+    "rlsEnable": 24,
+    "advisoryLocks": 33,
+    "authUid": 6,
+    "grants": 31,
+    "onConflict": 22,
+    "cte": 38,
+    "securityDefiner": 2
+  },
+  "dependencies": {
+    "npm:@insforge/sdk@1.4.5": "1.4.5",
+    "alipay-sdk": "4.14.0",
+    "urllib": "4.9.1",
+    "@waffo/pancake-ts": "0.25.0",
+    "note": "见 manifest-report.md 的依赖锁定段；Go 实现需登记等价依赖。"
+  },
+  "platform": {
+    "insforge": "v2.3.3",
+    "postgres": "15.18",
+    "deno": "2.0.6",
+    "node": ">=20"
+  }
+}

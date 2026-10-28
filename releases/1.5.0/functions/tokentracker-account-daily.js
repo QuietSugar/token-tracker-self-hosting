@@ -1,0 +1,763 @@
+module.exports = async function(req) {
+  return await (async (__selfHostPlatformDeno) => {
+    const Deno = { env: { get(key) {
+      if (key === "INSFORGE_BASE_URL") return __selfHostPlatformDeno.env.get("INSFORGE_INTERNAL_URL") || __selfHostPlatformDeno.env.get(key);
+      if (key === "INSFORGE_SERVICE_ROLE_KEY") return __selfHostPlatformDeno.env.get(key) || __selfHostPlatformDeno.env.get("API_KEY");
+      return __selfHostPlatformDeno.env.get(key);
+    } } };
+    const __selfHostModules = { "npm:@insforge/sdk@1.4.5": { __esModule: true, ...await import("npm:@insforge/sdk@1.4.5") } };
+    const require = specifier => {
+      if (!Object.hasOwn(__selfHostModules,specifier)) throw new Error("Unknown self-host runtime module: " + specifier);
+      return __selfHostModules[specifier];
+    };
+    
+    "use strict";
+var __selfHostHandler = (() => {
+  var __defProp = Object.defineProperty;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+    get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+  }) : x)(function(x) {
+    if (typeof require !== "undefined") return require.apply(this, arguments);
+    throw Error('Dynamic require of "' + x + '" is not supported');
+  });
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+  var __copyProps = (to, from, except, desc) => {
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (let key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key) && key !== except)
+          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    }
+    return to;
+  };
+  var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+  // dashboard/edge-patches/tokentracker-account-daily.ts
+  var tokentracker_account_daily_exports = {};
+  __export(tokentracker_account_daily_exports, {
+    default: () => tokentracker_account_daily_default
+  });
+  var import_sdk = __require("npm:@insforge/sdk@1.4.5");
+
+  // dashboard/edge-patches/cloud/access.ts
+  function cloudEnvironment() {
+    const value = Deno.env.get("TOKENTRACKER_BILLING_ENVIRONMENT") || "live";
+    if (value !== "live" && value !== "sandbox") throw new Error("Invalid Cloud environment");
+    return value;
+  }
+  async function cloudRpc(client, name, args) {
+    const { data, error } = await client.database.rpc(name, { ...args, p_environment: cloudEnvironment() });
+    if (error) throw new Error(error.message || "Cloud access unavailable");
+    if (!data || typeof data !== "object" || typeof data.ok !== "boolean") {
+      throw new Error("Invalid Cloud access response");
+    }
+    return data;
+  }
+  function cloudFailure(result, cors) {
+    const retryAfter = Number(result.retry_after_seconds);
+    return Response.json({ ...result, error: result.code || "cloud_access_denied" }, {
+      status: result.status || 403,
+      headers: {
+        ...cors,
+        "Cache-Control": "no-store",
+        ...Number.isFinite(retryAfter) && retryAfter > 0 ? { "Retry-After": String(Math.ceil(retryAfter)) } : {}
+      }
+    });
+  }
+  async function cloudReadAccess(client, userId, kind) {
+    return await cloudRpc(client, "cloud_account_access", { p_user_id: userId, p_kind: kind });
+  }
+  function cloudHistoryFailure(access, to) {
+    return access.available_from && to < access.available_from ? {
+      ...access,
+      ok: false,
+      code: "cloud_history_window_exceeded",
+      status: 400,
+      recovery_url: "https://www.tokentracker.cc/cloud"
+    } : null;
+  }
+
+  // dashboard/edge-patches/tokentracker-account-daily.ts
+  var SOURCES_WITH_AUTHORITATIVE_COST = /* @__PURE__ */ new Set(["grok", "cline"]);
+  var corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey"
+  };
+  function json(data, status = 200) {
+    return new Response(JSON.stringify(data), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  }
+  function b64urlToBytes(s) {
+    const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = (4 - b64.length % 4) % 4;
+    const raw = atob(b64 + "=".repeat(pad));
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  async function verifiedUserIdFromJwt(authHeader) {
+    if (!authHeader) return null;
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!token) return null;
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    try {
+      const header = JSON.parse(
+        new TextDecoder().decode(b64urlToBytes(parts[0]))
+      );
+      const data = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
+      const sig = b64urlToBytes(parts[2]);
+      let ok = false;
+      if (header.alg === "HS256") {
+        const secret = Deno.env.get("JWT_SECRET");
+        if (!secret) return null;
+        const key = await crypto.subtle.importKey(
+          "raw",
+          new TextEncoder().encode(secret),
+          { name: "HMAC", hash: "SHA-256" },
+          false,
+          ["verify"]
+        );
+        ok = await crypto.subtle.verify("HMAC", key, sig, data);
+      } else if (header.alg === "RS256") {
+        const publicKeyPem = Deno.env.get("JWT_PUBLIC_KEY");
+        if (!publicKeyPem) return null;
+        const publicKeyDer = Uint8Array.from(
+          atob(publicKeyPem.replace(/-----[^-]+-----|\s/g, "")),
+          (char) => char.charCodeAt(0)
+        );
+        const key = await crypto.subtle.importKey(
+          "spki",
+          publicKeyDer,
+          { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+          false,
+          ["verify"]
+        );
+        ok = await crypto.subtle.verify(
+          "RSASSA-PKCS1-v1_5",
+          key,
+          sig,
+          data
+        );
+      } else {
+        return null;
+      }
+      if (!ok) return null;
+      const payload = JSON.parse(new TextDecoder().decode(b64urlToBytes(parts[1])));
+      if (typeof payload.exp === "number" && Date.now() / 1e3 > payload.exp) return null;
+      const sub = payload.sub;
+      if (typeof sub === "string" && sub.length > 0) return sub;
+      const uid = payload.user_id;
+      if (typeof uid === "string" && uid.length > 0) return uid;
+    } catch {
+    }
+    return null;
+  }
+  var MODEL_PRICING = {
+    // ── Anthropic Claude ──
+    "claude-fable-5": { input: 10, output: 50, cache_read: 1, cache_write: 12.5 },
+    "claude-opus-5": { input: 5, output: 25, cache_read: 0.5, cache_write: 6.25 },
+    "claude-opus-5-fast": { input: 10, output: 50, cache_read: 1, cache_write: 12.5 },
+    "claude-opus-4-6": { input: 5, output: 25, cache_read: 0.5, cache_write: 6.25 },
+    "claude-opus-4-5-20250414": { input: 5, output: 25, cache_read: 0.5, cache_write: 6.25 },
+    "claude-sonnet-5": { input: 2, output: 10, cache_read: 0.2, cache_write: 2.5 },
+    "claude-opus-5-5": { input: 4, output: 20, cache_read: 0.2, cache_write: 5 },
+    "claude-sonnet-5-5": { input: 2, output: 10, cache_read: 0.1, cache_write: 2.5 },
+    "k3-256k": { input: 3, output: 15, cache_read: 0.3 },
+    "claude-sonnet-4-6": { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
+    "claude-sonnet-4-5-20250514": { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
+    "claude-sonnet-4-20250514": { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
+    "claude-haiku-5-5": { input: 0.1, output: 0.5, cache_read: 0.01, cache_write: 0.125 },
+    "claude-haiku-5.5": { input: 0.1, output: 0.5, cache_read: 0.01, cache_write: 0.125 },
+    "claude-haiku-4-5-20251001": { input: 1, output: 5, cache_read: 0.1, cache_write: 1.25 },
+    "claude-3-5-sonnet-20241022": { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
+    "claude-3-5-haiku-20241022": { input: 1, output: 5, cache_read: 0.1, cache_write: 1.25 },
+    // ── OpenAI GPT / Codex ──
+    "gpt-5": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gpt-5-fast": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gpt-5-high": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gpt-5-high-fast": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gpt-5-codex": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gpt-5-codex-high-fast": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gpt-5.1-codex": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gpt-5.1-codex-mini": { input: 0.25, output: 2, cache_read: 0.025 },
+    "gpt-5.1-codex-max": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gpt-5.1-codex-max-high-fast": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gpt-5.1-codex-max-xhigh-fast": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gpt-5.1-codex-high": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gpt-5.1-codex-max-high": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gpt-5.2": { input: 1.75, output: 14, cache_read: 0.175 },
+    "gpt-5.2-high": { input: 1.75, output: 14, cache_read: 0.175 },
+    "gpt-5.2-high-fast": { input: 1.75, output: 14, cache_read: 0.175 },
+    "gpt-5.2-codex": { input: 1.75, output: 14, cache_read: 0.175 },
+    "gpt-5.2-codex-high": { input: 1.75, output: 14, cache_read: 0.175 },
+    "gpt-5.3-codex": { input: 1.75, output: 14, cache_read: 0.175 },
+    "gpt-5.3-codex-high": { input: 1.75, output: 14, cache_read: 0.175 },
+    "gpt-5.4": { input: 2.5, output: 15, cache_read: 0.25 },
+    "gpt-5.4-mini": { input: 0.75, output: 4.5, cache_read: 0.075 },
+    // gpt-5.4-pro per developers.openai.com/api/docs/pricing; cache_read 3
+    // mirrors the local LiteLLM entry. There is NO "-medium" SKU —
+    // medium/high/xhigh are reasoning-effort levels billed at the base rate;
+    // a stale "gpt-5.4-medium" 1.5/10 entry here undercut the local engine
+    // (suffix-strip → gpt-5.4 at 2.5/15) by 40% until 2026-06.
+    "gpt-5.4-pro": { input: 30, output: 180, cache_read: 3 },
+    "gpt-5.5": { input: 5, output: 30, cache_read: 0.5 },
+    // GPT-5.6 family (public 2026-07-09), developers.openai.com/api/docs/pricing.
+    // Three durable capability tiers: sol (flagship and public alias) / terra (balanced) /
+    // luna (lightweight). Codex reports the tier in the model id (gpt-5.6-sol,
+    // + reasoning-effort variants like gpt-5.6-solhigh). Not yet in LiteLLM.
+    "gpt-5.6-sol": { input: 4, output: 20, cache_read: 0.4, cache_write: 5 },
+    "gpt-5.6-terra": { input: 2, output: 12, cache_read: 0.2, cache_write: 2.5 },
+    "gpt-5.6-luna": { input: 0.2, output: 1.2, cache_read: 0.02, cache_write: 0.25 },
+    // GPT-6 Astra Standard USD/MTok, verified 2026-09-07:
+    // https://developers.openai.com/api/docs/models/gpt-6-astra
+    // Cloud buckets do not retain per-request context/service tier. Use the
+    // standard short-context estimate; never infer long context from totals.
+    "gpt-6-astra": { input: 10, output: 50, cache_read: 1, cache_write: 12.5 },
+    // GPT-6 Sol Standard USD/MTok, verified 2026-09-24:
+    // https://developers.openai.com/api/docs/models/gpt-6-sol
+    "gpt-6-sol": { input: 2, output: 10, cache_read: 0.2, cache_write: 2.5 },
+    // GPT-6.1 Sol Standard pricing (issue #737), verified 2026-10-02.
+    // https://developers.openai.com/api/docs/models/gpt-6.1-sol
+    "gpt-6.1-sol": { input: 2, output: 10, cache_read: 0.1, cache_write: 2.5 },
+    // GPT-6.1 Terra Standard USD/MTok, verified 2026-10-27.
+    // https://developers.openai.com/api/docs/models/gpt-6.1-terra
+    // Cache write uses 30-minute retention ($1.25). Fast is 2x; Ultrafast not published.
+    "gpt-6.1-terra": { input: 1, output: 5, cache_read: 0.05, cache_write: 1.25 },
+    "gpt-5-mini": { input: 0.25, output: 2, cache_read: 0.025 },
+    "o3": { input: 2, output: 8, cache_read: 0.5 },
+    // ── Google Gemini ──
+    "gemini-2.5-pro": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gemini-2.5-pro-preview-06-05": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gemini-2.5-pro-preview-05-06": { input: 1.25, output: 10, cache_read: 0.125 },
+    "gemini-2.5-flash": { input: 0.3, output: 2.5, cache_read: 0.03 },
+    "gemini-3-flash-preview": { input: 0.5, output: 3, cache_read: 0.05 },
+    "gemini-3-pro-preview": { input: 2, output: 12, cache_read: 0.2 },
+    "gemini-3.1-pro-preview": { input: 2, output: 12, cache_read: 0.2 },
+    // ── Cursor Composer ──
+    "composer-1": { input: 1.25, output: 10, cache_read: 0.125 },
+    "composer-1.5": { input: 3.5, output: 17.5, cache_read: 0.35 },
+    "composer-2": { input: 0.5, output: 2.5, cache_read: 0.2 },
+    "composer-2-fast": { input: 1.5, output: 7.5, cache_read: 0.15 },
+    "composer-2.5": { input: 0.5, output: 2.5, cache_read: 0.2 },
+    "composer-2.5-fast": { input: 3, output: 15, cache_read: 0.5 },
+    // Google Gemini 4 Argon (Cursor Other Models / Google introductory list rate)
+    "gemini-4-argon": { input: 2, output: 10, cache_read: 0.1, cache_write: 0 },
+    // ── Moonshot Kimi ──
+    "kimi-for-coding": { input: 0.6, output: 2, cache_read: 0.15 },
+    "kimi-k2.5": { input: 0.6, output: 2, cache_read: 0.15 },
+    "kimi-k2.5-free": { input: 0, output: 0, cache_read: 0 },
+    "kimi-k2.6": { input: 0.95, output: 4, cache_read: 0.16 },
+    "kimi-k2.7-code": { input: 0.95, output: 4, cache_read: 0.19 },
+    // Kimi K3.1 Pro / Highspeed (official USD list https://platform.kimi.ai/ 2026-10-25).
+    // Must precede kimi-k3: substring "kimi-k3" would otherwise bill k3.1 at k3 rates.
+    "kimi-k3.1-pro": { input: 2, output: 10, cache_read: 0.2, cache_write: 2 },
+    "kimi-k3.1-pro-highspeed": { input: 4, output: 20, cache_read: 0.2, cache_write: 4 },
+    "k3.1-pro": { input: 2, output: 10, cache_read: 0.2, cache_write: 2 },
+    "k3.1pro": { input: 2, output: 10, cache_read: 0.2, cache_write: 2 },
+    "k3.1-pro-highspeed": { input: 4, output: 20, cache_read: 0.2, cache_write: 4 },
+    "k3.1pro-highspeed": { input: 4, output: 20, cache_read: 0.2, cache_write: 4 },
+    // Kimi K3 (released 2026-07-16; reported rates $3/M in, $15/M out, $0.30/M
+    // cached). Kimi Code records the alias as bare "k3" (kimi-code/k3), hence
+    // the separate "k3" exact key below. Not yet in LiteLLM.
+    "kimi-k3": { input: 3, output: 15, cache_read: 0.3 },
+    "k3": { input: 3, output: 15, cache_read: 0.3 },
+    // ── Z.ai GLM (mirrored from src/lib/pricing/curated-overrides.json).
+    //    LiteLLM only keys these under provider prefixes like `zai/glm-5`,
+    //    `openrouter/z-ai/glm-4.6`, etc. The reverse-substring fallback in the
+    //    matcher requires the user-supplied model name to CONTAIN the LiteLLM
+    //    key, so the bare `glm-5.1` / `glm-4.6` strings reported by Claude
+    //    Code-compatible GLM endpoints never match. Curate them here. ──
+    // GLM-5.3: flagship keeps the 5.2 list rate; Flash is a distinct cheap SKU
+    // (LiteLLM `zai/glm-5.3-flash`: $0.15/$0.50/$0.03 per MTok in/out/cache-read).
+    "glm-5.3": { input: 1.4, output: 4.4, cache_read: 0.26 },
+    "glm-5.3-flash": { input: 0.15, output: 0.5, cache_read: 0.03 },
+    "glm-5.2": { input: 1.4, output: 4.4, cache_read: 0.26 },
+    "glm-5.1": { input: 1.4, output: 4.4, cache_read: 0.26 },
+    "glm-5": { input: 1, output: 3.2, cache_read: 0.2 },
+    "glm-5-turbo": { input: 1.2, output: 4, cache_read: 0.24 },
+    "glm-4.7": { input: 0.6, output: 2.2, cache_read: 0.11 },
+    "glm-4.7-flashx": { input: 0.07, output: 0.4, cache_read: 0.01 },
+    "glm-4.7-flash": { input: 0, output: 0, cache_read: 0 },
+    "glm-4.6": { input: 0.6, output: 2.2, cache_read: 0.11 },
+    "glm-4.5": { input: 0.6, output: 2.2, cache_read: 0.11 },
+    "glm-4.5-x": { input: 2.2, output: 8.9, cache_read: 0.45 },
+    "glm-4.5-air": { input: 0.2, output: 1.1, cache_read: 0.03 },
+    "glm-4.5-airx": { input: 1.1, output: 4.5, cache_read: 0.22 },
+    "glm-4.5-flash": { input: 0, output: 0, cache_read: 0 },
+    // ── MiniMax / DeepSeek ──
+    "MiniMax-M2.7": { input: 0.3, output: 1.2, cache_read: 0.06, cache_write: 0.375 },
+    "MiniMax-M2.7-highspeed": { input: 0.6, output: 2.4, cache_read: 0.06, cache_write: 0.375 },
+    "minimax-m3": { input: 0.3, output: 1.2, cache_read: 0.06, cache_write: 0 },
+    "deepseek-v4-flash": { input: 0.44, output: 1.32, cache_read: 0.014, cache_write: 0.44 },
+    "deepseek-v4-pro": { input: 1.32, output: 3.96, cache_read: 0.044, cache_write: 1.32 },
+    "deepseek-v4-flash-vision-exp": { input: 0.44, output: 1.32, cache_read: 0.014, cache_write: 0.44 },
+    // DeepSeek V4.1 Flash (official id deepseek-flash, released 2026-09-10):
+    // $0.30 / $1.20 / $0.006 cache read per MTok peak; getRowPricing halves it
+    // off-peak. deepseek-v4.1-flash is the OpenRouter / Command Code / WorkBuddy id.
+    "deepseek-v4.1-flash": { input: 0.3, output: 1.2, cache_read: 6e-3, cache_write: 0.3 },
+    "deepseek-flash": { input: 0.3, output: 1.2, cache_read: 6e-3, cache_write: 0.3 },
+    "deepseek-chat": { input: 0.14, output: 0.28, cache_read: 28e-4, cache_write: 0.14 },
+    "deepseek-reasoner": { input: 0.14, output: 0.28, cache_read: 28e-4, cache_write: 0.14 },
+    // ── xAI Grok (mirrored from src/lib/pricing/curated-overrides.json;
+    //    Grok parser emits cache_creation_input_tokens = 0, so cache_write is
+    //    omitted — same as the canonical table). ──
+    "grok-build": { input: 1.25, output: 2.5, cache_read: 0.2 },
+    "cursor-grok-4.5": { input: 2, output: 6, cache_read: 0.5, cache_write: 0 },
+    "cursor-grok-4.5-fast": { input: 4, output: 18, cache_read: 1, cache_write: 0 },
+    "cursor-grok-4.6": { input: 2, output: 6, cache_read: 0.5, cache_write: 0 },
+    "cursor-grok-4.6-fast": { input: 4, output: 12, cache_read: 1, cache_write: 0 },
+    "cursor-grok-4.7": { input: 2, output: 6, cache_read: 0.5, cache_write: 0 },
+    "cursor-grok-4.7-fast": { input: 4, output: 12, cache_read: 1, cache_write: 0 },
+    "grok-4-0709": { input: 3, output: 15, cache_read: 0.75 },
+    "grok-4": { input: 3, output: 15, cache_read: 0.75 },
+    "grok-4-latest": { input: 3, output: 15, cache_read: 0.75 },
+    "grok-4-fast": { input: 0.2, output: 0.5, cache_read: 0.05 },
+    "grok-4-fast-reasoning": { input: 0.2, output: 0.5, cache_read: 0.05 },
+    "grok-4-fast-non-reasoning": { input: 0.2, output: 0.5, cache_read: 0.05 },
+    "grok-4-1-fast-non-reasoning": { input: 0.2, output: 0.5, cache_read: 0.05 },
+    // ── AWS Kiro (mirrored byte-for-byte from src/lib/local-api.js to
+    //    prevent cloud/local cost drift — Kiro routes through Bedrock,
+    //    most commonly claude-sonnet-4). ──
+    "kiro-agent": { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
+    "kiro-cli-agent": { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
+    // ── Tencent CodeBuddy / WorkBuddy (hy3-preview family). Tencent TokenHub
+    //    official rate: 1.2 / 0.4 (cache hit) / 4.0 RMB per MTok in/read/out,
+    //    converted at ~7.2 RMB/USD. DeepSeek-style cache: cache_write = input. ──
+    "hy3-preview-agent": { input: 0.167, output: 0.556, cache_read: 0.056, cache_write: 0.167 },
+    "hy3-preview": { input: 0.167, output: 0.556, cache_read: 0.056, cache_write: 0.167 },
+    // Hy4 preview: 6 / 0.3 (cache hit) / 18 RMB per MTok at ~7.2 RMB/USD (#633).
+    // Alibaba Model Studio Singapore reference rates; see curated-overrides.json (#715).
+    "qwen3.8-flash": { input: 0.15, output: 0.47, cache_read: 0.016, cache_write: 0.2 },
+    "qwen3.8-max": { input: 2, output: 6, cache_read: 0.17, cache_write: 2.5 },
+    "qwen3.8-max-0902": { input: 2, output: 6, cache_read: 0.17, cache_write: 2.5 },
+    "qwen3.8-max-2026-09-02": { input: 2, output: 6, cache_read: 0.17, cache_write: 2.5 },
+    "hy4-preview": { input: 0.833, output: 2.5, cache_read: 0.042, cache_write: 0.833 },
+    "hy4-preview-agent": { input: 0.833, output: 2.5, cache_read: 0.042, cache_write: 0.833 },
+    // ── Misc / Free ──
+    "glm-4.7-free": { input: 0, output: 0, cache_read: 0 },
+    "nemotron-3-super-free": { input: 0, output: 0, cache_read: 0 },
+    "mimo-v2-pro-free": { input: 0, output: 0, cache_read: 0 },
+    "muse-spark-1.2-contributor-free": { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+    "muse-spark-1.3-contributor-free": { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+    "minimax-m2.1-free": { input: 0, output: 0, cache_read: 0 },
+    "MiniMax-M2.1": { input: 0.5, output: 3, cache_read: 0.05 },
+    // ── Xiaomi MiMo (mirrored from src/lib/pricing/seed-snapshot.json LiteLLM
+    //    entries openrouter/xiaomi/mimo-*; queue rows report the bare names.
+    //    Kept in lockstep with the matcher's litellm:prefix-strip resolution —
+    //    cache_read for mimo-v2-flash uses novita's 0.02 (the lexicographically
+    //    smallest provider key the matcher deterministically picks). ──
+    "mimo-v2.5-pro": { input: 1, output: 3, cache_read: 0.2 },
+    "mimo-v2.5": { input: 0.4, output: 2, cache_read: 0.08 },
+    "mimo-v2-flash": { input: 0.1, output: 0.3, cache_read: 0.02 },
+    // ── Sakana Fugu (OpenAI-compatible API via sakana.ai PAYG / OpenRouter,
+    //    used through Codex/Cursor/Cline/ZCode etc.; mirrored from
+    //    src/lib/pricing/curated-overrides.json). OpenRouter rate: $5/$30 per
+    //    MTok in/out, cache_read $0.5/M; no cache-write surcharge so
+    //    cache_write = input. ──
+    "sakana/fugu-ultra": { input: 5, output: 30, cache_read: 0.5, cache_write: 5 },
+    // ── Meituan LongCat-2.0, seen via ZCode custom-provider routing (#276;
+    //    mirrored from src/lib/pricing/curated-overrides.json). Official
+    //    longcat.chat launch-promo rate: RMB 2/0.04(cache hit)/8 per MTok
+    //    in/read/out, converted at ~7.2 RMB/USD; standard list price is
+    //    RMB 5/0.10/20 once the promo ends — re-verify before changing. No
+    //    cache-write surcharge published, so cache_write = input. ──
+    "longcat-2.0": { input: 0.278, output: 1.111, cache_read: 556e-5, cache_write: 0.278 },
+    // ── StepFun Step 3.5/3.7 Flash (#283; mirrored from
+    //    src/lib/pricing/curated-overrides.json). Official platform.stepfun.ai
+    //    rates: 3.7-flash $0.20/$0.04(cache hit)/$1.15 per MTok in/read/out,
+    //    3.5-flash $0.10/$0.02/$0.30. No cache-write surcharge published, so
+    //    cache_write = input. ──
+    "step-3.7-flash": { input: 0.2, output: 1.15, cache_read: 0.04, cache_write: 0.2 },
+    "step-3.5-flash": { input: 0.1, output: 0.3, cache_read: 0.02, cache_write: 0.1 }
+  };
+  var ZERO_PRICING = { input: 0, output: 0, cache_read: 0, cache_write: 0 };
+  var IFLYTEK_MAAS_MODEL_PRICING = {
+    "spark-x2.5": { input: 0.13, output: 0.5, cache_read: 0.02, cache_write: 0.13 },
+    "spark-x2.5-4b": { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+    "spark-x2.5-1.7b": { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+    "xopglm53": { input: 1.11, output: 3.89, cache_read: 0.28, cache_write: 1.11 },
+    "xopdeepseekv4pro0813": { input: 1.25, output: 3.75, cache_read: 0.04, cache_write: 1.25 },
+    "xopdeepseekv4flash0731": { input: 0.14, output: 0.28, cache_read: 0.03, cache_write: 0.14 },
+    "xopkimik27code": { input: 0.9, output: 3.75, cache_read: 0.9, cache_write: 0.9 },
+    "xopglm52": { input: 1.11, output: 3.89, cache_read: 0.28, cache_write: 1.11 },
+    "xopdeepseekv4flash": { input: 0.14, output: 0.28, cache_read: 0.03, cache_write: 0.14 },
+    "xopkimik26": { input: 0.9, output: 3.75, cache_read: 0.18, cache_write: 0.9 },
+    "xopdeepseekv4pro": { input: 1.67, output: 3.33, cache_read: 0.14, cache_write: 1.67 },
+    "xopqwen36v35b": { input: 0.15, output: 0.9, cache_read: 0.15, cache_write: 0.15 },
+    "xophunyuan7bmt": { input: 0.07, output: 0.28, cache_read: 0.07, cache_write: 0.07 },
+    "xoppaddleocrv16": { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+    "xsparkx2flash": { input: 0.14, output: 0.28, cache_read: 0.14, cache_write: 0.14 },
+    "xopglm51": { input: 1.11, output: 3.89, cache_read: 0.22, cache_write: 1.11 },
+    "xsparkx2": { input: 0.42, output: 0.42, cache_read: 0.42, cache_write: 0.42 },
+    "xop35qwen2b": { input: 0.03, output: 0.06, cache_read: 0.03, cache_write: 0.03 },
+    "xopqwen35397b": { input: 0.17, output: 1, cache_read: 0.17, cache_write: 0.17 },
+    "xminimaxm25": { input: 0.29, output: 1.17, cache_read: 0.29, cache_write: 0.29 },
+    "xopglm5": { input: 0.83, output: 3.06, cache_read: 0.17, cache_write: 0.83 },
+    "xopkimik25": { input: 0.56, output: 2.92, cache_read: 0.56, cache_write: 0.56 },
+    "xopdeepseekv32": { input: 0.14, output: 0.21, cache_read: 0.14, cache_write: 0.14 },
+    "xop3qwencodernext": { input: 0.35, output: 1.39, cache_read: 0.35, cache_write: 0.35 },
+    "xopglmv47flash": { input: 0.14, output: 0.21, cache_read: 0.14, cache_write: 0.14 },
+    "xopglm47blth2": { input: 0.56, output: 2.22, cache_read: 0.56, cache_write: 0.56 },
+    "xop3qwen32bvl": { input: 0.28, output: 1.11, cache_read: 0.28, cache_write: 0.28 },
+    "xopdeepseekocr": { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+    "xophunyuanocr": { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+    "xop3qwen80bnext": { input: 0.08, output: 0.33, cache_read: 0.08, cache_write: 0.08 },
+    "xop3qwen235b2507": { input: 0.17, output: 1.67, cache_read: 0.17, cache_write: 0.17 },
+    "xop3qwen30b2507": { input: 0.06, output: 0.63, cache_read: 0.06, cache_write: 0.06 },
+    "xop3qwen235b": { input: 0.17, output: 1.67, cache_read: 0.17, cache_write: 0.17 },
+    "xop3qwen30b": { input: 0.06, output: 0.63, cache_read: 0.06, cache_write: 0.06 },
+    "xop3qwen32b": { input: 0.17, output: 1.67, cache_read: 0.17, cache_write: 0.17 },
+    "xdeepseekv3": { input: 0.22, output: 0.89, cache_read: 0.22, cache_write: 0.22 },
+    "xdeepseekr1": { input: 0.44, output: 1.78, cache_read: 0.44, cache_write: 0.44 },
+    "xdeepseekr1qwen32b": { input: 0.22, output: 0.67, cache_read: 0.22, cache_write: 0.22 },
+    "xopkimik2blth": { input: 0.56, output: 2.22, cache_read: 0.56, cache_write: 0.56 },
+    "xopkimik2blins": { input: 0.56, output: 2.22, cache_read: 0.56, cache_write: 0.56 },
+    "xop3qwen8breranker": { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+    "xop3qwen8bembedding": { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+    "xop3qwen0b6": { input: 0.04, output: 0.42, cache_read: 0.04, cache_write: 0.04 },
+    "xop3qwen4b": { input: 0.04, output: 0.42, cache_read: 0.04, cache_write: 0.04 },
+    "xqwen257bchat": { input: 0.07, output: 0.14, cache_read: 0.07, cache_write: 0.07 },
+    "xop3qwen14b": { input: 0.14, output: 1.39, cache_read: 0.14, cache_write: 0.14 },
+    "xop3qwen8b": { input: 0.07, output: 0.69, cache_read: 0.07, cache_write: 0.07 },
+    "xsparkprox": { input: 1.11, output: 5.56, cache_read: 1.11, cache_write: 1.11 },
+    "xspark13b6k": { input: 0.28, output: 0.83, cache_read: 0.28, cache_write: 0.28 },
+    "spark mini": { input: 0.28, output: 1.11, cache_read: 0.28, cache_write: 0.28 },
+    "spark mini instruct": { input: 0.28, output: 1.11, cache_read: 0.28, cache_write: 0.28 },
+    "spark tiny": { input: 0.28, output: 1.11, cache_read: 0.28, cache_write: 0.28 },
+    "internlm2.5_7b_chat": { input: 0.28, output: 1.11, cache_read: 0.28, cache_write: 0.28 },
+    "internlm2.5_1.8b_chat": { input: 0.28, output: 1.11, cache_read: 0.28, cache_write: 0.28 },
+    "qwen_v2.5_7b_base": { input: 0.28, output: 1.11, cache_read: 0.28, cache_write: 0.28 },
+    "xsqwen2d53b": { input: 0.28, output: 1.11, cache_read: 0.28, cache_write: 0.28 },
+    "qwen_v2.5_3b_base": { input: 0.28, output: 1.11, cache_read: 0.28, cache_write: 0.28 },
+    "qwen_v2.5_1.5b_instruct": { input: 0.28, output: 1.11, cache_read: 0.28, cache_write: 0.28 },
+    "qwen_v2.5_1.5b_base": { input: 0.28, output: 1.11, cache_read: 0.28, cache_write: 0.28 },
+    "qwen_v2.5_0.5b_instruct": { input: 0.28, output: 1.11, cache_read: 0.28, cache_write: 0.28 },
+    "qwen_v2.5_0.5b_base": { input: 0.28, output: 1.11, cache_read: 0.28, cache_write: 0.28 },
+    "xsqwenv2s1b5c": { input: 0.14, output: 0.28, cache_read: 0.14, cache_write: 0.14 },
+    "xsqwenv2s0b5c": { input: 0.28, output: 0.56, cache_read: 0.28, cache_write: 0.28 },
+    "xqwen14bchat": { input: 0.28, output: 0.83, cache_read: 0.28, cache_write: 0.28 }
+  };
+  function normalizeIFlytekMaasModel(model) {
+    const lower = model.trim().toLowerCase();
+    if (lower === "xsparkx2agent") return "xsparkx2";
+    return lower;
+  }
+  function getModelPricing(model, source = "") {
+    if (!model) return ZERO_PRICING;
+    if (source.toLowerCase() === "workbuddy-ai" && model.trim().toLowerCase() === "auto") return ZERO_PRICING;
+    if (source.toLowerCase() === "acode") {
+      const normalized = normalizeIFlytekMaasModel(model);
+      if (normalized === "auto" || normalized.endsWith("-auto")) return ZERO_PRICING;
+      const iFlytekMaasPricing = IFLYTEK_MAAS_MODEL_PRICING[normalized];
+      if (iFlytekMaasPricing) return iFlytekMaasPricing;
+    }
+    const exact = MODEL_PRICING[model];
+    if (exact) return exact;
+    const lower = model.toLowerCase();
+    if (source === "cline" && lower.endsWith(":free")) return ZERO_PRICING;
+    if (lower.endsWith("-free")) return ZERO_PRICING;
+    if (lower.includes("cline-free/") || lower.includes("cline-pass/")) return ZERO_PRICING;
+    if (lower.includes("fable")) return MODEL_PRICING["claude-fable-5"];
+    if (/opus-5[.-]5(?:$|[^0-9.])/.test(lower)) return MODEL_PRICING["claude-opus-5-5"];
+    if (/sonnet-5[.-]5(?:$|[^0-9.])/.test(lower)) return MODEL_PRICING["claude-sonnet-5-5"];
+    if (/sonnet-5(?:$|[^0-9.-])/.test(lower)) return MODEL_PRICING["claude-sonnet-5"];
+    if (lower.includes("opus-5-fast")) return MODEL_PRICING["claude-opus-5-fast"];
+    if (lower.includes("opus-5")) return MODEL_PRICING["claude-opus-5"];
+    if (lower.includes("opus")) return MODEL_PRICING["claude-opus-4-6"];
+    if (/haiku-5[.-]5(?:$|[^0-9.])/.test(lower)) return MODEL_PRICING["claude-haiku-5-5"];
+    if (lower.includes("haiku")) return MODEL_PRICING["claude-haiku-4-5-20251001"];
+    if (lower.includes("sonnet")) return MODEL_PRICING["claude-sonnet-4-6"];
+    if (lower.includes("gpt-6-astra")) return MODEL_PRICING["gpt-6-astra"];
+    if (lower.includes("gpt-6-sol")) return MODEL_PRICING["gpt-6-sol"];
+    if (lower.includes("gpt-6.1-sol")) return MODEL_PRICING["gpt-6.1-sol"];
+    if (lower.includes("gpt-6.1-terra")) return MODEL_PRICING["gpt-6.1-terra"];
+    if (lower.includes("gpt-5.6-sol")) return MODEL_PRICING["gpt-5.6-sol"];
+    if (lower.includes("gpt-5.6-terra")) return MODEL_PRICING["gpt-5.6-terra"];
+    if (lower.includes("gpt-5.6-luna")) return MODEL_PRICING["gpt-5.6-luna"];
+    if (lower.includes("gpt-5.6")) return MODEL_PRICING["gpt-5.6-sol"];
+    if (lower.includes("gpt-5.4-pro")) return MODEL_PRICING["gpt-5.4-pro"];
+    if (lower.includes("gpt-5.4")) return MODEL_PRICING["gpt-5.4"];
+    if (lower.includes("gpt-5.5")) return MODEL_PRICING["gpt-5.5"];
+    if (lower.includes("gpt-5-mini")) return MODEL_PRICING["gpt-5-mini"];
+    if (lower.includes("gpt-5.3")) return MODEL_PRICING["gpt-5.3-codex"];
+    if (lower.includes("gpt-5.2")) return MODEL_PRICING["gpt-5.2"];
+    if (lower.includes("gpt-5.1-codex-mini")) return MODEL_PRICING["gpt-5.1-codex-mini"];
+    if (lower.includes("gpt-5.1")) return MODEL_PRICING["gpt-5.1-codex"];
+    if (lower.includes("gpt-5")) return MODEL_PRICING["gpt-5"];
+    if (lower.includes("gemini-4-argon") || lower.includes("gemini-4.argon")) return MODEL_PRICING["gemini-4-argon"];
+    if (lower.includes("gemini-3") && lower.includes("pro")) return MODEL_PRICING["gemini-3-pro-preview"];
+    if (lower.includes("gemini-3")) return MODEL_PRICING["gemini-3-flash-preview"];
+    if (lower.includes("gemini-2.5")) return MODEL_PRICING["gemini-2.5-pro"];
+    if (lower.includes("minimax-m3")) return MODEL_PRICING["minimax-m3"];
+    if (lower.includes("minimax-m2.7-highspeed")) return MODEL_PRICING["MiniMax-M2.7-highspeed"];
+    if (lower.includes("minimax-m2.7")) return MODEL_PRICING["MiniMax-M2.7"];
+    if (lower.includes("deepseek-v4.1-flash")) return MODEL_PRICING["deepseek-v4.1-flash"];
+    if (lower.includes("deepseek-flash")) return MODEL_PRICING["deepseek-flash"];
+    if (lower.includes("deepseek-v4-flash")) return MODEL_PRICING["deepseek-v4-flash"];
+    if (lower.includes("deepseek-v4-pro")) return MODEL_PRICING["deepseek-v4-pro"];
+    if (lower.includes("deepseek-reasoner")) return MODEL_PRICING["deepseek-reasoner"];
+    if (lower.includes("deepseek-chat")) return MODEL_PRICING["deepseek-chat"];
+    if (lower.includes("grok-4.7") && lower.includes("fast")) return MODEL_PRICING["cursor-grok-4.7-fast"];
+    if (lower.includes("grok-4.7")) return MODEL_PRICING["cursor-grok-4.7"];
+    if (lower.includes("grok-4.6") && lower.includes("fast")) return MODEL_PRICING["cursor-grok-4.6-fast"];
+    if (lower.includes("grok-4.6")) return MODEL_PRICING["cursor-grok-4.6"];
+    if (lower.includes("grok-4.5") && lower.includes("fast")) return MODEL_PRICING["cursor-grok-4.5-fast"];
+    if (lower.includes("grok-4.5")) return MODEL_PRICING["cursor-grok-4.5"];
+    if (lower.includes("grok-build")) return MODEL_PRICING["grok-build"];
+    if (lower.includes("grok-4-fast")) return MODEL_PRICING["grok-4-fast"];
+    if (lower.includes("grok-4-1-fast")) return MODEL_PRICING["grok-4-1-fast-non-reasoning"];
+    if (lower.includes("grok-4")) return MODEL_PRICING["grok-4"];
+    if (lower.includes("kimi-k3.1-pro-highspeed") || lower.includes("k3.1-pro-highspeed") || lower.includes("k3.1pro-highspeed")) {
+      return MODEL_PRICING["kimi-k3.1-pro-highspeed"];
+    }
+    if (lower.includes("kimi-k3.1-pro") || lower.includes("k3.1-pro") || lower.includes("k3.1pro")) {
+      return MODEL_PRICING["kimi-k3.1-pro"];
+    }
+    if (lower.includes("kimi-k3")) return MODEL_PRICING["kimi-k3"];
+    if (lower === "k3" || lower.endsWith("/k3")) return MODEL_PRICING["kimi-k3"];
+    if (lower.includes("kimi-k2.7-code")) return MODEL_PRICING["kimi-k2.7-code"];
+    if (lower.includes("kimi-k2.6")) return MODEL_PRICING["kimi-k2.6"];
+    if (lower.includes("kimicoding") || lower.includes("kimi-k2.8") || lower === "k2.8" || lower.endsWith("/k2.8")) {
+      return ZERO_PRICING;
+    }
+    if (lower.includes("kimi")) return MODEL_PRICING["kimi-k2.5"];
+    if (lower.includes("mimo-v2-pro-free")) return MODEL_PRICING["mimo-v2-pro-free"];
+    if (lower.includes("mimo-v2.5-pro")) return MODEL_PRICING["mimo-v2.5-pro"];
+    if (lower.includes("mimo-v2.5")) return MODEL_PRICING["mimo-v2.5"];
+    if (lower.includes("mimo-v2-flash")) return MODEL_PRICING["mimo-v2-flash"];
+    if (lower.includes("glm-4.5-airx")) return MODEL_PRICING["glm-4.5-airx"];
+    if (lower.includes("glm-4.5-air")) return MODEL_PRICING["glm-4.5-air"];
+    if (lower.includes("glm-4.5-x")) return MODEL_PRICING["glm-4.5-x"];
+    if (lower.includes("glm-4.5-flash")) return MODEL_PRICING["glm-4.5-flash"];
+    if (lower.includes("glm-4.5")) return MODEL_PRICING["glm-4.5"];
+    if (lower.includes("glm-4.7-flashx")) return MODEL_PRICING["glm-4.7-flashx"];
+    if (lower.includes("glm-4.7-flash")) return MODEL_PRICING["glm-4.7-flash"];
+    if (lower.includes("glm-4.7")) return MODEL_PRICING["glm-4.7"];
+    if (lower.includes("glm-4.6")) return MODEL_PRICING["glm-4.6"];
+    if (lower.includes("glm-5.3-flash")) return MODEL_PRICING["glm-5.3-flash"];
+    if (lower.includes("glm-5.3")) return MODEL_PRICING["glm-5.3"];
+    if (lower.includes("glm-5-turbo")) return MODEL_PRICING["glm-5-turbo"];
+    if (lower.includes("glm-5.2")) return MODEL_PRICING["glm-5.2"];
+    if (lower.includes("glm-5.1")) return MODEL_PRICING["glm-5.1"];
+    if (lower.includes("glm-5")) return MODEL_PRICING["glm-5"];
+    if (lower.includes("kiro")) return MODEL_PRICING["kiro-cli-agent"];
+    if (lower.includes("hy3")) return MODEL_PRICING["hy3-preview-agent"];
+    if (/(?:^|\/)qwen3[.-]8-flash(?:-\d{4}-\d{2}-\d{2})?$/.test(lower.trim())) return MODEL_PRICING["qwen3.8-flash"];
+    if (/(?:^|\/)qwen3[.-]8-max(?:-0902|-\d{4}-\d{2}-\d{2})?$/.test(lower.trim())) return MODEL_PRICING["qwen3.8-max"];
+    if (lower.includes("hy4")) return MODEL_PRICING["hy4-preview"];
+    if (lower.includes("composer-2.5") && lower.includes("fast")) return MODEL_PRICING["composer-2.5-fast"];
+    if (lower.includes("composer-2.5")) return MODEL_PRICING["composer-2.5"];
+    if (lower.includes("composer-2-fast")) return MODEL_PRICING["composer-2-fast"];
+    if (lower.includes("composer-2")) return MODEL_PRICING["composer-2"];
+    if (lower.includes("composer-1.5")) return MODEL_PRICING["composer-1.5"];
+    if (lower.includes("composer")) return MODEL_PRICING["composer-1"];
+    if (lower.includes("fugu")) return MODEL_PRICING["sakana/fugu-ultra"];
+    if (lower.includes("longcat")) return MODEL_PRICING["longcat-2.0"];
+    if (lower.includes("step-3.7-flash")) return MODEL_PRICING["step-3.7-flash"];
+    if (lower.includes("step-3.5-flash")) return MODEL_PRICING["step-3.5-flash"];
+    if (lower.includes("stepfun")) return MODEL_PRICING["step-3.7-flash"];
+    if (lower === "auto") return MODEL_PRICING["composer-1"];
+    return ZERO_PRICING;
+  }
+  function getRowPricing(row) {
+    const pricing = getModelPricing(row.model || "", row.source);
+    if ((row.source || "").toLowerCase() === "acode") return pricing;
+    const lower = String(row.model || "").toLowerCase();
+    if (!lower.includes("deepseek-v4-flash") && !lower.includes("deepseek-v4.1-flash") && !lower.includes("deepseek-flash") && !lower.includes("deepseek-v4-pro")) return pricing;
+    let offPeak = row.pricing_tier === "off_peak";
+    if (!row.pricing_tier && row.hour_start) {
+      const timestamp = Date.parse(row.hour_start);
+      if (Number.isFinite(timestamp)) {
+        const hour = new Date(timestamp).getUTCHours();
+        offPeak = !(hour >= 1 && hour < 4 || hour >= 6 && hour < 10);
+        if (timestamp >= Date.UTC(2026, 7, 22, 16, 0, 0)) {
+          const beijingDay = new Date(timestamp + 8 * 60 * 60 * 1e3).getUTCDay();
+          if (beijingDay === 0 || beijingDay === 6) offPeak = true;
+        }
+      }
+    }
+    if (!offPeak) return pricing;
+    return { input: pricing.input * 0.5, output: pricing.output * 0.5, cache_read: pricing.cache_read * 0.5, cache_write: (pricing.cache_write || 0) * 0.5 };
+  }
+  function expandModelPairs(pairs, modelNames) {
+    if (pairs === null) return null;
+    const entries = [];
+    for (let i = 0; i < pairs.length; i += 2) {
+      entries.push([modelNames[Number(pairs[i])], pairs[i + 1]]);
+    }
+    return Object.fromEntries(entries);
+  }
+  function decodeDailyWire(data) {
+    const payload = data ?? {};
+    const modelNames = Array.isArray(payload.model_names) ? payload.model_names : [];
+    const sourceNames = Array.isArray(payload.source_names) ? payload.source_names : [];
+    const pricingTiers = Array.isArray(payload.pricing_tiers) ? payload.pricing_tiers : [];
+    return {
+      days: (Array.isArray(payload.days) ? payload.days : []).map(
+        ([day, tt, i, o, cr, cw, rs, cv, pairs]) => [day, tt, i, o, cr, cw, rs, cv, expandModelPairs(pairs, modelNames)]
+      ),
+      cost_dims: (Array.isArray(payload.cost_dims) ? payload.cost_dims : []).map(
+        ([day, source, model, tier, i, o, cr, cw, rs]) => [day, sourceNames[source], modelNames[model], pricingTiers[tier], i, o, cr, cw, rs]
+      )
+    };
+  }
+  var COMPACT_TTL_MS = 3e4;
+  var COMPACT_STALE_IF_ERROR_MS = 5 * 6e4;
+  var compactCache = /* @__PURE__ */ new Map();
+  var compactInFlight = /* @__PURE__ */ new Map();
+  async function fetchCompactDaily(client, userId, requestedDeviceId, fromIso, toIso, rangeFrom, rangeTo, tz, tzOffsetMinutes) {
+    const cacheKey = JSON.stringify([userId, requestedDeviceId, fromIso, toIso, rangeFrom, rangeTo, tz, tzOffsetMinutes]);
+    const cached = compactCache.get(cacheKey);
+    if (cached && Date.now() - cached.fetchedAt < COMPACT_TTL_MS) return cached.value;
+    const existing = compactInFlight.get(cacheKey);
+    if (existing) return existing;
+    const pending = (async () => {
+      try {
+        const { data, error } = await client.database.rpc("account_daily_wire", {
+          p_user_id: userId,
+          p_device_id: requestedDeviceId,
+          p_from: fromIso,
+          p_to: toIso,
+          p_tz: tz,
+          p_offset_min: tzOffsetMinutes,
+          p_range_from: rangeFrom,
+          p_range_to: rangeTo
+        });
+        if (error) throw new Error(error.message);
+        const value = decodeDailyWire(data);
+        compactCache.set(cacheKey, { fetchedAt: Date.now(), value });
+        if (compactCache.size > 64) {
+          const oldest = compactCache.keys().next().value;
+          if (oldest) compactCache.delete(oldest);
+        }
+        return value;
+      } catch (error) {
+        const stale = compactCache.get(cacheKey);
+        if (stale && Date.now() - stale.fetchedAt < COMPACT_STALE_IF_ERROR_MS) return stale.value;
+        throw error;
+      }
+    })().finally(() => compactInFlight.delete(cacheKey));
+    compactInFlight.set(cacheKey, pending);
+    return pending;
+  }
+  function computeRowCost(row) {
+    if (row.source === "lmstudio") return 0;
+    if (row.source === "pi-github-copilot" || row.source === "pi-copilot") return 0;
+    const reportedCost = Number(row.total_cost_usd);
+    if (SOURCES_WITH_AUTHORITATIVE_COST.has(row.source) && Number.isFinite(reportedCost) && reportedCost > 0) return reportedCost;
+    const rawModel = String(row.model || "").trim();
+    const unslothUnpriced = row.source === "unsloth" && /^(local|unpriced)\//i.test(rawModel);
+    const modelForPricing = unslothUnpriced ? "__tokentracker_unpriced_unsloth_model__" : row.source === "workbuddy" && rawModel.toLowerCase() === "auto" ? "hy3-preview-agent" : rawModel;
+    const p = getRowPricing({ ...row, model: modelForPricing });
+    const reasoningCost = row.source === "codex" || row.source === "acode" || row.source === "every-code" || row.source === "cline" || row.source === "omo" || row.source === "muse" ? 0 : (Number(row.reasoning_output_tokens) || 0) * (p.output || 0);
+    return ((Number(row.input_tokens) || 0) * (p.input || 0) + (Number(row.output_tokens) || 0) * (p.output || 0) + (Number(row.cached_input_tokens) || 0) * (p.cache_read || 0) + (Number(row.cache_creation_input_tokens) || 0) * (p.cache_write ?? 0) + reasoningCost) / 1e6;
+  }
+  async function tokentracker_account_daily_default(req) {
+    if (req.method === "OPTIONS")
+      return new Response(null, { status: 204, headers: corsHeaders });
+    if (req.method !== "GET") return json({ error: "Method not allowed" }, 405);
+    const url = new URL(req.url);
+    let from = url.searchParams.get("from") || "";
+    const to = url.searchParams.get("to") || "";
+    if (!from || !to) return json({ error: "Missing from/to" }, 400);
+    const MAX_RANGE_DAYS = 1095;
+    const fromMs = Date.parse(`${from}T00:00:00Z`);
+    const toMs = Date.parse(`${to}T00:00:00Z`);
+    if (Number.isFinite(fromMs) && Number.isFinite(toMs) && toMs > fromMs) {
+      const maxFromMs = toMs - MAX_RANGE_DAYS * 864e5;
+      if (fromMs < maxFromMs) from = new Date(maxFromMs).toISOString().slice(0, 10);
+    }
+    const tz = url.searchParams.get("tz") || null;
+    const tzOffsetRaw = url.searchParams.get("tz_offset_minutes");
+    const tzOffsetMinutes = tzOffsetRaw != null && tzOffsetRaw !== "" ? Number(tzOffsetRaw) : null;
+    const baseUrl = Deno.env.get("INSFORGE_BASE_URL");
+    const incomingApiKey = req.headers.get("apikey") ?? req.headers.get("Apikey") ?? req.headers.get("x-api-key") ?? void 0;
+    const anonKey = Deno.env.get("INSFORGE_ANON_KEY") ?? Deno.env.get("ANON_KEY") ?? incomingApiKey ?? void 0;
+    const serviceRoleKey = Deno.env.get("INSFORGE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return json({ error: "server misconfigured" }, 500);
+    const client = (0, import_sdk.createClient)({
+      baseUrl,
+      edgeFunctionToken: serviceRoleKey,
+      anonKey,
+      ...anonKey ? { headers: { apikey: anonKey } } : {}
+    });
+    const userId = await verifiedUserIdFromJwt(req.headers.get("Authorization"));
+    if (!userId) return json({ error: "Unauthorized" }, 401);
+    let cloudAccess;
+    try {
+      cloudAccess = await cloudReadAccess(client, userId, "daily");
+    } catch {
+      return json({ error: "Cloud access unavailable", code: "cloud_access_unavailable" }, 503);
+    }
+    if (!cloudAccess.ok) return cloudFailure(cloudAccess, corsHeaders);
+    const historyFailure = cloudHistoryFailure(cloudAccess, to);
+    if (historyFailure) return cloudFailure(historyFailure, corsHeaders);
+    if (cloudAccess.available_from && from < cloudAccess.available_from) from = cloudAccess.available_from;
+    const rawDeviceId = url.searchParams.get("device_id");
+    const requestedDeviceId = rawDeviceId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawDeviceId) ? rawDeviceId : null;
+    const startDate = /* @__PURE__ */ new Date(`${from}T00:00:00Z`);
+    startDate.setUTCDate(startDate.getUTCDate() - 1);
+    const endDate = /* @__PURE__ */ new Date(`${to}T00:00:00Z`);
+    endDate.setUTCDate(endDate.getUTCDate() + 2);
+    const rangeStart = startDate.toISOString();
+    const rangeEnd = endDate.toISOString();
+    let compact;
+    try {
+      compact = await fetchCompactDaily(client, userId, requestedDeviceId, rangeStart, rangeEnd, from, to, tz, tzOffsetMinutes);
+    } catch (e) {
+      return json({ error: e.message }, 500);
+    }
+    const byDay = /* @__PURE__ */ new Map();
+    for (const [day, tt, i, o, cr, cw, rs, cv, models] of compact.days) {
+      const total = Number(tt) || 0;
+      const mdl = {};
+      if (models) for (const name of Object.keys(models)) mdl[name] = Number(models[name]) || 0;
+      byDay.set(day, {
+        day,
+        total_tokens: total,
+        billable_total_tokens: total,
+        total_cost_usd: 0,
+        input_tokens: Number(i) || 0,
+        output_tokens: Number(o) || 0,
+        cached_input_tokens: Number(cr) || 0,
+        cache_creation_input_tokens: Number(cw) || 0,
+        reasoning_output_tokens: Number(rs) || 0,
+        conversation_count: Number(cv) || 0,
+        models: mdl
+      });
+    }
+    for (const [day, source, model, tier, i, o, cr, cw, rs] of compact.cost_dims) {
+      const a = byDay.get(day);
+      if (!a) continue;
+      a.total_cost_usd += computeRowCost({
+        bucket: day,
+        source,
+        model,
+        pricing_tier: tier ?? void 0,
+        input_tokens: Number(i) || 0,
+        output_tokens: Number(o) || 0,
+        cached_input_tokens: Number(cr) || 0,
+        cache_creation_input_tokens: Number(cw) || 0,
+        reasoning_output_tokens: Number(rs) || 0,
+        total_tokens: 0,
+        conversations: 0
+      });
+    }
+    const data = Array.from(byDay.values()).sort((a, b) => a.day.localeCompare(b.day));
+    return json({ from, to, data });
+  }
+  return __toCommonJS(tokentracker_account_daily_exports);
+})();
+
+    return await __selfHostHandler.default(req);
+  })(Deno);
+};

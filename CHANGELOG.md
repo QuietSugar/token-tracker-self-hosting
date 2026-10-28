@@ -3,6 +3,17 @@
 记录**本仓库自身**的变化（上游版本见 [`docs/maintainers/upstream.md`](docs/maintainers/upstream.md)）。
 只写使用者能感知的东西；内部重构与文档搬家不在此列。当前处于实验通道，未发正式版。
 
+## 2026-10-28 — 跟进上游 v1.5.0
+
+- **锁定点升到上游 v1.5.0**（`b2c2eb85`），重新生成 `releases/1.5.0/` 并重录 `contract/golden/1.5.0/`。
+- **后端无需改动**：安装 SQL / 迁移 SQL / 15 步清单 / 14 个函数 bundle / `functions.json`
+  与 1.4.15 **逐字节相同**；35 个行为用例与 `static.json`（依赖版本）也逐字节相同。
+  契约路径下唯一的变更是 `edge-patches/tokentracker-leaderboard-profile.ts`（榜单资料卡的
+  `totals` 改用 lifetime snapshot 并新增 `source` 字段）——该函数不在自托管的 14 个函数内。
+- 客户端建议升级到 v1.5.0：sessions 页支持 DeepSeek Harness 会话、zcode 重置卡倒计时、
+  限额面板可折叠、榜单资料卡总额口径修正。
+- 部署工件镜像默认 tag 随之升到 `1.5.0`（`docker-compose.example.yml`）。
+
 ## 2026-10-28 — 并发刷新不再把界面锁进「登录状态需要刷新」
 
 - **refresh token 轮换加了 60 秒宽限期**：桌面 GUI 的 webview 里多个组件会**同时**拿同一份
