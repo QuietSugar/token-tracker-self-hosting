@@ -8,6 +8,7 @@ jobs:
   comment:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Post comment to issue 47
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
