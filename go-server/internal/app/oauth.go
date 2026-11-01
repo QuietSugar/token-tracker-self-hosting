@@ -242,6 +242,14 @@ func (s *Server) respondWithSession(w http.ResponseWriter, r *http.Request, uid,
 		authFail(w, 500, "INTERNAL", err.Error())
 		return
 	}
+	s.writeSessionResponse(w, r, uid, client, refresh, csrf)
+}
+
+// writeSessionResponse 只负责回写（token 由调用方决定是怎么来的）。
+//
+// 拆出来是因为轮换路径的 token 是**派生**出来的（不是新签发），两者必须共用同一份
+// 响应形状与 cookie 逻辑，否则很容易只改一处。
+func (s *Server) writeSessionResponse(w http.ResponseWriter, r *http.Request, uid, client, refresh, csrf string) {
 	user, err := s.userPayload(uid)
 	if err != nil {
 		authFail(w, 500, "INTERNAL", err.Error())
@@ -305,18 +313,19 @@ func (s *Server) authRefresh(w http.ResponseWriter, r *http.Request) {
 		}
 		// 宽限期：因**轮换**而失效的 token，在 refreshGrace 之内再用一次不算重放。
 		//
-		// 为什么需要（真实故障，issue #38 后续实测）：桌面 GUI 的 webview 里多个组件
-		// 并发拿同一份 refresh token 去 mint，轮换是"旧的立刻失效、发新的"，先到的那个
-		// 成功、后到的命中 revoked_at → 401 → 前端当成鉴权失效 → 重试 → 再撞，页面卡在
-		// 「登录状态需要刷新」并循环。客户端没有做 single-flight，这一点我们改不了。
+		// 为什么需要（真实故障，issue #38 / #47）：桌面 GUI 与 CLI web 面板里多个组件
+		// 会**同时**拿同一份 refresh token 去 mint。轮换是"旧的立刻失效"，先到的成功、
+		// 后到的命中 revoked_at → 401 → 前端当成鉴权失效 → 重试 → 循环。
+		// 客户端没有 single-flight，这一点我们改不了。
 		//
 		// 三种失效必须区分开，所以只看 rotated_at 而不看 revoked_at：
-		//   - 轮换（这里）：宽限期内再签一份新会话，等价于"两个组件各拿一份"；
+		//   - 轮换（这里）：宽限期内沿着接替链走到"当前那一份"并返回它；
 		//   - 登出：立即失效，不给宽限；
 		//   - 泄露处置（revokeOnReuse=true）：走上面的硬拒绝。
 		//
-		// 代价：这段时间内一份被偷走的旧 token 仍可换到新会话。定位是局域网单实例自用，
-		// 且只要 rotate 时不留原文（本服务只存 SHA-256）就够；要零宽限请开严格模式。
+		// 注意这里**不再新签会话**。之前每次都 newSession()，于是并发的 N 路各自拿到
+		// 一份不同的新 token，客户端只有一个存储位、互相覆盖，最后落盘的常常是链中间
+		// 已被轮换的那一份 → 下次请求取不到 token → 不带 Authorization → 401（issue #47）。
 		if rotatedAt.Valid && s.withinRefreshGrace(rotatedAt.String) {
 			if client == "browser" {
 				got := r.Header.Get("X-CSRF-Token")
@@ -325,8 +334,16 @@ func (s *Server) authRefresh(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
+			refresh, csrf, ok := s.resolveChainTail(uid, client, id, token)
+			if !ok {
+				// 链上那一份是被登出/连带撤销的（没有 rotated_at），不能借宽限期复活。
+				w.Header().Set("Cache-Control", "no-store")
+				w.Header().Set("X-TokenTracker-Auth-Error", "refresh_token_reused")
+				authFail(w, 401, "REFRESH_TOKEN_REUSED", "Refresh token was already rotated or revoked")
+				return
+			}
 			w.Header().Set("X-TokenTracker-Refresh", "grace")
-			s.respondWithSession(w, r, uid, client, id)
+			s.writeSessionResponse(w, r, uid, client, refresh, csrf)
 			return
 		}
 		// 过期太久的旧 token：明确告诉调用方"重试没用"。
@@ -347,12 +364,30 @@ func (s *Server) authRefresh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// 轮换：旧的立即失效（同时记 rotated_at，供宽限期判定），新的接替（client 类型不变）。
+	//
+	// 新 token **由旧 token 派生**（见 deriveToken），所以同一个旧 token 被并发提交 N 次
+	// 也只会有同一个结果：先到的把旧行标记为已轮换并插入子行，后到的插入撞唯一索引后
+	// 什么都不做，双方返回的 refresh / csrf 逐字节相同。客户端 N 路拿到同一份，不会再
+	// 互相覆盖（issue #47）。
 	if _, err := s.db.Exec(`UPDATE auth_sessions SET revoked_at=?, rotated_at=? WHERE id=? AND revoked_at IS NULL`,
 		s.nowISO(), s.nowISO(), id); err != nil {
 		authFail(w, 500, "INTERNAL", err.Error())
 		return
 	}
-	s.respondWithSession(w, r, uid, client, id)
+	refresh, csrf, err := s.newDerivedSession(uid, client, id, token)
+	if err != nil {
+		authFail(w, 500, "INTERNAL", err.Error())
+		return
+	}
+	// 派生出的那一份理论上总是新的；只有历史遗留数据能撞上一个"已存在且已撤销"的
+	// 派生行，此时不能把它当有效会话发出去。
+	if alive, err := s.sessionAliveByToken(refresh); err != nil || !alive {
+		w.Header().Set("X-TokenTracker-Auth-Error", "refresh_token_reused")
+		authFail(w, 401, "REFRESH_TOKEN_REUSED", "Refresh token was already rotated or revoked")
+		return
+	}
+	s.pruneRotatedSessions(uid)
+	s.writeSessionResponse(w, r, uid, client, refresh, csrf)
 }
 
 func (s *Server) authLogout(w http.ResponseWriter, r *http.Request) {
@@ -461,6 +496,125 @@ func (s *Server) authPublicConfig(w http.ResponseWriter, r *http.Request) {
 
 // ---------- 内部工具 ----------
 
+// deriveToken 从「父 token」派生一份子 token（用途用 kind 区分）。
+//
+// 为什么派生而不是随机：客户端会**同时**拿同一份 refresh token 发 N 个 refresh
+// （GUI 的 webview 组件 + relay，issue #47 里一次开页面 20+ 个）。随机签发的话 N 路
+// 各得一份，而客户端只有一个存储位，互相覆盖后很可能留下链中间那份已失效的 token。
+// 派生保证「同一个父 token → 永远同一个子 token」，N 路结果逐字节相同，幂等。
+//
+// 这**不**破坏"库里只存哈希"的性质：派生输入是旧 token 的 SHA-256，服务端依然不留
+// 任何 token 原文；也省掉了"为宽限期缓存子 token"的新表。
+//
+// 安全性：HMAC key 是 TT_JWT_SECRET，不是旧 token 本身，所以拿到旧 token 也推不出
+// 兄弟链（同用户其它会话）；同时派生是单向的，不能反推父 token。
+func (s *Server) deriveToken(kind, parentToken string) string {
+	mac := hmac.New(sha256.New, s.secret)
+	mac.Write([]byte("tt-" + kind + "-v1\x00"))
+	mac.Write([]byte(tokenHash(parentToken)))
+	sum := mac.Sum(nil)
+	if kind == "csrf" {
+		return hex.EncodeToString(sum[:16]) // 与 randomHex(16) 同形：32 个 hex 字符
+	}
+	return hex.EncodeToString(sum) // 与 randomHex(32) 同形：64 个 hex 字符
+}
+
+// newDerivedSession 以 parentToken 为父派生并落库一份子会话（幂等）。
+//
+// ON CONFLICT DO NOTHING 靠 auth_sessions(token_hash) 的唯一索引：并发下先到的插入、
+// 后到的什么也不做，两边的 token 本来就一样，所以不需要事务或行锁。
+func (s *Server) newDerivedSession(uid, client, parentID, parentToken string) (refresh, csrf string, err error) {
+	refresh = s.deriveToken("refresh", parentToken)
+	csrf = s.deriveToken("csrf", parentToken)
+	_, err = s.db.Exec(`INSERT INTO auth_sessions(id,user_id,token_hash,csrf_hash,client,created_at,expires_at,parent_id)
+		VALUES(?,?,?,?,?,?,?,?) ON CONFLICT (token_hash) DO NOTHING`,
+		newID(), uid, tokenHash(refresh), tokenHash(csrf), client,
+		s.nowISO(), s.now.Add(s.authCfg.refreshTTL).UTC().Format(time.RFC3339), parentID)
+	return refresh, csrf, err
+}
+
+// sessionAliveByToken 报告某个 token 对应的行是否「存在且未撤销、未过期」。
+func (s *Server) sessionAliveByToken(token string) (bool, error) {
+	var expires string
+	var revoked sql.NullString
+	err := s.db.QueryRow(`SELECT expires_at,revoked_at FROM auth_sessions WHERE token_hash=?`,
+		tokenHash(token)).Scan(&expires, &revoked)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return !revoked.Valid && expires >= s.nowISO(), nil
+}
+
+// resolveChainTail 处理「拿一份已被轮换的旧 token 来刷新」的情况，返回**当前有效的那一份**。
+//
+// 从被提交的 token 出发，反复用派生规则向前走，直到：
+//   - 走到一个还不存在的 token → 就地把它建出来（父是上一层），并把它这一层的
+//     "兄弟"（同一父、仍然存活的行）全部撤销 —— 那些正是历史上并发签出的重复品，
+//     客户端手里可能就是其中任一份，留着它们只会继续互相覆盖；
+//   - 走到一个存活的行 → 直接返回它（真正的幂等：并发 N 路返回同一个 token）。
+//
+// 只沿派生链走，遇到「已撤销但没有 rotated_at」（= 登出 / 连带撤销）就放弃并返回
+// false，绝不借宽限期复活一个被明确登出的会话。
+//
+// 历史上的非派生会话（旧版本签的随机 token）派生不出子 token，所以会走第一条分支
+// 新建一份，同时撤销它们的存活兄弟 —— 升级后第一次刷新就收敛到单一链条。
+func (s *Server) resolveChainTail(uid, client, parentID, parentToken string) (refresh, csrf string, ok bool) {
+	curID, curToken := parentID, parentToken
+	for hop := 0; hop < refreshChainMaxHops; hop++ {
+		next := s.deriveToken("refresh", curToken)
+		var rowID string
+		var revoked, rotated sql.NullString
+		err := s.db.QueryRow(`SELECT id,revoked_at,rotated_at FROM auth_sessions WHERE token_hash=?`,
+			tokenHash(next)).Scan(&rowID, &revoked, &rotated)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			// 这一层还没有 → 建出来，并把同父的其它存活行收掉（历史并发重复品）。
+			refresh, csrf, err = s.newDerivedSession(uid, client, curID, curToken)
+			if err != nil {
+				return "", "", false
+			}
+			_, _ = s.db.Exec(`UPDATE auth_sessions SET revoked_at=?
+				WHERE parent_id=? AND revoked_at IS NULL AND token_hash<>?`,
+				s.nowISO(), curID, tokenHash(refresh))
+			// 撞上"已存在且已撤销"的历史派生行时不能复活它。
+			if alive, err := s.sessionAliveByToken(refresh); err != nil || !alive {
+				return "", "", false
+			}
+			return refresh, csrf, true
+		case err != nil:
+			return "", "", false
+		case !revoked.Valid:
+			// 存活且未过期：这就是"当前那一份"。
+			var expires string
+			if err := s.db.QueryRow(`SELECT expires_at FROM auth_sessions WHERE id=?`, rowID).Scan(&expires); err != nil || expires < s.nowISO() {
+				return "", "", false
+			}
+			return next, s.deriveToken("csrf", curToken), true
+		case rotated.Valid && s.withinRefreshGrace(rotated.String):
+			// 它自己也被轮换过了 → 继续向前。
+			curID, curToken = rowID, next
+		default:
+			// 被登出或太久之前轮换的：不复活。
+			return "", "", false
+		}
+	}
+	return "", "", false
+}
+
+// pruneRotatedSessions 清掉很久以前轮换留下的死行。
+//
+// issue #47 里那张表涨到 853 行（单次开页面 20+ 次刷新），长期不清理会让
+// auth_sessions 无限膨胀。只删「已轮换且早就过了宽限期」的行：登出产生的行
+// （revoked_at 有、rotated_at 空）不在此列，它们留着用于"旧 token 登出"的链式撤销。
+func (s *Server) pruneRotatedSessions(uid string) {
+	cutoff := s.now.Add(-sessionRetention).UTC().Format(time.RFC3339)
+	_, _ = s.db.Exec(`DELETE FROM auth_sessions
+		WHERE user_id=? AND rotated_at IS NOT NULL AND rotated_at < ?`, uid, cutoff)
+}
+
 // newSession 落库一条 refresh 会话（轮换时调用方负责先撤销旧行）。
 func (s *Server) newSession(uid, client, parent string) (refresh, csrf string, err error) {
 	refresh = randomHex(32)
@@ -551,11 +705,26 @@ func urlQueryUnescape(s string) (string, error) {
 }
 
 // authFail 统一错误形状：InsForge SDK 读 `error` + `code`，据此决定是否触发刷新。
+func authFail(w http.ResponseWriter, status int, code, msg string) {
+	writeJSON(w, status, map[string]any{"error": msg, "code": code, "statusCode": status, "message": msg})
+}
+
 // refreshGrace 是「因轮换失效的 refresh token 仍可再换一次」的宽限窗口。
 //
 // 60 秒足够覆盖客户端里多个组件并发 mint 的抖动（它们几乎同时发出），
 // 也覆盖 relay 每 60s 轮换一次的节拍；再长就把轮换的意义稀释掉了。
 const refreshGrace = 60 * time.Second
+
+const (
+	// refreshChainMaxHops 是宽限期沿派生链向前走的最大跳数。
+	// 一次开页面并发 20+ 也会收敛到一层（派生是幂等的），正常只跳 1~2 次；
+	// 设上限只是防止人为构造的超长链把请求拖慢。
+	refreshChainMaxHops = 16
+	// sessionRetention 是「轮换留下死行」的保留期，过期在下次轮换时顺手清掉。
+	// 只是为了别让表无限长（宽限期只认 60 秒，一周的行已没有诊断价值），
+	// 且不需要运维配任何东西。
+	sessionRetention = 7 * 24 * time.Hour
+)
 
 // withinRefreshGrace 判断 rotated_at 是否落在宽限期内。时间戳是服务端自己写的 RFC3339，
 // 解析失败按「不在宽限期」处理（宁可拒绝，也不要因为脏数据放行）。
@@ -568,10 +737,6 @@ func (s *Server) withinRefreshGrace(rotatedAt string) bool {
 		}
 	}
 	return s.now.Sub(t) >= 0 && s.now.Sub(t) <= refreshGrace
-}
-
-func authFail(w http.ResponseWriter, status int, code, msg string) {
-	writeJSON(w, status, map[string]any{"error": msg, "code": code, "statusCode": status, "message": msg})
 }
 
 func normalizeEmail(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
