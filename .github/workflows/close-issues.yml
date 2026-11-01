@@ -9,11 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Close 44 and 47
+      - name: Comment on 47
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh issue close 44 --repo "$REPO" --reason completed --comment "$(cat .github/issue-44-closing.md)"
-          gh issue close 47 --repo "$REPO" --reason completed --comment "$(cat .github/issue-47-closing.md)"
+          gh issue comment 47 --repo "$REPO" --body-file .github/issue-47-closing.md

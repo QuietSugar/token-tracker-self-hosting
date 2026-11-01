@@ -1,4 +1,6 @@
-维护者实测确认已恢复，关闭。
+补一条收尾说明。
+
+（本 issue 在 PR #48 合并时被 `Closes #47` 关键字自动关闭，属于我的措辞失误 —— 原意是修完只留言、关不关由维护者决定。已确认修复有效，就保持关闭状态。）
 
 修复见 PR #48（main `7d293fc`），镜像 `ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental-7d293fc` 已推送：
 
