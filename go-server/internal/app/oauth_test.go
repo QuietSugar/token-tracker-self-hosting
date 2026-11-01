@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -133,8 +134,9 @@ func TestAuthSignUpSignInRefreshRotation(t *testing.T) {
 	if got := w6.Header().Get("X-TokenTracker-Refresh"); got != "grace" {
 		t.Fatalf("grace reuse header=%q，期望 grace", got)
 	}
-	if graceTok := cookieByName(c6, refreshCookieName).Value; graceTok == "" || graceTok == newRefresh {
-		t.Fatalf("宽限期应再签一份新 token（得到 %q）", graceTok)
+	// 幂等：宽限期把**同一个**接替者再给一次，不另签（issue #47）。
+	if graceTok := cookieByName(c6, refreshCookieName).Value; graceTok != newRefresh {
+		t.Fatalf("宽限期应返回同一份接替 token（得到 %q，期望 %q）", graceTok, newRefresh)
 	}
 	// 6b) 超出宽限期再用 → 401，并带上"重试无用"的标记头
 	if _, err := db.Exec(`UPDATE auth_sessions SET rotated_at=? WHERE token_hash=?`,
@@ -303,14 +305,10 @@ func TestAuthRefreshGraceWindow(t *testing.T) {
 		RefreshToken string `json:"refreshToken"`
 	}
 	_ = json.Unmarshal(w2.Body.Bytes(), &second)
-	if second.RefreshToken == "" || second.RefreshToken == first.RefreshToken {
-		t.Fatalf("宽限期应签一份独立的新 token（得到 %q）", second.RefreshToken)
-	}
-	// 两份新 token 都必须可用——否则客户端拿到哪份都可能立刻失效
-	for name, tok := range map[string]string{"first": first.RefreshToken, "second": second.RefreshToken} {
-		if r := mintMobile(tok); r.Code != 200 {
-			t.Fatalf("%s successor unusable: status=%d body=%s", name, r.Code, r.Body.String())
-		}
+	// 幂等：宽限期**不再另签一份**，而是把同一个接替者再给一次（issue #47）。
+	// 否则 N 路并发各得一份、客户端只有一个存储位，落盘的很可能是链中间那份。
+	if second.RefreshToken != first.RefreshToken {
+		t.Fatalf("宽限期应返回同一份接替 token（得到 %q，期望 %q）", second.RefreshToken, first.RefreshToken)
 	}
 
 	// 用"已经被换掉的旧 token"登出（并发 mint 里没抢到先到的那个组件就是这种情况）：
@@ -320,10 +318,127 @@ func TestAuthRefreshGraceWindow(t *testing.T) {
 	if wOut.Code != 200 {
 		t.Fatalf("logout status=%d body=%s", wOut.Code, wOut.Body.String())
 	}
-	for name, tok := range map[string]string{"first": first.RefreshToken, "second": second.RefreshToken} {
-		if r := mintMobile(tok); r.Code != 401 {
-			t.Fatalf("登出后 %s 仍可用: status=%d body=%s", name, r.Code, r.Body.String())
+	if r := mintMobile(first.RefreshToken); r.Code != 401 {
+		t.Fatalf("登出后 successor 仍可用: status=%d body=%s", r.Code, r.Body.String())
+	}
+}
+
+// issue #47 的核心：客户端一次开页面会并发提交 N 个相同的 refresh 请求。
+// 服务端必须让它们收敛到**同一份**新 token，否则客户端只有一个存储位，互相覆盖后
+// 留下的常常是链中间那份已轮换的 token，下次请求就取不到 token → 不带 Authorization。
+func TestAuthRefreshConcurrentMintIsIdempotent(t *testing.T) {
+	s, db := testServer(t)
+	h := s.Handler()
+	mustSignUp(t, h, "burst@example.com", "correct horse battery")
+
+	w, _ := httpDo(t, h, "POST", "/api/auth/sessions",
+		map[string]any{"email": "burst@example.com", "password": "correct horse battery"}, nil, nil)
+	var sess struct {
+		RefreshToken string `json:"refreshToken"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &sess)
+	orig := sess.RefreshToken
+
+	const n = 20
+	tokens := make([]string, n)
+	codes := make([]int, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			// 不用 httpDo：它内部会碰 *testing.T（Helper/Fatal），在 goroutine 里不安全。
+			req := httptest.NewRequest("POST", "/api/auth/refresh?client_type=mobile",
+				strings.NewReader(`{"refresh_token":"`+orig+`"}`))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			r := rec
+			codes[i] = r.Code
+			var body struct {
+				RefreshToken string `json:"refreshToken"`
+			}
+			_ = json.Unmarshal(r.Body.Bytes(), &body)
+			tokens[i] = body.RefreshToken
+		}(i)
+	}
+	wg.Wait()
+
+	for i := 0; i < n; i++ {
+		if codes[i] != 200 {
+			t.Fatalf("burst[%d] status=%d，期望全部 200", i, codes[i])
 		}
+		if tokens[i] != tokens[0] {
+			t.Fatalf("burst[%d] token=%q 与 burst[0]=%q 不同：并发刷新必须幂等", i, tokens[i], tokens[0])
+		}
+	}
+
+	// 链不能膨胀：旧 token 那一层只该有**一个**子会话。
+	var children int
+	if err := db.QueryRow(`SELECT count(*) FROM auth_sessions WHERE parent_id=
+		(SELECT id FROM auth_sessions WHERE token_hash=?)`, tokenHash(orig)).Scan(&children); err != nil {
+		t.Fatal(err)
+	}
+	if children != 1 {
+		t.Fatalf("旧 token 下挂了 %d 个子会话，期望 1", children)
+	}
+
+	// 收敛后的 token 必须是可用的。
+	r, _ := httpDo(t, h, "POST", "/api/auth/refresh?client_type=mobile",
+		map[string]any{"refresh_token": tokens[0]}, nil, nil)
+	if r.Code != 200 {
+		t.Fatalf("收敛后的 token 不可用: status=%d body=%s", r.Code, r.Body.String())
+	}
+}
+
+// 客户端手里若是链中间那份已轮换的 token（历史并发签出的重复品就会这样），
+// 宽限期内要能沿链把它带回**当前存活**的那一份，而不是 401、也不是再签一份。
+func TestAuthRefreshFollowsRotatedChainToLiveToken(t *testing.T) {
+	s, _ := testServer(t)
+	h := s.Handler()
+	mustSignUp(t, h, "chain@example.com", "correct horse battery")
+
+	w, _ := httpDo(t, h, "POST", "/api/auth/sessions",
+		map[string]any{"email": "chain@example.com", "password": "correct horse battery"}, nil, nil)
+	var sess struct {
+		RefreshToken string `json:"refreshToken"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &sess)
+
+	mint := func(tok string) (int, string) {
+		r, _ := httpDo(t, h, "POST", "/api/auth/refresh?client_type=mobile",
+			map[string]any{"refresh_token": tok}, nil, nil)
+		var body struct {
+			RefreshToken string `json:"refreshToken"`
+		}
+		_ = json.Unmarshal(r.Body.Bytes(), &body)
+		return r.Code, body.RefreshToken
+	}
+
+	code, gen1 := mint(sess.RefreshToken) // 第一层
+	if code != 200 {
+		t.Fatalf("gen1 status=%d", code)
+	}
+	code, gen2 := mint(gen1) // 第二层：gen1 随之失效
+	if code != 200 {
+		t.Fatalf("gen2 status=%d", code)
+	}
+	// 拿中间的 gen1（已被轮换）去刷新 → 必须给回 gen2，而不是又造一份
+	code, got := mint(gen1)
+	if code != 200 {
+		t.Fatalf("中间 token status=%d，宽限期内应命中间接替者", code)
+	}
+	if got != gen2 {
+		t.Fatalf("中间 token 得到 %q，期望链尾 %q", got, gen2)
+	}
+	// 再走一层后回到更早的 gen1，应继续追到新的链尾
+	code, gen3 := mint(got)
+	if code != 200 {
+		t.Fatalf("gen3 status=%d", code)
+	}
+	code, got = mint(gen1)
+	if code != 200 || got != gen3 {
+		t.Fatalf("回到链尾失败: status=%d token=%q 期望 %q", code, got, gen3)
 	}
 }
 

@@ -3,6 +3,23 @@
 记录**本仓库自身**的变化（上游版本见 [`docs/maintainers/upstream.md`](docs/maintainers/upstream.md)）。
 只写使用者能感知的东西；内部重构与文档搬家不在此列。当前处于实验通道，未发正式版。
 
+## 2026-11-01 — refresh 轮换变成幂等（修「云服务页卡在登录状态需要刷新」）
+
+- **同一个 refresh token 并发提交 N 次，返回的永远是同一份新 token。** 轮换出来的 token 改为
+  由父 token 派生（HMAC-SHA256，key 是 `TT_JWT_SECRET`，输入是父 token 的 SHA-256），插入走
+  `ON CONFLICT DO NOTHING`，N 路收敛成一行。此前每次生成随机 token，20 路并发就签出 20 份不同
+  的会话，而客户端只有一个存储位，互相覆盖后落盘的常是链中间已轮换的那一份 → 之后
+  `/functions/tokentracker-billing` 不带 `Authorization` → `401 auth=no`（issue #47）。
+- **宽限期改为「顺链找回」，不再另签一份。** 60 秒内用旧 token 刷新时，沿 `parent_id` 走到当前
+  存活的那一份返回（`X-TokenTracker-Refresh: grace` 保留），客户端手里是链中间的死 token 也能被
+  带回活的。登出/连带撤销仍然立即失效、不复活。
+- **轮换时顺手清理 7 天前的死行**（`rotated_at` 早于 7 天），issue #47 里 `auth_sessions` 涨到
+  853 行的情况不会再累积。
+- **没有新增任何环境变量或配置项**：窗口仍是既有的 60 秒，保留期是代码常量。
+- 库结构不变（无新 additive step）。老实例里已有的会话是同父随机 token 的兄弟行，升级后
+  每一次刷新都会转成派生链、此后不再分裂；若客户端手里那份旧 token 已过 60 秒宽限，会需要
+  重新登录一次（服务端只存 SHA-256，拿不回原文，这一点无法避免）。
+
 ## 2026-11-01 — 跟进上游 v1.5.2
 
 - **锁定点升到上游 v1.5.2**（`a9ef316f`），重新生成 `releases/1.5.2/` 并重录 `contract/golden/1.5.2/`。
