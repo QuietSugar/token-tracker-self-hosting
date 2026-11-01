@@ -1,0 +1,44 @@
+name: close-issues
+on:
+  push:
+    branches: [arena/05cbbe3c-token-tracker-self-hosting]
+permissions:
+  issues: write
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close 44 and 47
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          gh issue close 44 --repo "$REPO" --reason completed --comment "$(cat <<'EOF'
+维护者确认已修好，关闭。
+
+两个根因都在本仓库解决：
+
+- `tokentracker-leaderboard` 现在回 **200 空态**（`entries: []`，公开、故意不要求 JWT）—— PR #43
+- 其余未实现 slug（`leaderboard-profile`、`sessions`、`pets`…）回 **404 `Function not installed`，且在鉴权之前** —— PR #45
+
+main 上 `go-server` 矩阵跑的是全量 `go test -race ./...`，含 `TestLeaderboardEmptyState`、`TestUnimplementedFunctionIs404BeforeAuth`、`TestLeaderboardPreflightAndAuthBoundary`；契约 golden 对这 7 个 slug 也按 404 断言。
+
+⚠️ 如果之前给 `/functions/tokentracker-leaderboard` 加了 nginx 兜底（直接回 `200 {"entries":[]}`），现在可以删掉——留着会遮住真实响应。
+EOF
+)"
+
+          gh issue close 47 --repo "$REPO" --reason completed --comment "$(cat <<'EOF'
+维护者实测确认已恢复，关闭。
+
+修复见 PR #48（main `7d293fc`），镜像 `ghcr.io/quietsugar/token-tracker-self-hosting-go:experimental-7d293fc` 已推送：
+
+- 轮换出的 token 由父 token 派生（HMAC-SHA256 + 父 token 的 SHA-256），同一份 refresh token 并发 N 次只得到同一个新 token，插入靠唯一索引 `ON CONFLICT DO NOTHING` 收敛成一行；
+- 60 秒宽限期改为沿 `parent_id` 走到当前存活那一份返回，不再另签；
+- 轮换时顺手清理 7 天前的死行；
+- 没有新增任何环境变量或配置项，库结构不变。
+
+若日后仍复现，请直接重开本 issue 并附上 `/health` 的 `ref` 与访问日志。
+EOF
+)"
