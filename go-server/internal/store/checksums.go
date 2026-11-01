@@ -1,4 +1,4 @@
-// Code generated from contract/golden/1.5.0/static.json — DO NOT EDIT.
+// Code generated from contract/golden/1.5.2/static.json — DO NOT EDIT.
 // PostgreSQL reference migration checksums are an audit crosswalk only.
 package store
 

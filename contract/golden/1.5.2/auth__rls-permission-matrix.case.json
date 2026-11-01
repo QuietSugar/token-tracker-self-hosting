@@ -1,0 +1,127 @@
+{
+  "id": "auth/rls-permission-matrix",
+  "tags": [
+    "auth",
+    "security",
+    "owner-isolation",
+    "L2"
+  ],
+  "group": "auth",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "request",
+      "call": "tokentracker-account-summary",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "days": 1,
+          "from": "@relday-25",
+          "rolling": {
+            "last_30d": {
+              "active_days": 1,
+              "avg_per_active_day": 100,
+              "from": "@relday-29",
+              "to": "@relday+0",
+              "totals": {
+                "billable_total_tokens": 100,
+                "conversation_count": 1
+              }
+            },
+            "last_7d": {
+              "active_days": 0,
+              "from": "@relday-6",
+              "to": "@relday+0",
+              "totals": {
+                "billable_total_tokens": 0,
+                "conversation_count": 0
+              }
+            }
+          },
+          "to": "@relday-25",
+          "totals": {
+            "billable_total_tokens": 100,
+            "cache_creation_input_tokens": 0,
+            "cached_input_tokens": 0,
+            "conversation_count": 1,
+            "input_tokens": 100,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_cost_usd": "0.000000",
+            "total_tokens": 100
+          }
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "request",
+      "call": "tokentracker-account-summary",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type, Authorization, apikey",
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "days": 0,
+          "from": "@relday-25",
+          "rolling": {
+            "last_30d": {
+              "active_days": 0,
+              "avg_per_active_day": 0,
+              "from": "@relday-29",
+              "to": "@relday+0",
+              "totals": {
+                "billable_total_tokens": 0,
+                "conversation_count": 0
+              }
+            },
+            "last_7d": {
+              "active_days": 0,
+              "from": "@relday-6",
+              "to": "@relday+0",
+              "totals": {
+                "billable_total_tokens": 0,
+                "conversation_count": 0
+              }
+            }
+          },
+          "to": "@relday-25",
+          "totals": {
+            "billable_total_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cached_input_tokens": 0,
+            "conversation_count": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_cost_usd": "0.000000",
+            "total_tokens": 0
+          }
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}
