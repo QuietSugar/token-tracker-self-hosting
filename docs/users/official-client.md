@@ -146,7 +146,7 @@ tracker doctor                   # Summary: ok 12 | fail 0
 
 服务端不需要跟客户端版本号一致：契约基线（`contract/golden/<ver>`）锁的是**接口行为**。
 上游升级时维护者跑 `./scripts/upstream.sh review`，只有 `steps()` / `privateFunctions` 变了才需要动服务端
-（见 [`../maintainers/upstream.md`](../maintainers/upstream.md)）。当前后端在 1.5.0 基线上 33 PASS / 2 SKIP。
+（见 [`../maintainers/upstream.md`](../maintainers/upstream.md)）。当前后端在 1.5.2 基线上 33 PASS / 2 SKIP。
 
 ---
 

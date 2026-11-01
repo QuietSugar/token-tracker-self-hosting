@@ -1,0 +1,145 @@
+{
+  "id": "policy/free-device-enrollment-7",
+  "tags": [
+    "policy",
+    "quota"
+  ],
+  "group": "policy",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "issueMany",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "memberships": [
+            "self_hosted",
+            "self_hosted",
+            "self_hosted",
+            "self_hosted",
+            "self_hosted",
+            "self_hosted",
+            "self_hosted"
+          ],
+          "statuses": [
+            200,
+            200,
+            200,
+            200,
+            200,
+            200,
+            200
+          ]
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "rpc",
+      "call": "cloud_list_machines",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "machine_count": 7,
+          "machine_limit": null,
+          "machines": [
+            {
+              "is_current": false,
+              "last_seen_at": null,
+              "machine_id": "@uuid:1",
+              "name": "Free host 0",
+              "platform": "test",
+              "status": "active"
+            },
+            {
+              "is_current": false,
+              "last_seen_at": null,
+              "machine_id": "@uuid:2",
+              "name": "Free host 1",
+              "platform": "test",
+              "status": "active"
+            },
+            {
+              "is_current": false,
+              "last_seen_at": null,
+              "machine_id": "@uuid:3",
+              "name": "Free host 2",
+              "platform": "test",
+              "status": "active"
+            },
+            {
+              "is_current": false,
+              "last_seen_at": null,
+              "machine_id": "@uuid:4",
+              "name": "Free host 3",
+              "platform": "test",
+              "status": "active"
+            },
+            {
+              "is_current": false,
+              "last_seen_at": null,
+              "machine_id": "@uuid:5",
+              "name": "Free host 4",
+              "platform": "test",
+              "status": "active"
+            },
+            {
+              "is_current": false,
+              "last_seen_at": null,
+              "machine_id": "@uuid:6",
+              "name": "Free host 5",
+              "platform": "test",
+              "status": "active"
+            },
+            {
+              "is_current": false,
+              "last_seen_at": null,
+              "machine_id": "@uuid:7",
+              "name": "Free host 6",
+              "platform": "test",
+              "status": "active"
+            }
+          ],
+          "membership": {
+            "access_source": "none",
+            "can_read_cloud": true,
+            "can_upload_cloud": true,
+            "daily_history_months": null,
+            "environment": "live",
+            "expires_at": null,
+            "gift_expires_at": null,
+            "has_gift": false,
+            "hosting_mode": "self_hosted",
+            "hourly_history_days": null,
+            "machine_limit": null,
+            "phase": "active",
+            "read_only_until": null,
+            "status": "self_hosted",
+            "sync_interval_seconds": 0,
+            "transition_ends_at": null,
+            "trial_available": false,
+            "trial_ends_at": null
+          },
+          "over_machine_limit": null
+        },
+        "_norm": {
+          "uuid": 7,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

@@ -3,6 +3,19 @@
 记录**本仓库自身**的变化（上游版本见 [`docs/maintainers/upstream.md`](docs/maintainers/upstream.md)）。
 只写使用者能感知的东西；内部重构与文档搬家不在此列。当前处于实验通道，未发正式版。
 
+## 2026-11-01 — 跟进上游 v1.5.2
+
+- **锁定点升到上游 v1.5.2**（`a9ef316f`），重新生成 `releases/1.5.2/` 并重录 `contract/golden/1.5.2/`。
+- **后端无需改动**：安装 SQL / 迁移 SQL / `functions.json` 与 1.5.0 逐字节相同；
+  3 个 `account-*` bundle 只因上游定价表新增 5 条模型（`claude-opus-4-5`、`gpt-5.3-codex-spark`、
+  `gpt-6-luna`、`muse-spark-1.2/1.3-contributor`）而变 —— 本后端的成本取客户端上传值、不内嵌定价表。
+  **35 个行为用例与 1.5.0 逐字节相同**。
+- 客户端建议升级到 v1.5.2：Qoder 附加额度跨来源一致、zcode 跨区套餐与重置卡修复、
+  WorkBuddy 中英文版拆成独立 provider、Codex 会话统计对齐小时账本、macOS 更新检查遇 GitHub 限流时落到发布页。
+- 部署工件镜像默认 tag 随之升到 `1.5.2`（`docker-compose.example.yml`）。
+- 上游 v1.5.3 的 npm 包已发、但 git tag 与 GitHub Release 尚未出现；已核对它在本仓库契约路径上零差异，
+  待 tag 落地只需改 `tracking/REF` 并重跑一次构建。
+
 ## 2026-10-28 — 未实现的接口回 404 而不是 401（不再被当成登录失效）
 
 - **`/functions/*` 里我们没实现的路由，现在返回 `404 Function not installed`，而且判断在鉴权之前**。
