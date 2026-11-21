@@ -3,6 +3,24 @@
 记录**本仓库自身**的变化（上游版本见 [`docs/maintainers/upstream.md`](docs/maintainers/upstream.md)）。
 只写使用者能感知的东西；内部重构与文档搬家不在此列。当前处于实验通道，未发正式版。
 
+## 2026-11-21 — 跟进上游 v1.5.24
+
+- **锁定点从 v1.5.2 升到 v1.5.24**，重新生成 `releases/1.5.24/` 并重录 `contract/golden/1.5.24/`。
+  跨了 21 个版本（1.5.3 … 1.5.24）。
+- **自托管清单未变**：仍是 15 步安装 + 14 个私有函数，`manifest.cjs` 与 1.5.2 逐字节相同。
+- **安装 SQL 变了**（1.4.12 以来第一次）：deepseek 的峰谷计费日历现在同时认 `deepseek-v4.1-flash`
+  与 `deepseek-flash`（上游 #1010）。升级时 `04-private-aggregation` 的 checksum 会更新，属正常。
+- **5 个函数 bundle 更新**：`account-summary` / `account-daily` / `account-model-breakdown` 的定价表
+  （Fable 5.2、GPT-6.2、Gemini 3.5/3.6/3.7/3.8 Flash、Gemini 4 Carbon/Hydrogen、grok-4.7、muse-wonder）、
+  `billing` 的取消订单与 checkout 恢复、`ingest` 的去重 tie-break（纯请求行不再被 0 token 行盖住）。
+- **Go 后端零改动**：定价表不在我们的实现里（成本取客户端上传值）。model-breakdown 新增的
+  `conversation_count` 在上游自托管链路上恒为 0（它依赖的 migration 不在自托管 15 步内），
+  Go 侧保持 0 才与参考实现一致。
+- **登记了 1 条有意偏差**（`contract/waivers.json`）：上游 1.5.24 自托管的 `billing` account 分支
+  会读两张不在 15 步里的 migration 才有的列，导致上游参考实现自己返回 503；我们的 billing 不读这两列，
+  保持 200。上游修复后应删除该 waiver 并重录 golden。
+- 部署工件镜像默认 tag 随之升到 `1.5.24`（`docker-compose.example.yml`）。
+
 ## 2026-11-01 — refresh 轮换变成幂等（修「云服务页卡在登录状态需要刷新」）
 
 - **同一个 refresh token 并发提交 N 次，返回的永远是同一份新 token。** 轮换出来的 token 改为

@@ -6,8 +6,9 @@
 ## 1. 为什么不采用"增加适配层"的方案
 
 上游那套自托管后端（InsForge + TypeScript edge functions）是**语义级**绑在 PostgreSQL 上的。
-在 v1.5.2 的安装 SQL（4,711 行；与 1.4.12 起各版本逐字节相同）里：`jsonb` 338 处、`timestamptz` 217 处、PL/pgSQL 82 处、
-`pg_advisory_xact_lock` 33 处、RLS 策略 28 处、`auth.uid()` 24 处。
+在 v1.5.24 的安装 SQL（4,716 行；1.4.12 → 1.5.2 之间逐字节相同，1.5.24 只多了 deepseek 峰谷计费的 4 行）里：
+`jsonb` 375 处、`timestamptz` 199 处、PL/pgSQL 140 个函数体、`pg_advisory_xact_lock` 33 处、
+RLS 策略 4 条、`auth.uid()` 6 处。
 再加安装器第一行的 preflight：没有 `auth.users`、`auth.uid()`、`anon`/`authenticated`/`project_admin`
 三个角色就直接 `RAISE EXCEPTION`。
 

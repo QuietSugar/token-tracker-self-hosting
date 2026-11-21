@@ -1,0 +1,89 @@
+{
+  "id": "policy/self-hosted-membership",
+  "tags": [
+    "policy",
+    "rpc"
+  ],
+  "group": "policy",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "rpc",
+      "call": "cloud_membership",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "access_source": "none",
+          "can_read_cloud": true,
+          "can_upload_cloud": true,
+          "daily_history_months": null,
+          "environment": "live",
+          "expires_at": null,
+          "gift_expires_at": null,
+          "has_gift": false,
+          "hosting_mode": "self_hosted",
+          "hourly_history_days": null,
+          "machine_limit": null,
+          "phase": "active",
+          "read_only_until": null,
+          "status": "self_hosted",
+          "sync_interval_seconds": 0,
+          "transition_ends_at": null,
+          "trial_available": false,
+          "trial_ends_at": null
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "rpc",
+      "call": "cloud_account_access",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "available_from": null,
+          "membership": {
+            "access_source": "none",
+            "can_read_cloud": true,
+            "can_upload_cloud": true,
+            "daily_history_months": null,
+            "environment": "live",
+            "expires_at": null,
+            "gift_expires_at": null,
+            "has_gift": false,
+            "hosting_mode": "self_hosted",
+            "hourly_history_days": null,
+            "machine_limit": null,
+            "phase": "active",
+            "read_only_until": null,
+            "status": "self_hosted",
+            "sync_interval_seconds": 0,
+            "transition_ends_at": null,
+            "trial_available": false,
+            "trial_ends_at": null
+          },
+          "ok": true
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}
