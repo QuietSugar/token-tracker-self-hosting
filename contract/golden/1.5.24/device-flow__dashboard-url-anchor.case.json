@@ -1,0 +1,59 @@
+{
+  "id": "device-flow/dashboard-url-anchor",
+  "tags": [
+    "auth",
+    "device",
+    "config"
+  ],
+  "group": "device-flow",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "request",
+      "call": "tokentracker-device-flow-authorize",
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-headers": "Content-Type",
+          "access-control-allow-methods": "POST, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "device_code": "@secret:1",
+          "expires_in": 900,
+          "interval": 5,
+          "user_code": "@secret:2",
+          "verification_uri": "https://private.example.test/device",
+          "verification_uri_complete": "https://private.example.test/device?user_code=@secret:2"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 2,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "assertNot",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "assertion": "assertNot",
+          "passed": true,
+          "value": "https://private.example.test/device"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

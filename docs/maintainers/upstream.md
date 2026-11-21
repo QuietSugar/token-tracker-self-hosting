@@ -10,10 +10,10 @@
 
 | 项 | 值 |
 |---|---|
-| 版本 | **1.5.2** |
-| commit | `a9ef316fbe58cf594dbefa7cdbfd5f71cfa212f1` |
-| 自托管清单 | 15 步安装 + 14 个私有函数（与 1.4.12 相同） |
-| 1.5.0 → 1.5.2 | 安装 / 迁移 SQL、`functions.json` **逐字节相同**；3 个 `account-*` bundle 只因定价表新增 5 条模型（`claude-opus-4-5`、`gpt-5.3-codex-spark`、`gpt-6-luna`、`muse-spark-1.2/1.3-contributor`）而变；**35 个行为用例仍逐字节相同** → **后端无需动作** |
+| 版本 | **1.5.24** |
+| commit | `ea17c5f68c3e1c72b6d3440b536ef99dc160811a` |
+| 自托管清单 | 15 步安装 + 14 个私有函数（与 1.4.12 相同，manifest 自 1.4.12 起未变） |
+| 1.5.2 → 1.5.24 | 跨 21 个版本。清单不变，但**产物变了**：`04-private-aggregation` 的 deepseek 计费日历多认 `deepseek-v4.1-flash` / `deepseek-flash`（step checksum 变）；5 个函数 bundle 变（4 个 `account-*` 定价表 + `ingest` 的去重 tie-break）；golden 里 model-breakdown 多出 `conversation_count`（上游 #990）。**Go 后端零改动**：定价表不在我们实现里，`conversation_count` 上游自托管实现恒为 0（见下） |
 
 ## 2. 版本追踪表（跟着 REF 走）
 
@@ -29,15 +29,24 @@
 | **1.5.0** | `b2c2eb85` | 15 步 | 契约路径下仅 `leaderboard-profile`（榜单资料卡 `totals` 改用 lifetime snapshot，新增 `source` 字段）——**不在我们的 14 个函数内**；其余为客户端侧（sessions 页支持 DeepSeek Harness、zcode 重置卡倒计时、限额面板） | **后端无需动作**：产物与 1.4.15 逐字节相同；重录的 1.5.0 golden 与 1.4.15 golden 逐字节相同（仅版本号与时间戳不同）；Go 契约 33 PASS / 2 SKIP |
 | 1.5.1 | `f80ed15a` | 15 步 | 无契约变化（多为 SEO / 依赖升级）；客户端侧修 zcode 重置卡空行、Qoder 读取 desktop 0.4.x | 后端无需动作 |
 | **1.5.2** | `a9ef316f` | 15 步 | 定价表新增 5 条模型（3 个 `account-*` bundle 变，行为用例不变）；客户端侧修 Qoder / zcode / WorkBuddy 限额与 Codex 会话统计 | **后端无需动作**（定价表不在 Go 实现里，成本取客户端上传值）；重录的 1.5.2 golden 与 1.5.0 **35 个用例逐字节相同**，Go 契约 33 PASS / 2 SKIP |
+| **1.5.24** | `ea17c5f6` | 15 步 | 跨 21 个版本（1.5.3…1.5.24）。清单 `manifest.cjs` 与 1.5.2 **逐字节相同**；`aggregation.sql` 改了 deepseek 计费日历（`deepseek-v4.1-flash`、`deepseek-flash` 走同一峰谷表，#1010）→ step 04 checksum 变；5 个函数 bundle 变（`account-summary/daily/model-breakdown` 定价表新增 Fable 5.2 / GPT-6.2 / Gemini 3.5-3.8 / Gemini 4 Carbon-Hydrogen / grok-4.7 / muse-wonder；`billing` 加取消订单与 checkout 恢复；`ingest` 去重加 conversations tie-break）；model-breakdown 新增 `conversation_count`（#990） | **后端零改动**。定价表不在 Go 实现里（成本取客户端上传值）；`conversation_count` 在自托管链路上**恒为 0**（上游 `account_model_breakdown_compact` 没透传 conversations，直到 `migrations/20261102090000_*` —— 该 migration 不在自托管 15 步内），所以 Go 侧保持 0 即与参考实现一致；33 PASS / 2 SKIP + 1 条登记偏差 |
 
-> 安装 SQL 自 1.4.12 起逐字节未变（1.5.0 / 1.5.2 亦然），所以
-> [`contract/L3-RESULTS.md`](../../contract/L3-RESULTS.md) 里那次真实四容器栈的并发结果（1.4.15 基线）
-> 对后续版本同样成立，不必重跑。
+> 安装 SQL 在 1.4.12 / 1.5.0 / 1.5.2 之间逐字节未变；**1.5.24 起变了**（deepseek 计费日历，见上），
+> 所以 [`contract/L3-RESULTS.md`](../../contract/L3-RESULTS.md) 里那次真实四容器栈的并发结果
+> （1.4.15 基线）仍然成立（并发与锁的行为没动），但安装 SQL 的 checksum 已不再是那份。
 
-> **1.5.3 的处理**：上游 main 上已有 `chore(release): 1.5.3`（npm `tokentracker-cli@1.5.3` 已发），
-> 但 **git tag 与 GitHub Release 尚未出现**（桌面端二进制仍停在 1.5.2）。本次仍锁 1.5.2。
-> 已核对 `v1.5.2..1.5.3` 在契约路径上**零差异**，所以 tag 一落地只需把 `tracking/REF` 的
-> VERSION/COMMIT 改过去、重跑一次 `build.sh`（产物除版本号外逐字节相同），不必再评审。
+> **1.5.24 的两个上游自托管缺陷**（本仓库不照抄，已登记在
+> [`contract/waivers.json`](../../contract/waivers.json)）：
+>
+> 1. `tokentracker-billing` 的 account 分支会 `select` `tokentracker_cloud_orders.cancel_requested_at`
+>    与 `checkout_tracking_uncertain`，这两列由 `migrations/20261117090000_cloud-order-cancellation.sql`
+>    添加 —— 但**该 migration 不在 `scripts/self-host/manifest.cjs` 的 15 步里**，所以自托管库没有这两列，
+>    上游参考实现自己的 `billing/account-default` 用例从 200 变成 **503 `billing_operation_failed`**。
+>    我们的 billing 不读这两列，保持 200（与 1.5.2 行为一致）。
+> 2. `account_model_breakdown_compact` 至今没有 `SUM(conversations)`，上游靠
+>    `migrations/20261102090000_add-conversations-to-account-model-breakdown-wire.sql` 补，
+>    同样不在 15 步内 → 自托管链路上 `conversation_count` **恒为 0**。Go 侧照此实现，不"修"成真实值，
+>    否则反而与参考实现不一致。
 
 > 关于"14 步"：上游文档与早期归档写"14 application steps"，那是 2026-10-09 的快照
 > （缺 `13-machine-alias-cascade`）。以 `require('./scripts/self-host/manifest.cjs').steps()` 的实际输出为准 —— **15 步**。

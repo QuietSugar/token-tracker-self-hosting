@@ -1,4 +1,4 @@
-// Code generated from contract/golden/1.5.2/static.json — DO NOT EDIT.
+// Code generated from contract/golden/1.5.24/static.json — DO NOT EDIT.
 // PostgreSQL reference migration checksums are an audit crosswalk only.
 package store
 
@@ -9,7 +9,7 @@ var PostgreSQLReferenceSteps = []struct{ ID, Checksum string }{
 	{"01-private-baseline", "071ca2557673de115bca98fba2ea1fd577ad056b96ef76ff4a44dcae5fff6470"},
 	{"02-account-sessions", "980d8eeef13d68f95d4fa9c32d925b66715bd342aed9aef0872d8b416cd7eabf"},
 	{"03-device-identity", "6967e029ddba62373f5e18b80cecbca2deae8f1dbeb8c2a1891ff15e5b4a85db"},
-	{"04-private-aggregation", "b95a322e4c8f1a2afd038e6f3658cc9236349b8200502bd48d07d79f68204c02"},
+	{"04-private-aggregation", "a4a6c85a6899b1ff7f42736dd999a164c4c56db835cfde2a3213ca272e39b978"},
 	{"20261003120000_cloud-subscriptions", "d7ccbed0b936d8ff517a7932799770c944e6942cadb0c949b745ded799c19937"},
 	{"20261004120000_cloud-machine-access", "6938d26ea6dc211db83ac6c769e9930c80b147dc2fcbe837c6902ef2dc1a394c"},
 	{"20261007120000_cloud-waffo", "ee4303a99b3141015b68f960ad111672862ba9b2b2537c3d25c288eedaa66f5c"},

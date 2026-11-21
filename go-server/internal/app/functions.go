@@ -1205,7 +1205,8 @@ func (s *Server) accountModelBreakdown(w http.ResponseWriter, r *http.Request, s
 			a := modelsMap[n]
 			tot := map[string]any{"total_tokens": a.total, "billable_total_tokens": a.bill, "input_tokens": a.input,
 				"output_tokens": a.output, "cached_input_tokens": a.cached, "cache_creation_input_tokens": a.creation,
-				"reasoning_output_tokens": a.reasoning, "total_cost_usd": fmt.Sprintf("%.6f", a.cost)}
+				"reasoning_output_tokens": a.reasoning, "conversation_count": 0,
+				"total_cost_usd": fmt.Sprintf("%.6f", a.cost)}
 			models = append(models, map[string]any{"model": n, "model_id": n,
 				"pricing":     map[string]any{"status": "unpriced", "source": nil, "input": 0, "output": 0, "cache_read": 0, "cache_write": 0},
 				"cost_source": "model_pricing", "totals": tot})
@@ -1220,7 +1221,8 @@ func (s *Server) accountModelBreakdown(w http.ResponseWriter, r *http.Request, s
 		}
 		st := map[string]any{"total_tokens": sourceTotal.total, "billable_total_tokens": sourceTotal.bill, "input_tokens": sourceTotal.input,
 			"output_tokens": sourceTotal.output, "cached_input_tokens": sourceTotal.cached, "cache_creation_input_tokens": sourceTotal.creation,
-			"reasoning_output_tokens": sourceTotal.reasoning, "total_cost_usd": fmt.Sprintf("%.6f", sourceTotal.cost)}
+			"reasoning_output_tokens": sourceTotal.reasoning, "conversation_count": 0,
+			"total_cost_usd": fmt.Sprintf("%.6f", sourceTotal.cost)}
 		outSources = append(outSources, map[string]any{"source": src, "totals": st, "models": models})
 	}
 	writeJSON(w, 200, map[string]any{

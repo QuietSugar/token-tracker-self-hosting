@@ -1,0 +1,40 @@
+{
+  "id": "install/policy-self-hosted",
+  "tags": [
+    "L1",
+    "install"
+  ],
+  "group": "install",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "query",
+      "call": "SELECT environment, hosting_mode, phase FROM public.tokentra",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "rows": [
+            {
+              "environment": "live",
+              "hosting_mode": "self_hosted",
+              "phase": "active"
+            },
+            {
+              "environment": "sandbox",
+              "hosting_mode": "self_hosted",
+              "phase": "active"
+            }
+          ]
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

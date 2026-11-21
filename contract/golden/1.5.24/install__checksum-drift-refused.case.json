@@ -1,0 +1,63 @@
+{
+  "id": "install/checksum-drift-refused",
+  "tags": [
+    "install",
+    "error",
+    "postgres-specific"
+  ],
+  "group": "install",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "tamperChecksum",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "tampered": true
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "rerunInstall",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "error": "Installed step has changed: 01-private-baseline"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    },
+    {
+      "op": "restoreChecksum",
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "restored": true
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

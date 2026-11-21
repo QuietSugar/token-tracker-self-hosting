@@ -1,0 +1,34 @@
+{
+  "id": "device-flow/poll-unknown-code",
+  "tags": [
+    "auth",
+    "error"
+  ],
+  "group": "device-flow",
+  "seed": "tokentracker-contract-v1",
+  "steps": [
+    {
+      "op": "request",
+      "call": "tokentracker-device-flow-poll",
+      "response": {
+        "status": 404,
+        "headers": {
+          "access-control-allow-headers": "Content-Type",
+          "access-control-allow-methods": "POST, OPTIONS",
+          "access-control-allow-origin": "*",
+          "content-type": "application/json"
+        },
+        "body": {
+          "status": "unknown"
+        },
+        "_norm": {
+          "uuid": 0,
+          "secret": 0,
+          "ts": 0,
+          "rel": 0,
+          "referenceNow": "2026-10-26T00:00:00.000Z"
+        }
+      }
+    }
+  ]
+}

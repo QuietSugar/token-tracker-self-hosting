@@ -72,7 +72,7 @@ contract/
 ├── golden/<ver>/      录制的参考快照：_meta.json、static.json、*.case.json、SHA256SUMS
 ├── adapters/          go-postgres.cjs（我们的实现）、reference.cjs（上游黑盒）
 ├── lib/               normalize / runner / compare / static / verify / recorder / harness
-├── waivers.json       已登记的有意偏差（当前为空）
+├── waivers.json       已登记的有意偏差（1 条：上游 1.5.24 的 billing 缺陷）
 └── L3-RESULTS.md      真实 PG 上的并发测试**生成结果**（不是文档，勿手改）
 ```
 
@@ -85,7 +85,9 @@ contract/
 
 - 归一化后才比对：UUID、时间、随机 token、浮点。规则见 §2，实现是 `lib/normalize.cjs`。
 - 归一化覆盖不到的真实差异 → **FAIL**，除非在 `waivers.json` 里逐项登记
-  `case` / `path` / `reason` / `approvedBy` / `date`。当前 `waivers` 为空数组。
+  `case` / `path` / `reason` / `approvedBy` / `date`。
+  当前 1 条：`billing/account-default` —— 上游 1.5.24 自托管参考实现读了两列只有自托管清单外的
+  migration 才会加的列，自己返回 503；我们的实现不读这两列，保持 200。上游修复后应删除。
 - 状态码、body 的字段与值都比；关键响应头（`Access-Control-Allow-Origin`、`Content-Type`）也比。
 
 ## 5. 加用例 / 改 golden

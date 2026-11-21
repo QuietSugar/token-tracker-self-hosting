@@ -47,12 +47,35 @@ go vet ./... && go build ./cmd/server
 Go ≥1.24（以 `go.mod` 为准）。**必须有一个 PG**（SQLite 已移除）：
 
 ```sh
-./scripts/test-with-pg.sh          # docker 一键起临时库，打印 DSN
-# 无 docker：pip install --target /tmp/tools pgserver，然后用它给的 unix socket DSN
+./scripts/test-with-pg.sh          # 有 docker 时一键起临时库，打印 DSN
+```
+
+没有 docker 的沙箱（如 Arena / 各类 AI 开发环境）用同一份配方，只需 PyPI 可达：
+
+```sh
+pip install --target /tmp/tools go-bin pgserver     # Go 工具链 + PG 16 二进制
+export GOROOT=/tmp/tools/go GOTOOLCHAIN=local GOPROXY=direct GOSUMDB=off \
+       GOMODCACHE=/tmp/gomod GOCACHE=/tmp/gocache PATH=/tmp/tools/go/bin:$PATH
+export PATH=/tmp/tools/pgserver/pginstall/bin:$PATH
+initdb -D /tmp/pgdata -U postgres --auth=trust
+postgres -D /tmp/pgdata -k /tmp/pgdata -c listen_addresses=   # 只走 unix socket
 export TT_TEST_DATABASE_URL='postgresql://postgres:@/postgres?host=/tmp/pgdata'
 ```
 
-`TT_JWT_SECRET` 重启后要保持一致，否则手头的 token 全废。
+要点：
+
+- `/tmp` 可能被清空，重装约 10 秒，不要指望上一轮的二进制还在。
+- `postgres` 必须显式 `-k`；`listen_addresses=` 置空即不开 TCP，沙箱里足够。
+- 后台服务用进程工具起（`start_process`），不要 `pkill -f`：它会连自己的 shell 一起杀，用 `pkill -x`。
+- 换 schema 隔离并行测试：`TT_POSTGRES_SCHEMA=<独立名>`。
+- `TT_JWT_SECRET` 重启后要保持一致（≥ 32 字节，否则拒绝启动），否则手头的 token 全废。
+
+## §2.1 做不到的事
+
+没有 docker / podman / buildah，也没有 socket，`download.docker.com` 与 `ghcr.io` 均不可达 ——
+**镜像只能由 CI 构建与验证**。改 `Dockerfile`、compose 或镜像相关脚本时，本地能做的只有
+`docker build` 之外的静态检查；真正的证据是 `build-image` / `build-go-image` 的 smoke job。
+同理，官方桌面 GUI 的端到端行为无法在沙箱里复现，只能靠服务端日志与客户端 bundle 的代码推断。
 
 ## §3 改动流程
 

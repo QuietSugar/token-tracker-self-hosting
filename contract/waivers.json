@@ -1,7 +1,15 @@
 {
   "schemaVersion": 1,
   "description": "已登记的有意偏差。未登记的偏差一律判 FAIL。",
-  "waivers": [],
+  "waivers": [
+    {
+      "case": "billing/account-default",
+      "path": "$",
+      "reason": "上游 1.5.24 自托管参考实现自身的缺陷：billing 的 account 分支会 select tokentracker_cloud_orders.cancel_requested_at / checkout_tracking_uncertain，而这些列由 migrations/20261117090000_cloud-order-cancellation.sql 添加 —— 该 migration 不在 scripts/self-host/manifest.cjs 的 15 步里，因此自托管库没有这两列，上游参考实现返回 503 billing_operation_failed（1.5.2 同一用例是 200）。本仓库不照抄这个 503：我们的 billing 不需要那两列，返回 200 与 1.5.2 及官方云行为一致。上游修复后应删除本条并重录 golden。",
+      "approvedBy": "maintainer",
+      "date": "2026-11-21"
+    }
+  ],
   "example": {
     "case": "07-aggregation/timezone-bucket",
     "path": "$.steps[0].body.tz",
